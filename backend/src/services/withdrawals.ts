@@ -1,5 +1,5 @@
 import { logAction } from "./admin.js";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { completeWithdrawal, refundWithdrawal, withdraw } from "./balanceService.js";
 import {
   checkTellerStatus,
@@ -35,6 +35,28 @@ export interface WithdrawalRow {
   updated_at: Date;
 }
 
+/** A player may withdraw only once their game winnings reach this many times everything they have deposited. */
+export const WIN_MULTIPLE = 3;
+
+/** Lifetime GHS deposits and game winnings (every payout a game credited), in cedis. */
+export async function winRequirement(
+  client: Pool | PoolClient,
+  userId: string
+): Promise<{ deposited: number; won: number; required: number; remaining: number }> {
+  const { rows } = await client.query<{ deposited: string; won: string }>(
+    `SELECT COALESCE(SUM(e.amount) FILTER (WHERE j.entry_type = 'DEPOSIT'), 0)     AS deposited,
+            COALESCE(SUM(e.amount) FILTER (WHERE j.entry_type = 'BET_SETTLED'), 0) AS won
+       FROM ledger_entries e JOIN ledger_journal j ON j.id = e.journal_id
+      WHERE e.user_id = $1 AND e.currency_code = 'GHS' AND e.direction = 'CREDIT'
+        AND j.entry_type IN ('DEPOSIT', 'BET_SETTLED')`,
+    [userId]
+  );
+  const deposited = Number(rows[0]!.deposited);
+  const won = Number(rows[0]!.won);
+  const required = Math.round(deposited * WIN_MULTIPLE * 100) / 100;
+  return { deposited, won, required, remaining: Math.max(0, Math.round((required - won) * 100) / 100) };
+}
+
 /** A player's request: the money leaves their balance into the hold at once, to be paid to their registered number. */
 export async function requestWithdrawal(
   db: Pool,
@@ -48,6 +70,13 @@ export async function requestWithdrawal(
   const client = await db.connect();
   try {
     await client.query("BEGIN");
+    /* deposits can't be cashed straight out: winnings must first reach WIN_MULTIPLE times all deposits */
+    const need = await winRequirement(client, user.id);
+    if (need.remaining > 0) {
+      throw new WithdrawalError("win_requirement",
+        `You can withdraw once your winnings reach ${WIN_MULTIPLE}x your deposits (GHS ${need.required.toFixed(2)}). ` +
+        `You've won GHS ${need.won.toFixed(2)} so far — GHS ${need.remaining.toFixed(2)} to go.`, 403);
+    }
     /* the client's key is namespaced to the player: on its own it shared the ledger's key space with the server's
        settlement keys, so a player could take "win:live:<their bet id>" and stall a whole round's settlement */
     const journalId = await withdraw(client, user.id, "GHS", amountMajor, `withdraw:${user.id}:${idempotencyKey}`, "momo:" + user.phone);

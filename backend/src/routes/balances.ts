@@ -21,7 +21,7 @@ import type { Pool } from "pg";
 import { getUserBalances } from "../services/balanceService.js";
 import { requireUser } from "../middleware/authenticate.js";
 import { FeedbackError, listTransactions, saveFeedback } from "../services/accountActivity.js";
-import { requestWithdrawal, WithdrawalError } from "../services/withdrawals.js";
+import { requestWithdrawal, winRequirement, WIN_MULTIPLE, WithdrawalError } from "../services/withdrawals.js";
 import { getLimits, LimitError, selfExclude, setLimits } from "../services/responsibleGaming.js";
 import { convert } from "../services/conversions.js";
 import { FxError, quoteConversion } from "../services/fxRates.js";
@@ -66,6 +66,17 @@ export function balancesRouter(db: Pool): Router {
   /* Body: { amount, idempotency_key }. Paid only to the registered      */
   /* number, after an admin approves it.                                 */
   /* ------------------------------------------------------------------- */
+  /* GET /api/user/withdraw/requirement: how far the player's winnings are from WIN_MULTIPLE x their deposits */
+  r.get("/withdraw/requirement", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = requireUser(req);
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ multiple: WIN_MULTIPLE, ...(await winRequirement(db, user.id)) });
+    } catch (e) {
+      next(e);
+    }
+  });
+
   r.post("/withdraw", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = requireUser(req);
