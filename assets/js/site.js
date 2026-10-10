@@ -579,7 +579,7 @@
 
   const FAQ = [
     { q: "How do I deposit?",
-      a: 'Open the <a href="wallet.html">wallet</a>, pick MTN MoMo, Telecel Cash, AirtelTigo Money, a bank transfer or a card, and enter ₵ 100 or more.' },
+      a: 'Open the <a href="wallet.html">wallet</a>, pick MTN MoMo, Telecel Cash, AirtelTigo Money, a bank transfer or a card, and enter ₵ 5 or more.' },
     { q: "How fast are withdrawals?",
       a: 'Mobile money withdrawals are approved in about two minutes during business hours. The minimum is ₵ 20 — start from the <a href="withdraw.html">withdraw page</a>.' },
     { q: "Is this real money?",
@@ -928,13 +928,13 @@
       [/fail|declin|denied|error|not approved|unsuccessful/i,
         'A failed deposit never takes money. The reason from our payment partner is shown under it on the <a href="wallet.html">Deposit</a> page. Check your wallet balance and that you approved the PIN prompt, then try again.'],
       [/deposit|top ?up|fund|add money|momo|mobile money|pay in/i,
-        'Go to <a href="wallet.html">Deposit</a>, enter ₵ 100 or more and tap Top Up Now. A payment prompt is sent to your registered number — approve it with your MoMo PIN. MTN users without a prompt can dial *170#, then 6 and 3.'],
+        'Go to <a href="wallet.html">Deposit</a>, enter ₵ 5 or more and tap Top Up Now. A payment prompt is sent to your registered number — approve it with your MoMo PIN. MTN users without a prompt can dial *170#, then 6 and 3.'],
       [/\bpin\b|otp|password|hack|scam|someone (called|asked)/i,
         'Never share your MoMo PIN, an OTP or your password with anyone — RendoWin will never ask for them. To change a forgotten password, use “Forgot password” on the <a href="register.html#login">log-in page</a>.'],
       [/bonus|promo|cashback|cash back|reward|free spin|offer/i,
         'Cashback, VIP perks and a welcome bonus are coming soon but aren\'t live yet, so no bonus is paid on deposits for now. See what\'s planned on the <a href="promotions.html">Promotions</a> page.'],
       [/limit|minimum|maximum|\bmin\b|\bmax\b|how much/i,
-        "Deposits: ₵ 100 to ₵ 50,000 per transaction. Withdrawals: from ₵ 20, paid to your registered number."],
+        "Deposits: ₵ 5 to ₵ 50,000 per transaction. Withdrawals: from ₵ 20, paid to your registered number."],
       [/addict|stop gambling|self.?exclu|responsib|too much|problem/i, FAQ[3].a],
       [/human|agent|person|call (you|me)|phone number|email|talk to|contact|customer care|whatsapp/i,
         'To message our team, <a href="register.html#login">log in</a> — then write here and a member of our team will reply in this chat. ' +

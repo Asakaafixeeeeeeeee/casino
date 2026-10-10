@@ -52,7 +52,7 @@
       <div class="pay-balance">Balance (GHS) <b data-wallet-balance-num>0.00</b></div>
 
       <div class="pay-amount">
-        <input id="depAmount" type="number" min="100" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
+        <input id="depAmount" type="number" min="5" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
         <span class="pay-min">min. 10.00</span>
       </div>
       <div class="pay-err" id="depAmountErr"></div>
@@ -69,7 +69,7 @@
 
       <ol class="pay-notes">
         <li>Maximum per transaction is GHS 50,000.00</li>
-        <li>Minimum per transaction is GHS 100.00<span id="depMinUsd"></span></li>
+        <li>Minimum per transaction is GHS 5.00<span id="depMinUsd"></span></li>
         <li>Deposit is free, no transaction fees.</li>
         <li>Your balance can only be withdrawn to the mobile number that you registered with.</li>
         <li>You can deposit from another mobile money number: change the number at the top. The prompt goes to that phone.</li>
@@ -81,7 +81,7 @@
     <section class="pay-panel" data-panel="paybill" hidden>
       <div class="pay-balance">Balance (GHS) <b data-wallet-balance-num>0.00</b></div>
       <div class="pay-amount">
-        <input id="pbAmount" type="number" min="100" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
+        <input id="pbAmount" type="number" min="5" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
         <span class="pay-min">min. 10.00</span>
       </div>
       <div class="pay-err" id="pbAmountErr"></div>
@@ -97,7 +97,7 @@
     <section class="pay-panel" data-panel="card" hidden>
       <div class="pay-balance">Balance (GHS) <b data-wallet-balance-num>0.00</b></div>
       <div class="pay-amount">
-        <input id="cdAmount" type="number" min="100" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
+        <input id="cdAmount" type="number" min="5" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
         <span class="pay-min">min. 10.00</span>
       </div>
       <div class="pay-err" id="cdAmountErr"></div>

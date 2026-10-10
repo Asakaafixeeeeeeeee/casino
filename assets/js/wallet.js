@@ -6,7 +6,7 @@
   const payments = (window.VB && window.VB.payments) || [];
   const MOMO = payments.filter((m) => m.type === "momo");
 
-  const DEPOSIT_MIN = 100;
+  const DEPOSIT_MIN = 5;
   const DEPOSIT_MAX = 50000;
   const WITHDRAW_MIN = 20;
 

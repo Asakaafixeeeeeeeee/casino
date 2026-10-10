@@ -21,7 +21,7 @@ import {
 import { noteIntent, reopenFailedIntent, settleIntent } from "../services/tellerSettlement.js";
 import { checkDeposit, LimitError } from "../services/responsibleGaming.js";
 
-const MIN_DEPOSIT = 100;   // GHS; about US$ 7–9 depending on the day's rate (the page shows the dollar figure)
+const MIN_DEPOSIT = 5;     // GHS; well under US$ 1 (the page shows the dollar figure)
 const MAX_DEPOSIT = 50000;
 const NETWORKS: readonly MomoNetwork[] = ["MTN", "VDF", "ATL", "TGO"];
 
