@@ -41,6 +41,9 @@ services:
         value: https://asakaa-casino.onrender.com
       - key: ADMIN_PHONES
         sync: false
+      # TheTeller production server; set to "test" to use the sandbox
+      - key: TELLER_MODE
+        value: live
       - key: TELLER_MERCHANT_ID
         sync: false
       - key: TELLER_API_USERNAME
