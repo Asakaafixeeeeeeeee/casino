@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#04200d">
+<title>Red Black — RendoWin</title>
+<meta name="description" content="Red Black: call the colour of the next card — a correct call pays 2x. Play with real credits.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/minigame.css">
+<link rel="stylesheet" href="assets/css/redblack.css">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+<script src="assets/js/data.js?v=50"></script>
+<!-- the splash screen: the game's picture and a loading bar, shown before the page draws -->
+<script src="assets/js/splash.js?v=33"></script>
+</head>
+<body class="game-page mg-page redblack-page" data-shell="game">
+
+<!-- card suits and the Joker's cap, drawn once and reused by every card face -->
+<svg class="rb-sprite" aria-hidden="true" focusable="false">
+  <symbol id="rbH" viewBox="0 0 100 100">
+    <path d="M50 92C47 86 38 77 26 66C12 53 4 43 4 29C4 15 15 5 28 5C38 5 46 11 50 20C54 11 62 5 72 5C85 5 96 15 96 29C96 43 88 53 74 66C62 77 53 86 50 92Z"/>
+  </symbol>
+  <symbol id="rbD" viewBox="0 0 100 100">
+    <path d="M50 2C60 20 72 36 88 50C72 64 60 80 50 98C40 80 28 64 12 50C28 36 40 20 50 2Z"/>
+  </symbol>
+  <symbol id="rbS" viewBox="0 0 100 100">
+    <path d="M50 3C56 14 68 24 80 34C92 44 97 52 97 62C97 75 87 83 75 83C66 83 59 79 54 72C55 82 59 90 67 97H33C41 90 45 82 46 72C41 79 34 83 25 83C13 83 3 75 3 62C3 52 8 44 20 34C32 24 44 14 50 3Z"/>
+  </symbol>
+  <symbol id="rbC" viewBox="0 0 100 100">
+    <circle cx="50" cy="27" r="21"/><circle cx="27" cy="57" r="21"/><circle cx="73" cy="57" r="21"/><circle cx="50" cy="50" r="12"/>
+    <path d="M47 56C47 74 43 86 34 97H66C57 86 53 74 53 56Z"/>
+  </symbol>
+  <symbol id="rbJester" viewBox="0 0 170 140">
+    <path d="M46 106C36 82 22 66 8 42C34 48 58 74 74 102Z" fill="#6a1b9a"/>
+    <path d="M124 106C134 82 148 66 162 42C136 48 112 74 96 102Z" fill="#6a1b9a"/>
+    <path d="M64 104C62 74 68 44 85 16C102 44 108 74 106 104Z" fill="#d01c1f"/>
+    <path d="M40 102Q85 118 130 102L134 124Q85 140 36 124Z" fill="#e8b923" stroke="#7a5200" stroke-width="2"/>
+    <g fill="#ffd54f" stroke="#7a5200" stroke-width="2"><circle cx="9" cy="40" r="8"/><circle cx="85" cy="13" r="8"/><circle cx="161" cy="40" r="8"/></g>
+    <g fill="#d01c1f"><path d="M62 109l5 7-5 7-5-7z"/><path d="M85 114l5 7-5 7-5-7z"/><path d="M108 109l5 7-5 7-5-7z"/></g>
+  </symbol>
+</svg>
+
+<header class="mg-header">
+  <a class="mg-icon-btn" href="games.html?category=Instant%20Win" aria-label="Back to the lobby"><i data-icon="arrowLeft"></i></a>
+  <h1 class="mg-title">Red Black</h1>
+  <button class="mg-icon-btn" type="button" id="rbChat" aria-label="Live chat"><i data-icon="chat"></i></button>
+  <button class="mg-icon-btn" type="button" id="rbMenuBtn" aria-label="Game menu" aria-expanded="false" aria-controls="rbMenu"><i data-icon="menu"></i></button>
+  <nav class="mg-menu" id="rbMenu" aria-label="Game menu" hidden>
+    <div class="mg-menu-label">Play with</div>
+    <div class="mg-modes">
+      <button type="button" data-mode="fun" aria-pressed="true">Credits</button>
+      <button type="button" data-mode="real" aria-pressed="false">Wallet</button>
+    </div>
+    <button type="button" id="rbTopUp"><i data-icon="plus"></i>Top up credits</button>
+    <button type="button" id="rbSound" aria-pressed="true"><i data-icon="sound"></i><span>Sound: on</span></button>
+    <button type="button" id="rbRulesBtn"><i data-icon="info"></i>How to play</button>
+    <a href="wallet.html"><i data-icon="wallet"></i>Deposit</a>
+    <a href="games.html?category=Instant%20Win"><i data-icon="arrowLeft"></i>Back to the lobby</a>
+  </nav>
+</header>
+
+<div class="mg-subheader">
+  <span class="mg-bal-label" id="rbBalLabel">Credits</span>
+  <span class="mg-balance">GHS <b id="rbBalance">0.00</b></span>
+  <span class="mg-delta" id="rbDelta" aria-hidden="true"></span>
+</div>
+
+<main class="mg-main">
+  <!-- the card table: history on the left, the card to turn in the middle, the deck on the right -->
+  <section class="rb-board" aria-label="Card table">
+    <div class="rb-felt">
+      <div class="rb-history">
+        <h2 class="rb-cap">History</h2>
+        <ol class="rb-hist" id="rbHistory" aria-label="Cards drawn this round, oldest first"></ol>
+      </div>
+
+      <div class="rb-spot">
+        <div class="rb-slot" id="rbSlot">
+          <div class="rb-card" id="rbCard" role="img" aria-label="Face-down card — pays 2x">
+            <div class="rb-card-inner" id="rbInner">
+              <div class="rb-face rb-back">
+                <img src="assets/img/card-back.svg" alt="" width="250" height="350">
+                <span class="rb-pays">PAYS 2X</span>
+              </div>
+              <div class="rb-face rb-front" id="rbFront"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rb-deck-col">
+        <div class="rb-dots" id="rbDots" aria-hidden="true"></div>
+        <div class="rb-deck" id="rbDeck" aria-hidden="true"></div>
+        <p class="rb-left"><b id="rbLeft">54</b> <span>cards left</span></p>
+      </div>
+
+      <div class="rb-status" id="rbStatus">
+        <span class="rb-badge" id="rbBadge" hidden></span>
+        <p class="rb-msg" id="rbMsg">Red or black? Make your call.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="mg-bet" aria-label="Your bet">
+    <div class="rb-bet-row">
+      <div class="mg-amount"><span>Bet</span> <span class="mg-coin" aria-hidden="true"></span> <b id="rbAmount">0.20</b></div>
+      <button class="rb-new" type="button" id="rbNew" hidden>New Round</button>
+    </div>
+    <input class="mg-slider" id="rbSlider" type="range" min="0" max="1000" step="1" value="0" aria-label="Bet amount">
+    <div class="mg-chips" id="rbChips"></div>
+    <div class="mg-limits"><span>Min: 0.20</span> <span>Max: 15K</span></div>
+  </section>
+  <p class="mg-note">Live play · RTP <span id="rbRtp">96.3%</span></p>
+</main>
+
+<div class="mg-actions" id="rbActions">
+  <button class="mg-act rb-act-red" type="button" data-side="RED">
+    <b>RED</b> <span class="rb-suits" aria-hidden="true"><svg viewBox="0 0 100 100"><use href="#rbH"/></svg><svg viewBox="0 0 100 100"><use href="#rbD"/></svg></span>
+  </button>
+  <button class="mg-act rb-act-black" type="button" data-side="BLACK">
+    <b>BLACK</b> <span class="rb-suits" aria-hidden="true"><svg viewBox="0 0 100 100"><use href="#rbS"/></svg><svg viewBox="0 0 100 100"><use href="#rbC"/></svg></span>
+  </button>
+  <button class="mg-act rb-act-next" type="button" id="rbNext" hidden><b>Play Next Hand</b></button>
+</div>
+
+<canvas class="mg-confetti" id="rbConfetti" aria-hidden="true"></canvas>
+<div class="sr-only" id="rbLive" aria-live="polite"></div>
+
+<dialog class="mg-sheet" id="rbConfirm" aria-labelledby="rbConfirmTitle" aria-describedby="rbConfirmText">
+  <h2 id="rbConfirmTitle">New round?</h2>
+  <p id="rbConfirmText">Starting a new round will end this round. Are you sure you want to start a new round?</p>
+  <div class="mg-sheet-actions">
+    <button class="rb-sheet-new" type="button" id="rbConfirmNew">New Round</button>
+    <button class="rb-sheet-stay" type="button" id="rbConfirmStay" autofocus>Stay</button>
+  </div>
+</dialog>
+
+<dialog class="mg-dialog" id="rbRules" aria-labelledby="rbRulesTitle">
+  <h2 id="rbRulesTitle">How to play</h2>
+  <ol>
+    <li>Choose your bet with the slider or a chip.</li>
+    <li>Tap <b>RED</b> (hearts and diamonds) or <b>BLACK</b> (spades and clubs) — the top card of the deck is turned over.</li>
+    <li>If its colour matches your call, you win 2× your bet.</li>
+    <li>If a <b>Joker</b> turns up, every call loses.</li>
+    <li>With credits, cards aren't put back: the deck runs down through the round and the history shows every card drawn. <b>New Round</b> shuffles a full deck.</li>
+    <li>With real money, every hand is dealt by our server from a freshly shuffled full deck of 54, so every call has the same 96.3% return.</li>
+  </ol>
+  <p><b>Fairness:</b> each round's deck is shuffled at random, then dealt in order — no card is ever picked to suit a call. A full deck holds 26 red cards, 26 black and 2 Jokers, so a call on a fresh deck wins 26 times in 54: a return of <span id="rbRulesRtp">96.3%</span>. As the deck runs down, the odds move with what's left.</p>
+  <form method="dialog"><button class="btn btn-primary btn-block">Got it</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/minigame.js?v=34"></script>
+<script src="assets/js/redblack.js?v=33"></script>
+</body>
+</html>

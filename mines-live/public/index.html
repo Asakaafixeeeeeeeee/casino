@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#071630">
+<title>Live Mines — RendoWin</title>
+<meta name="description" content="Live Mines: everyone plays the same 5×5 board in 3-minute rounds, with fun credits or real money.">
+<link rel="stylesheet" href="style.css?v=6">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<!-- the star, the bomb, the blast (the same art as Rendo Mines) -->
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  <defs>
+    <!-- the bomb: a cast-iron ball lit from the top left, a cool rim light from below, a steel collar -->
+    <radialGradient id="mnBombBody" cx="34%" cy="28%" r="80%">
+      <stop offset="0" stop-color="#8a95a8"/><stop offset=".22" stop-color="#3d4452"/><stop offset=".58" stop-color="#15181f"/><stop offset="1" stop-color="#030405"/>
+    </radialGradient>
+    <radialGradient id="mnBombGloss" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mnBombRim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset=".45" stop-color="#7fa2ff" stop-opacity="0"/><stop offset="1" stop-color="#8fb0ff" stop-opacity=".5"/>
+    </linearGradient>
+    <linearGradient id="mnSteel" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2b313b"/><stop offset=".3" stop-color="#d3dbe6"/><stop offset=".55" stop-color="#6c7582"/><stop offset="1" stop-color="#1c2027"/>
+    </linearGradient>
+    <radialGradient id="mnSpark" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff"/><stop offset=".35" stop-color="#ffe066"/><stop offset="1" stop-color="#ff8a00" stop-opacity="0"/>
+    </radialGradient>
+    <!-- the burst left on the tile that was hit -->
+    <radialGradient id="mnBlastGlow" cx="50%" cy="50%" r="50%">
+      <stop offset=".25" stop-color="#ffd27a" stop-opacity=".85"/><stop offset="1" stop-color="#ff4d00" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="mnBlastOuter" cx="50%" cy="50%" r="50%">
+      <stop offset=".2" stop-color="#ff9a00"/><stop offset=".75" stop-color="#ff4d00"/><stop offset="1" stop-color="#c4001a"/>
+    </radialGradient>
+    <radialGradient id="mnBlastMid" cx="50%" cy="50%" r="50%">
+      <stop offset=".1" stop-color="#fff3b0"/><stop offset=".8" stop-color="#ffc400"/><stop offset="1" stop-color="#ff8f00"/>
+    </radialGradient>
+    <linearGradient id="mnLogoFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c08cff"/><stop offset=".55" stop-color="#7b3fe4"/><stop offset="1" stop-color="#4c1d95"/>
+    </linearGradient>
+  </defs>
+  <!-- a flat star (badge, logo) that takes the surrounding colour -->
+  <symbol id="mnStar" viewBox="0 0 64 64">
+    <path d="M32 8.5L38.8 25.2L56.7 26.5L42.9 38.1L47.3 55.5L32 46L16.7 55.5L21.1 38.1L7.3 26.5L25.2 25.2Z"
+          fill="currentColor" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
+  </symbol>
+  <!-- the star on an opened tile: ten facets lit from the top left, shadows warmed by the orange tile -->
+  <symbol id="mnStar3d" viewBox="0 0 64 64">
+    <path d="M32.0 5.0L39.4 23.3L59.1 24.7L44.0 37.4L48.8 56.6L32.0 46.1L15.2 56.6L20.0 37.4L4.9 24.7L24.6 23.3Z" fill="#c95f00" opacity=".45" transform="translate(0 2.2)"/>
+    <path d="M32.0 33.5 L24.6 23.3 L32.0 5.0Z" fill="#fefdfb"/>
+    <path d="M32.0 33.5 L32.0 5.0 L39.4 23.3Z" fill="#fcf7f2"/>
+    <path d="M32.0 33.5 L39.4 23.3 L59.1 24.7Z" fill="#f6e2cc"/>
+    <path d="M32.0 33.5 L59.1 24.7 L44.0 37.4Z" fill="#f3d7b9"/>
+    <path d="M32.0 33.5 L44.0 37.4 L48.8 56.6Z" fill="#eec598"/>
+    <path d="M32.0 33.5 L48.8 56.6 L32.0 46.1Z" fill="#eec497"/>
+    <path d="M32.0 33.5 L32.0 46.1 L15.2 56.6Z" fill="#f3d5b5"/>
+    <path d="M32.0 33.5 L15.2 56.6 L20.0 37.4Z" fill="#f6e0c7"/>
+    <path d="M32.0 33.5 L20.0 37.4 L4.9 24.7Z" fill="#fcf6ef"/>
+    <path d="M32.0 33.5 L4.9 24.7 L24.6 23.3Z" fill="#fefcf9"/>
+    <path d="M32.0 33.5L32.0 5.0M32.0 33.5L59.1 24.7M32.0 33.5L48.8 56.6M32.0 33.5L15.2 56.6M32.0 33.5L4.9 24.7" fill="none" stroke="#fff" stroke-width="1" stroke-opacity=".75"/>
+    <path d="M32.0 5.0L39.4 23.3L59.1 24.7L44.0 37.4L48.8 56.6L32.0 46.1L15.2 56.6L20.0 37.4L4.9 24.7L24.6 23.3Z" fill="none" stroke="#fff6e6" stroke-width="1.4" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="mnBomb" viewBox="0 0 64 64">
+    <ellipse cx="30.5" cy="58.6" rx="15" ry="2.6" fill="#000" opacity=".4"/>
+    <circle cx="30" cy="37" r="20.5" fill="url(#mnBombBody)"/>
+    <circle cx="30" cy="37" r="20.5" fill="url(#mnBombRim)"/>
+    <circle cx="30" cy="37" r="20" fill="none" stroke="#000" stroke-opacity=".5"/>
+    <ellipse cx="22.5" cy="27.5" rx="9.5" ry="6.5" transform="rotate(-38 22.5 27.5)" fill="url(#mnBombGloss)"/>
+    <ellipse cx="20.6" cy="25.4" rx="3.4" ry="2" transform="rotate(-38 20.6 25.4)" fill="#fff" opacity=".9"/>
+    <g transform="rotate(45 46 20)">
+      <rect x="40" y="15.5" width="12" height="9.5" rx="1.6" fill="url(#mnSteel)" stroke="#11141a" stroke-width=".9"/>
+      <path d="M40.5 19.6H51.5" stroke="#0f1217" stroke-opacity=".55" stroke-width=".8"/>
+      <ellipse cx="46" cy="15.5" rx="6" ry="1.9" fill="#1a1e25" stroke="#8a93a0" stroke-width=".8"/>
+    </g>
+    <path d="M49.3 16.8C52.6 12.6 50.6 9.6 55.2 6.6" fill="none" stroke="#d9b075" stroke-width="3" stroke-linecap="round"/>
+    <path d="M49.3 16.8C52.6 12.6 50.6 9.6 55.2 6.6" fill="none" stroke="#6b4a20" stroke-width="3" stroke-linecap="round" stroke-dasharray="1.1 1.9"/>
+    <path d="M49.9 15.9C52.7 12.3 51 9.7 54.6 7.1" fill="none" stroke="#fff3d6" stroke-width=".7" stroke-opacity=".6" stroke-linecap="round"/>
+    <circle cx="56" cy="6" r="6" fill="url(#mnSpark)"/>
+    <path d="M56 .6v10.8M50.6 6h10.8M52.2 2.2l7.6 7.6M59.8 2.2l-7.6 7.6" stroke="#fff6c8" stroke-width="1" stroke-linecap="round"/>
+    <circle cx="59.6" cy="2.4" r=".9" fill="#ffd54f"/><circle cx="52" cy="3" r=".7" fill="#ffe082"/><circle cx="60.4" cy="9.4" r=".6" fill="#ffca28"/>
+  </symbol>
+  <symbol id="mnBlast" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="49" fill="url(#mnBlastGlow)"/>
+    <path d="M50.0 9.2L56.6 23.3L70.7 10.6L70.2 27.3L79.1 29.9L74.4 40.7L85.3 45.7L82.2 53.9L92.7 66.2L72.9 65.8L79.4 83.2L64.4 77.4L58.8 85.5L50.0 81.1L38.3 97.3L38.2 72.5L21.4 82.2L24.8 67.4L11.7 64.5L23.2 53.3L1.5 44.1L22.5 39.6L11.4 23.4L28.8 26.1L30.7 13.3L43.2 22.2Z" fill="url(#mnBlastOuter)" stroke="#7a0010" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M55.3 19.9L60.1 31.1L74.4 26.5L69.9 40.3L80.5 45.7L69.5 53.4L75.8 63.7L65.3 65.9L62.7 76.0L52.9 70.7L44.0 84.2L39.7 69.3L25.5 73.6L29.8 59.8L19.7 54.3L29.6 46.4L19.7 33.9L35.2 34.7L36.7 22.8L47.0 28.7Z" fill="url(#mnBlastMid)"/>
+    <path d="M56.9 31.1L58.3 41.0L69.0 41.2L64.5 49.4L69.7 57.2L60.3 59.4L58.5 68.3L50.6 63.7L43.6 67.6L41.0 59.8L32.8 58.0L36.5 50.6L31.5 43.3L40.1 40.9L41.2 31.1L49.4 37.0Z" fill="#fffbe6"/>
+  </symbol>
+  <symbol id="mnLogo" viewBox="0 0 32 32">
+    <rect width="32" height="32" rx="8" fill="url(#mnLogoFill)"/>
+    <rect x=".5" y=".5" width="31" height="31" rx="7.5" fill="none" stroke="#fff" stroke-opacity=".28"/>
+    <path d="M4 3h24a5 5 0 0 1 4 4v5c-8-3-20-3-28 0V7a5 5 0 0 1 0-4z" fill="#fff" opacity=".18"/>
+    <use href="#mnStar" x="6" y="6.5" width="20" height="20" color="#fff"/>
+  </symbol>
+</svg>
+
+<header class="top">
+  <button type="button" class="burger" id="menuBtn" aria-expanded="false" aria-controls="menu" aria-label="Open the menu">
+    <span></span><span></span><span></span>
+  </button>
+  <h1 class="title"><svg viewBox="0 0 32 32" aria-hidden="true"><use href="#mnLogo"/></svg><span class="live">LIVE</span> <span class="title-name">Mines</span></h1>
+  <div class="balance"><span id="balLabel">Fun credits</span><b><span id="balance">0.00</span> GHS</b></div>
+</header>
+
+<!-- the menu: slides in from the left over a dimmed page -->
+<div class="menu" id="menu" hidden>
+  <div class="menu-scrim" data-close></div>
+  <nav class="menu-panel" aria-label="Menu">
+    <div class="menu-head">
+      <span class="title"><svg viewBox="0 0 32 32" aria-hidden="true"><use href="#mnLogo"/></svg><span class="live">LIVE</span> Mines</span>
+      <button type="button" class="menu-close" data-close aria-label="Close the menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <button type="button" class="menu-me" id="meBtn">
+      <span class="avatar" aria-hidden="true"><span class="dot"></span></span>
+      <span class="menu-txt"><small>Playing as</small><b id="meName">Player</b></span>
+      <span class="menu-aside">Change</span>
+    </button>
+    <button type="button" class="menu-item" id="soundBtn" aria-pressed="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="wave" d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/><path class="cross" d="M16 9l6 6M22 9l-6 6"/></svg>
+      <span class="menu-txt"><b>Sound</b></span>
+      <span class="sound-switch" aria-hidden="true"></span>
+    </button>
+    <p class="menu-label">Bets</p>
+    <button type="button" class="menu-item" data-go="live"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M5.6 5.6a9 9 0 000 12.8M18.4 5.6a9 9 0 010 12.8"/></svg><span class="menu-txt"><b>Live bets</b></span></button>
+    <button type="button" class="menu-item" data-go="history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg><span class="menu-txt"><b>Round history</b></span></button>
+    <button type="button" class="menu-item" data-go="mine"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 9h6M9 13h6"/></svg><span class="menu-txt"><b>My bets</b></span></button>
+    <p class="menu-label">Game</p>
+    <button type="button" class="menu-item" data-go="fair"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg><span class="menu-txt"><b>How it works · provably fair</b></span></button>
+    <a class="menu-item" href="https://asakaa-casino.onrender.com/games.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span class="menu-txt"><b>Back to RendoWin lobby</b></span></a>
+  </nav>
+</div>
+
+<section class="status" aria-live="polite">
+  <div class="clock" id="clockWrap" title="Everyone plays this board until the clock runs out">
+    <svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5" class="ring-bg"/><circle cx="18" cy="18" r="15.5" class="ring" id="ring"/></svg>
+    <b id="clock">3:00</b>
+  </div>
+  <div class="status-text">
+    <b id="statusTitle">Connecting…</b>
+    <span id="statusSub">Everyone plays the same board this round</span>
+  </div>
+  <div class="round-id">Round <b id="roundId">–</b></div>
+</section>
+
+<main class="game">
+  <div class="info">
+    <select class="mines-select" id="minesSelect" aria-label="Number of mines" disabled><option>Mines: 6</option></select>
+    <span class="next"><span id="nextLabel">1 tile pays</span>: <b id="nextMult">1.27x</b></span>
+  </div>
+
+  <section class="board" id="board" aria-label="The shared board">
+    <div class="grid" id="grid" role="group" aria-label="25 tiles"></div>
+  </section>
+
+  <div class="tools">
+    <button type="button" class="random" id="randomBtn">RANDOM</button>
+    <button type="button" class="clear" id="clearBtn">Clear</button>
+    <button type="button" class="switch" role="switch" aria-checked="false" id="autoBtn"><span>Auto Game</span><span class="track"><span class="thumb"></span></span></button>
+  </div>
+
+  <button type="button" class="go" id="goBtn" data-state="bet"><b>BET</b></button>
+
+  <div class="betbar">
+    <label for="betInput">Bet <small>GHS</small></label>
+    <button type="button" id="minusBtn" aria-label="Lower the bet">−</button>
+    <input id="betInput" type="text" inputmode="decimal" value="0.10" autocomplete="off" aria-label="Bet amount in GHS">
+    <button type="button" id="plusBtn" aria-label="Raise the bet">+</button>
+    <button type="button" class="preset" id="halfBtn">Half</button>
+    <button type="button" class="preset" id="doubleBtn">Double</button>
+  </div>
+
+  <!-- who's staking this round, past rounds, and your own bets -->
+  <section class="panel" aria-label="Bets and history">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" aria-selected="true" data-tab="live">Live bets <span class="count" id="liveCount">0</span></button>
+      <button type="button" role="tab" aria-selected="false" data-tab="history">History</button>
+      <button type="button" role="tab" aria-selected="false" data-tab="mine">My bets</button>
+    </div>
+    <div class="tab-body" id="tabLive">
+      <div class="summary" id="liveSummary"></div>
+      <div class="rows head"><span>Player</span><span>Tiles</span><span>Stake</span><span>Result</span></div>
+      <div id="liveRows"></div>
+      <p class="demo-note">Players tagged <em class="demo">DEMO</em> are simulated, to show how a busy round looks. Their bets settle on the same board but don't affect anyone else.</p>
+    </div>
+    <div class="tab-body" id="tabHistory" hidden></div>
+    <div class="tab-body" id="tabMine" hidden></div>
+  </section>
+
+  <details class="fair" id="fair">
+    <summary>Provably fair · how it works</summary>
+    <p>Everyone connected plays the <b>same board</b> for 3 minutes. At the start of a round the server shows the SHA-256 hash of a secret seed: <code id="hash">–</code>. The <span id="minesCount">6</span> mines are worked out from that seed. When the round ends, the seed and the mines are published, so you can check the hash matches and re-derive the mines (<a id="verifyLink" href="#" hidden>verify the last round</a>).</p>
+    <p>Choose 1–19 tiles and press BET to lock them in — one bet per round, and you can cancel it until the last 10 seconds. <b>Nothing is revealed until the clock hits 0:00</b>; then the board turns over for everyone. If all your tiles are stars you win your bet × the multiplier for that many tiles; if any is a mine, the bet is lost. The multiplier for k tiles is 96.5% ÷ the chance that k tiles are all safe (1 tile 1.27x, 2 tiles 1.69x, 3 tiles 2.29x …), so every bet returns 96.5% on average. Auto Game places the same tiles and stake again every round.</p>
+    <p>Playing for <b>real money</b> (open Live Mines from the RendoWin lobby while signed in), your bet comes from your RendoWin wallet: the wallet service draws each round's seed, keeps it secret until 0:00, and pays wins straight into your wallet — even if you close this page before the round ends.</p>
+    <p class="last" id="lastRound"></p>
+  </details>
+  <p class="note"><span id="modeNote">Fun credits · no real money · </span><a href="https://asakaa-casino.onrender.com/games.html">Back to RendoWin</a></p>
+</main>
+
+<div class="toast" id="toast" hidden></div>
+<div class="winfx" id="winfx" hidden role="dialog" aria-modal="false" aria-labelledby="winfxTitle">
+  <div class="winfx-rays" aria-hidden="true"></div><div class="winfx-glow" aria-hidden="true"></div>
+  <div class="winfx-card">
+    <div class="winfx-star" aria-hidden="true"><svg viewBox="0 0 64 64"><use href="#mnStar3d"/></svg></div>
+    <p class="winfx-title" id="winfxTitle">Congratulations!</p>
+    <p class="winfx-sub">You won</p>
+    <p class="winfx-amount"><span>GHS</span> <b id="winfxAmount" data-v="0.00">0.00</b></p>
+    <p class="winfx-mult" id="winfxMult"></p>
+    <button type="button" class="winfx-ok" id="winfxOk">Collect</button>
+  </div>
+</div>
+<canvas class="coins" id="coins" hidden aria-hidden="true"></canvas>
+<script src="/socket.io/socket.io.js"></script>
+<script src="app.js?v=7"></script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 135 25" width="270" height="50">
+  <!-- RendoWin wordmark: RENDO in silver, WIN in the brand gold. Letters are drawn as strokes and shapes (not font
+       text), so it renders the same everywhere; same letterforms as the Rendo Crash logo. A darker copy offset behind
+       gives depth. -->
+  <defs>
+    <linearGradient id="silver" x1="0" y1="0" x2="0" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c3c8d3"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffe866"/>
+      <stop offset=".55" stop-color="#ffcc00"/>
+      <stop offset="1" stop-color="#ff9a00"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-40%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="0" stdDeviation="1.2" flood-color="#ffb300" flood-opacity=".6"/>
+    </filter>
+    <!-- heavy geometric letters on a 20-unit cap height, stroke 5; diagonals are filled shapes -->
+    <path id="rendo" d="M2.5 0V20 M2.5 2.5H9.5Q11.5 2.5 11.5 4.5V9Q11.5 11 9.5 11H2.5
+      M19.6 0V20 M19.6 2.5H29.1 M19.6 10H27.6 M19.6 17.5H29.1
+      M34.1 0V20 M43.1 0V20
+      M50.6 0V20 M50.6 2.5H55.6Q59.6 2.5 59.6 6.5V13.5Q59.6 17.5 55.6 17.5H50.6
+      M69.1 2.5H74.1Q76.1 2.5 76.1 4.5V15.5Q76.1 17.5 74.1 17.5H69.1Q67.1 17.5 67.1 15.5V4.5Q67.1 2.5 69.1 2.5Z"/>
+    <path id="rendoFill" d="M5.2 11H10.4L14.6 20H9.4Z M31.6 0H36.8L45.6 20H40.4Z"/>
+    <path id="win" d="M108.5 0V20 M116 0V20 M125 0V20"/>
+    <path id="winFill" d="M81.1 0H86.1L88.1 11L90.1 0H95.1L90.5 20H85.7Z M89.5 0H94.5L96.5 11L98.5 0H103.5L98.9 20H94.1Z
+      M113.5 0H118.7L127.5 20H122.3Z"/>
+  </defs>
+  <g transform="translate(5 2) skewX(-12)" stroke-width="5" stroke-linejoin="miter" stroke-miterlimit="2" fill="none">
+    <g transform="translate(1.1 1.4)">
+      <use href="#rendo" stroke="#3a3f4b"/>
+      <use href="#rendoFill" fill="#3a3f4b" stroke="none"/>
+      <use href="#win" stroke="#5c3a00"/>
+      <use href="#winFill" fill="#5c3a00" stroke="none"/>
+    </g>
+    <use href="#rendo" stroke="url(#silver)"/>
+    <use href="#rendoFill" fill="url(#silver)" stroke="none"/>
+    <g filter="url(#glow)">
+      <use href="#win" stroke="url(#gold)"/>
+      <use href="#winFill" fill="url(#gold)" stroke="none"/>
+    </g>
+  </g>
+</svg>

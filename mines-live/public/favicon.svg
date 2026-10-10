@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="128" height="128">
+  <!-- RendoWin emblem: a heavy italic "R", in the wordmark's letterforms, on the brand's yellow tile -->
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe55c"/>
+      <stop offset=".5" stop-color="#ffcc00"/>
+      <stop offset="1" stop-color="#ff9500"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#gold)" stroke="#d98300" stroke-width="1.5"/>
+  <path d="M6 9Q32 3 58 9V22Q32 15 6 22Z" fill="#fff" opacity=".12"/>
+  <g transform="translate(32 32) skewX(-12) translate(-32 -32)" fill="#151515">
+    <path d="M21.5 13V51 M21.5 17.2H35Q42 17.2 42 24.2V26.3Q42 33.3 35 33.3H21.5" fill="none" stroke="#151515"
+          stroke-width="8.4" stroke-linejoin="miter" stroke-miterlimit="2"/>
+    <path d="M26.4 33.3H35.2L45.5 51H36.7Z"/>
+  </g>
+</svg>

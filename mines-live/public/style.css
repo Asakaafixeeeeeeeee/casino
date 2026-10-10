@@ -1,0 +1,896 @@
+/* Rendo Mines Live — deep navy, rounded dark-blue tiles that flip to a gold star or a bomb, the shared round clock,
+   the control bar (mines, RANDOM, Auto Game, BET / CASH OUT, bet bar) and the cash-out toast. */
+:root {
+  --ink: #e6ecff;
+  --dim: #8fa1cf;
+  --line: rgba(120, 150, 230, .2);
+  --panel: rgba(8, 20, 48, .85);
+  --green: linear-gradient(180deg, #34d058, #15803d);
+  --orange: linear-gradient(180deg, #ffbf47, #f08a00);
+  --ff: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  min-height: 100vh; color: var(--ink); font: 15px/1.45 var(--ff);
+  background: radial-gradient(120% 60% at 50% 0%, #17336e, #0a1838 55%, #050c1f);
+  background-color: #071630;
+}
+.sprite { position: absolute; width: 0; height: 0; }
+button { font: inherit; color: inherit; }
+
+/* ---------- header and round status ---------- */
+.top {
+  position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 14px; background: rgba(5, 12, 31, .92); border-bottom: 1px solid var(--line); backdrop-filter: blur(8px);
+}
+.title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1.15rem; font-weight: 900; min-width: 0; }
+.title svg { width: 26px; height: 26px; }
+.live { padding: 2px 7px; border-radius: 6px; font-size: .62rem; letter-spacing: .1em; background: #dc2626; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .55; } }
+.balance { display: grid; justify-items: end; line-height: 1.1; padding: 4px 10px; border-radius: 10px; background: rgba(0, 0, 0, .4); }
+.balance span { font-size: .55rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #ffd60a; }
+.balance b { font-size: 1rem; }
+
+.status {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; max-width: 480px; margin: 12px auto 0; padding: 10px 14px;
+  border-radius: 16px; background: var(--panel); border: 1px solid var(--line);
+}
+.clock { position: relative; width: 58px; height: 58px; display: grid; place-items: center; }
+.clock svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.ring-bg, .ring { fill: none; stroke-width: 3; }
+.ring-bg { stroke: rgba(255, 255, 255, .1); }
+.ring { stroke: #ffd60a; stroke-dasharray: 97.4; stroke-linecap: round; transition: stroke-dashoffset .3s linear; }
+.clock b { font-size: .95rem; font-variant-numeric: tabular-nums; }
+.clock.urgent .ring { stroke: #ef4444; }
+.clock.urgent b { color: #fca5a5; animation: pulse .8s ease-in-out infinite; }
+.status-text { display: grid; line-height: 1.25; }
+.status-text b { font-size: .95rem; }
+.status-text span { font-size: .75rem; color: var(--dim); }
+.round-id { font-size: .7rem; color: var(--dim); text-align: right; }
+.round-id b { display: block; font-size: 1rem; color: var(--ink); }
+
+/* ---------- the game ---------- */
+.game { max-width: 480px; margin: 0 auto; padding: 12px 12px 24px; display: grid; gap: 12px; }
+.info { display: flex; justify-content: space-between; align-items: center; }
+.mines-select {
+  height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: #0b1a3d; color: var(--ink); font: 800 .85rem var(--ff); appearance: none;
+}
+.next { padding: 7px 14px; border-radius: 999px; background: rgba(0, 0, 0, .35); border: 1px solid var(--line); font-size: .82rem; font-weight: 700; color: var(--dim); }
+.next b { color: #ffd60a; }
+
+.board { padding: 12px; border-radius: 20px; background: linear-gradient(180deg, #0f2453, #0a1838); border: 1px solid var(--line); box-shadow: inset 0 0 30px rgba(0, 0, 0, .5), 0 14px 30px rgba(0, 0, 0, .4); }
+.board.shake { animation: shake .45s ease; }
+@keyframes shake { 20% { transform: translate(-6px, 3px); } 40% { transform: translate(5px, -4px); } 60% { transform: translate(-4px, 2px); } 80% { transform: translate(3px, -1px); } }
+.grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.tile { position: relative; aspect-ratio: 1; padding: 0; border: 0; background: none; cursor: pointer; perspective: 500px; }
+.flip { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform .45s cubic-bezier(.3, 1.3, .5, 1); transition-delay: var(--d, 0ms); }
+.tile.is-open .flip { transform: rotateY(180deg); }
+.face { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 12px; backface-visibility: hidden; }
+.up {
+  background: linear-gradient(180deg, #2a4a9a, #17306e);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .22), inset 0 -3px 6px rgba(0, 0, 0, .35), 0 3px 6px rgba(0, 0, 0, .4);
+  transition: filter .15s;
+}
+.up::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: url("mines-grain.png") center / 120px; opacity: .25; mix-blend-mode: overlay; }
+.tile:hover .up { filter: brightness(1.18); }
+.down { transform: rotateY(180deg); background: #0a1838; border: 1px solid rgba(255, 255, 255, .12); }
+.down svg { width: 78%; height: 78%; }
+.is-star .down { background: radial-gradient(circle, #3a4a20, #1a2410 70%); border-color: rgba(255, 214, 10, .5); box-shadow: inset 0 0 14px rgba(255, 200, 60, .4); }
+.is-boom .down { background: radial-gradient(circle, #ff5a3c, #8a0d0d 75%); border-color: #ff8a70; }
+.is-ghost-star .down, .is-ghost-mine .down { opacity: .5; }
+.tile.is-pick .up { box-shadow: inset 0 0 0 3px #ffd60a, 0 0 12px rgba(255, 214, 10, .6); }
+.order { position: absolute; top: 4px; right: 6px; font-size: .7rem; font-weight: 900; color: #ffd60a; }
+/* the blast over a hit mine (the same sprite sheets as Rendo Mines) */
+.fx { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.flash { z-index: 4; width: 260%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, #fff 0 14%, rgba(255, 244, 200, .9) 24%, rgba(255, 170, 60, .35) 44%, transparent 64%); animation: fl .5s ease-out both; }
+@keyframes fl { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.25); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.25); } }
+.fire { z-index: 5; width: 300%; aspect-ratio: 1; background: url("mines-blast.webp") 0 0 / 1000% 100% no-repeat; animation: fire .8s steps(9) both, fade .8s linear both; }
+@keyframes fire { to { background-position: 100% 0; } }
+@keyframes fade { 96% { opacity: 1; } 100% { opacity: 0; } }
+.shock { z-index: 3; width: 100%; aspect-ratio: 1; border-radius: 50%; border: 3px solid rgba(255, 228, 170, .9); animation: sh .6s ease-out both; }
+@keyframes sh { from { opacity: 1; transform: translate(-50%, -50%) scale(.3); } to { opacity: 0; transform: translate(-50%, -50%) scale(3.4); } }
+.blast { z-index: 3; width: 100%; animation: settle .45s ease-out .5s both; }
+.blast svg { width: 100%; height: 100%; filter: drop-shadow(0 0 8px rgba(255, 150, 30, .9)); }
+@keyframes settle { from { opacity: 0; transform: translate(-50%, -50%) scale(.3); } to { opacity: 1; transform: translate(-50%, -50%) scale(.95); } }
+
+/* ---------- controls ---------- */
+.tools { display: flex; justify-content: space-between; align-items: center; }
+.random { min-width: 120px; height: 42px; border-radius: 12px; border: 0; cursor: pointer; font-weight: 900; letter-spacing: .06em; color: #fff; background: var(--green); box-shadow: 0 4px 0 #0c5c2a; }
+.random:disabled { opacity: .45; cursor: default; }
+.clear { height: 42px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, .06); cursor: pointer; font-weight: 800; }
+.clear:disabled { opacity: .4; cursor: default; }
+.tools { gap: 10px; }
+.tools .switch { margin-left: auto; }
+/* chosen tiles: a gold ring and their order; once the bet is placed they're locked (a steadier glow) */
+.tile.is-pick .up { box-shadow: inset 0 0 0 3px #ffd60a, 0 0 12px rgba(255, 214, 10, .6); filter: brightness(1.15); }
+.tile.is-locked .up { box-shadow: inset 0 0 0 3px #ffd60a, 0 0 18px rgba(255, 214, 10, .85); background: linear-gradient(180deg, #4a5aa8, #2a3e86); }
+.go[data-state="placed"] { flex-direction: column; gap: 0; font-size: 1.1rem; color: #3a1d00; background: var(--orange); box-shadow: 0 5px 0 #a35a00; }
+.switch { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; cursor: pointer; font-weight: 800; font-size: .88rem; }
+.switch:disabled { opacity: .45; cursor: default; }
+.track { position: relative; width: 44px; height: 24px; border-radius: 999px; background: rgba(0, 0, 0, .45); border: 1px solid var(--line); }
+.thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #8fa1cf; transition: transform .2s; }
+.switch[aria-checked="true"] .track { background: #16a34a; }
+.switch[aria-checked="true"] .thumb { transform: translateX(20px); background: #fff; }
+.go {
+  display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 62px; border-radius: 16px; border: 0; cursor: pointer;
+  font-size: 1.3rem; letter-spacing: .06em; color: #fff; transition: filter .15s, transform .08s;
+}
+.go svg { width: 22px; height: 22px; fill: currentColor; }
+.go span { font-size: .95rem; font-weight: 800; }
+.go[data-state="bet"] { background: var(--green); box-shadow: 0 5px 0 #0c5c2a, 0 10px 20px rgba(0, 0, 0, .35); }
+.go[data-state="cash"] { color: #3a1d00; background: var(--orange); box-shadow: 0 5px 0 #a35a00, 0 0 22px rgba(255, 179, 71, .4); }
+.go[data-state="done"] { flex-direction: column; gap: 0; font-size: 1rem; background: #1c2a52; color: var(--dim); }
+.go[aria-disabled="true"] { filter: grayscale(.4) brightness(.75); cursor: default; }
+.go:active:not([aria-disabled="true"]) { transform: translateY(2px); }
+.betbar { display: grid; grid-template-columns: auto 40px 1fr 40px auto auto; align-items: center; gap: 6px; padding: 8px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+.betbar label { padding: 0 4px; font-size: .82rem; font-weight: 800; color: var(--dim); }
+.betbar button { height: 40px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, .06); cursor: pointer; font-weight: 900; }
+.betbar .preset { padding: 0 10px; font-size: .8rem; }
+.betbar button:disabled, .betbar input:disabled { opacity: .45; cursor: default; }
+.betbar input { min-width: 0; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: #050c1f; color: #fff; text-align: center; font: 800 1.05rem var(--ff); }
+
+/* ---------- live bets, history, my bets ---------- */
+.panel { border-radius: 16px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 6px; border-bottom: 1px solid var(--line); }
+.tabs button { padding: 8px 4px; border: 0; border-radius: 10px; cursor: pointer; background: transparent; color: var(--dim); font-weight: 800; font-size: .82rem; }
+.tabs button[aria-selected="true"] { background: #1c2a52; color: #fff; }
+.count { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px; background: #dc2626; color: #fff; font-size: .68rem; }
+.tab-body { max-height: 320px; overflow-y: auto; }
+.summary { display: flex; justify-content: space-between; gap: 8px; padding: 8px 12px; font-size: .78rem; color: var(--dim); border-bottom: 1px solid rgba(255, 255, 255, .05); }
+.summary b { color: #ffd60a; }
+.rows { display: grid; grid-template-columns: 1fr 52px 70px 86px; gap: 6px; align-items: center; padding: 7px 12px; font-size: .8rem; border-bottom: 1px solid rgba(255, 255, 255, .04); font-variant-numeric: tabular-nums; }
+.rows.head { font-size: .66rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.rows span:not(:first-child) { text-align: right; }
+.rows .who { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.rows .who i { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: .66rem; font-weight: 900; color: #fff; }
+.rows .who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.rows.you { background: rgba(255, 214, 10, .08); }
+.rows.sim .who b { color: #b9c4e4; font-weight: 600; }
+.demo { flex: none; margin-left: 2px; padding: 1px 5px; border-radius: 5px; font-style: normal; font-size: .58rem; font-weight: 900; letter-spacing: .06em;
+  color: #c7d2f2; background: rgba(143, 161, 207, .18); border: 1px solid rgba(143, 161, 207, .35); }
+.demo-note { margin: 0; padding: 8px 12px; font-size: .7rem; color: var(--dim); border-top: 1px solid rgba(255, 255, 255, .05); }
+.rows .won { color: #4ade80; font-weight: 800; }
+.rows .lost { color: #f87171; }
+.rows .wait { color: var(--dim); }
+.empty { margin: 0; padding: 18px 12px; text-align: center; font-size: .82rem; color: var(--dim); }
+/* a past round: the mine map, then its numbers */
+.hist { display: grid; grid-template-columns: 46px 1fr auto; gap: 10px; align-items: center; padding: 9px 12px; border-bottom: 1px solid rgba(255, 255, 255, .05); font-size: .78rem; }
+.mini { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.5px; width: 46px; }
+.mini i { aspect-ratio: 1; border-radius: 2px; background: #22356b; }
+.mini i.m { background: #ef4444; box-shadow: 0 0 3px rgba(239, 68, 68, .8); }
+.mini i.p { outline: 1.5px solid #ffd60a; outline-offset: -1.5px; }
+.hist b { color: #fff; }
+.hist small { display: block; color: var(--dim); }
+.hist .pay { text-align: right; }
+.hist a { color: #7ab8ff; font-size: .7rem; }
+.fair { padding: 10px 14px; border-radius: 14px; background: rgba(0, 0, 0, .25); border: 1px solid var(--line); font-size: .8rem; color: var(--dim); }
+.fair summary { cursor: pointer; font-weight: 800; color: var(--ink); }
+.fair code { color: #ffd60a; word-break: break-all; }
+.fair a { color: #7ab8ff; }
+.note { margin: 0; text-align: center; font-size: .72rem; color: var(--dim); }
+
+.toast {
+  position: fixed; left: 50%; top: 70px; z-index: 50; transform: translateX(-50%); max-width: calc(100% - 24px); padding: 10px 18px; border-radius: 14px;
+  font-weight: 800; color: #fff; background: #1c2a52; border: 1px solid var(--line); box-shadow: 0 12px 28px rgba(0, 0, 0, .45); text-align: center;
+  animation: drop .4s cubic-bezier(.2, 1.4, .4, 1) both;
+}
+.toast.ok { background: linear-gradient(180deg, #22c55e, #15803d); border-color: #86efac; }
+.toast.err { background: linear-gradient(180deg, #ef4444, #991b1b); border-color: #fca5a5; }
+@keyframes drop { from { opacity: 0; transform: translate(-50%, -20px); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* =====================================================================================================================
+   The real look: the same finish as Rendo Mines (assets/css/mines.css), converted to this page's class names — a
+   chrome-rimmed board with a socket under every tile, glossy keycap tiles with grain and thickness, a faceted gold star,
+   a cast-iron bomb with a burning fuse, the fireball sprite sheet, and raised glossy buttons.
+   ===================================================================================================================== */
+:root {
+  --mn-gold: linear-gradient(180deg, #fff6c4 0%, #ffd84a 30%, #f2a900 56%, #ffd23c 82%, #ffe98a 100%);
+  --mn-grain: url("mines-grain.png");
+  --yellow: #ffd60a;
+  --muted: #a9bde0;
+}
+body {
+  /* royal blue under a stage light, a faint diamond lattice like a casino carpet, darker towards the edges */
+  background:
+    radial-gradient(75% 40% at 50% -8%, rgba(130, 200, 255, .38), transparent 72%),
+    radial-gradient(130% 75% at 50% 42%, transparent 52%, rgba(0, 6, 22, .58) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44'%3E%3Cpath d='M22 1L43 22L22 43L1 22Z' fill='none' stroke='%23ffffff' stroke-opacity='.045'/%3E%3Ccircle cx='22' cy='22' r='1.2' fill='%23ffffff' fill-opacity='.05'/%3E%3C/svg%3E") center top / 44px 44px,
+    linear-gradient(180deg, #034383 0%, #001c3d 100%);
+  background-color: #001c3d;
+}
+/* soft rays of light fanning down from above the board */
+.mines-page::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: repeating-conic-gradient(from 160deg at 50% -12%, rgba(170, 215, 255, .05) 0deg 3deg, transparent 3deg 11deg);
+  -webkit-mask-image: radial-gradient(90% 70% at 50% 0%, #000 0%, transparent 75%);
+  mask-image: radial-gradient(90% 70% at 50% 0%, #000 0%, transparent 75%);
+}
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: repeating-conic-gradient(from 160deg at 50% -12%, rgba(170, 215, 255, .05) 0deg 3deg, transparent 3deg 11deg);
+  -webkit-mask-image: radial-gradient(90% 70% at 50% 0%, #000 0%, transparent 75%);
+  mask-image: radial-gradient(90% 70% at 50% 0%, #000 0%, transparent 75%);
+}
+.mines-select {
+  -webkit-appearance: none; appearance: none; height: 40px; padding: 0 36px 0 14px; cursor: pointer;
+  border: 1px solid rgba(140, 195, 255, .35); border-radius: 12px; color: #fff; font: 800 .92rem var(--ff);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23d6e8ff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>") right 12px center / 12px no-repeat,
+    linear-gradient(180deg, #164b8f 0%, #0b2f62 52%, #072550 100%);
+  box-shadow: inset 0 1px 0 rgba(200, 228, 255, .35), inset 0 -2px 0 rgba(0, 0, 0, .3), 0 3px 0 #041633, 0 6px 12px rgba(0, 0, 0, .35);
+}
+.mines-select option { background: #082b57; color: #fff; }
+.mines-select:disabled { opacity: .55; cursor: not-allowed; }
+/* the gold "Next" plate, lettering pressed into the metal */
+.next {
+  display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px 0 12px; border-radius: 999px;
+  background: var(--mn-gold); color: #3d2600; font-size: .92rem; font-weight: 800; white-space: nowrap;
+  text-shadow: 0 1px 0 rgba(255, 245, 200, .7);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .95), inset 0 -2px 0 rgba(150, 90, 0, .4), 0 0 0 1px rgba(120, 70, 0, .55),
+    0 3px 0 #9a6400, 0 7px 14px rgba(0, 0, 0, .38), 0 0 18px rgba(255, 196, 0, .25);
+}
+.next svg { width: 17px; height: 17px; color: #8a5200; filter: drop-shadow(0 1px 0 rgba(255, 240, 190, .8)); }
+.next b { font-weight: 900; font-variant-numeric: tabular-nums; }
+
+/* ---------- the board: a chrome rim with a gold trim line, a dark well, a socket under every tile ---------- */
+.board {
+  position: relative; padding: 11px; border-radius: 26px; border: 3px solid transparent;
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(90, 160, 255, .16), transparent 62%) padding-box,
+    linear-gradient(180deg, #0b2752, #061733 60%, #04112a) padding-box,
+    linear-gradient(155deg, #e2f0ff 0%, #6fa3e6 16%, #1d4f95 42%, #0b2b5a 66%, #7cb0f0 100%) border-box;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .7), 0 22px 42px rgba(0, 0, 0, .55), 0 0 70px rgba(40, 120, 255, .22),
+    inset 0 5px 16px rgba(0, 0, 0, .7), inset 0 0 0 1px rgba(255, 255, 255, .04);
+}
+.board::before {
+  content: ""; position: absolute; inset: 4px; border-radius: 19px; pointer-events: none;
+  border: 1px solid rgba(255, 214, 130, .22); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35);
+}
+/* the blast lights up the board around it */
+.board::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at var(--hx, 50%) var(--hy, 50%), rgba(255, 140, 40, .55), rgba(255, 60, 20, .18) 30%, transparent 62%);
+}
+.board.is-hit::after { animation: mn-glare 1s ease-out .26s both; }
+@keyframes mn-glare { 0% { opacity: 0; } 18% { opacity: 1; } 100% { opacity: 0; } }
+.grid { position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; }
+.grid.no-anim .flip { transition: none !important; }
+.board.is-shaking { animation: mn-shake .5s .26s; }
+@keyframes mn-shake {
+  12% { transform: translate(-5px, 2px) rotate(-.4deg); } 26% { transform: translate(5px, -3px) rotate(.4deg); }
+  42% { transform: translate(-3px, -2px); } 58% { transform: translate(3px, 3px); } 78% { transform: translate(-1px, 1px); }
+}
+
+.tile {
+  position: relative; aspect-ratio: 1; padding: 0; border: 0; background: none; cursor: pointer; perspective: 540px;
+  border-radius: 14px; -webkit-tap-highlight-color: transparent;
+}
+/* the socket the tile sits in */
+.tile::before {
+  content: ""; position: absolute; inset: -2px -2px 0; z-index: -1; border-radius: 15px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, .55), rgba(0, 0, 0, .3));
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, .7), 0 1px 0 rgba(255, 255, 255, .07);
+}
+.tile:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; z-index: 6; }
+.tile.is-boom { z-index: 5; }
+/* the face sits 5px up: the tile's thickness shows underneath */
+.flip {
+  position: absolute; inset: 0 0 5px; transform-style: preserve-3d;
+  transition: transform .52s cubic-bezier(.35, .1, .25, 1); transition-delay: var(--d, 0ms);
+}
+.tile.is-open .flip { transform: rotateY(180deg); }
+.face {
+  position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; border-radius: 13px;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+}
+
+/* covered: a glossy navy keycap with grain, a curved sheen across the top, and a small lit gem in a ring */
+.up {
+  background:
+    radial-gradient(150% 85% at 50% -24%, rgba(255, 255, 255, .27) 0 47%, rgba(255, 255, 255, 0) 60%),
+    var(--mn-grain) 0 0 / 96px 96px,
+    linear-gradient(160deg, #3080d8 0%, #1b58a8 40%, #103f80 74%, #0b3067 100%);
+  background-blend-mode: normal, soft-light, normal;
+  box-shadow: inset 0 2px 0 rgba(200, 230, 255, .6), inset 0 -2px 0 rgba(0, 18, 50, .55), inset 2px 0 0 rgba(160, 210, 255, .14),
+    inset -2px 0 0 rgba(0, 20, 60, .3), 0 4px 0 #0b2856, 0 5px 0 #061936, 0 9px 12px rgba(0, 0, 0, .5);
+  transition: filter .15s ease, translate .1s ease, box-shadow .1s ease;
+}
+.up::after {
+  content: ""; width: 14%; aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f2f9ff 0 12%, #93c6ff 34%, #3479d9 64%, #143f80 100%);
+  box-shadow: 0 0 0 3px rgba(0, 24, 66, .38), 0 0 0 4px rgba(170, 215, 255, .14), 0 0 10px 2px rgba(120, 185, 255, .5);
+}
+/* now and then a light sweeps across the covered tiles, corner to corner */
+.up::before {
+  content: ""; position: absolute; inset: -30%; pointer-events: none;
+  background: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, .26) 50%, transparent 58%);
+  transform: translateX(-120%); animation: mn-sweep 7s ease-in-out infinite; animation-delay: calc(1.2s + var(--i, 0) * 90ms);
+}
+@keyframes mn-sweep { 0%, 74% { transform: translateX(-120%); } 90%, 100% { transform: translateX(120%); } }
+.board[data-live="true"] .tile:not(.is-open):active .up {
+  translate: 0 3px; box-shadow: inset 0 2px 0 rgba(200, 230, 255, .5), inset 0 -2px 0 rgba(0, 18, 50, .55), 0 1px 0 #0b2856, 0 2px 0 #061936, 0 4px 6px rgba(0, 0, 0, .45);
+}
+@media (hover: hover) {
+  .board[data-live="true"] .tile:not(.is-open):hover .up { filter: brightness(1.18) saturate(1.1); translate: 0 -1px; }
+}
+.board:not([data-live="true"]) .tile { cursor: default; }
+
+/* Auto Game: the tiles you've lined up get a glowing gold ring and a numbered gold coin */
+.tile.is-pick .up {
+  box-shadow: inset 0 0 0 2px #ffd54a, inset 0 2px 0 rgba(255, 245, 200, .7), 0 0 0 1px #8a5c00, 0 0 16px 2px rgba(255, 200, 40, .6),
+    0 4px 0 #0b2856, 0 5px 0 #061936, 0 9px 12px rgba(0, 0, 0, .5);
+}
+.order {
+  position: absolute; top: -6px; left: -6px; z-index: 4; min-width: 21px; height: 21px; padding: 0 5px; display: grid; place-items: center;
+  border-radius: 999px; background: var(--mn-gold); color: #3d2600; font-size: .72rem; font-weight: 900;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 0 0 1px #8a5c00, 0 2px 5px rgba(0, 0, 0, .55);
+}
+.order:empty, .tile.is-open .order { display: none; }
+
+/* ---------- opened tiles ---------- */
+.down { transform: rotateY(180deg); }
+.down svg { position: relative; display: block; width: 70%; height: 70%; }
+/* a star: glossy amber, glowing, with slow rays behind the star */
+.tile.is-star .down {
+  background:
+    radial-gradient(150% 85% at 50% -24%, rgba(255, 255, 255, .42) 0 46%, rgba(255, 255, 255, 0) 60%),
+    var(--mn-grain) 0 0 / 96px 96px,
+    radial-gradient(circle at 50% 58%, #ffd57e 0%, #ffa526 38%, #f47a00 70%, #d65a00 100%);
+  background-blend-mode: normal, soft-light, normal;
+  box-shadow: inset 0 2px 0 rgba(255, 245, 210, .85), inset 0 -2px 0 rgba(150, 50, 0, .55), 0 4px 0 #a54300, 0 5px 0 #7a3000,
+    0 0 0 2px rgba(255, 214, 140, .7), 0 0 24px 3px rgba(255, 140, 0, .7), 0 10px 14px rgba(0, 0, 0, .4);
+}
+.tile.is-star .down svg { filter: drop-shadow(0 0 5px rgba(255, 255, 255, .85)) drop-shadow(0 2px 2px rgba(140, 50, 0, .5)); }
+.tile.is-star:not(.is-ghost) .down::before {
+  content: ""; position: absolute; inset: -40%; pointer-events: none;
+  background: repeating-conic-gradient(rgba(255, 250, 220, .3) 0deg 7deg, transparent 7deg 22deg);
+  -webkit-mask-image: radial-gradient(circle, #000 18%, transparent 58%);
+  mask-image: radial-gradient(circle, #000 18%, transparent 58%);
+  animation: mn-spin 14s linear infinite;
+}
+@keyframes mn-spin { to { transform: rotate(360deg); } }
+/* a mine shown at the end of the round: a gunmetal tile, a faint red glow under the bomb */
+.tile.is-mine .down {
+  background:
+    radial-gradient(150% 85% at 50% -24%, rgba(255, 255, 255, .13) 0 46%, rgba(255, 255, 255, 0) 60%),
+    radial-gradient(circle at 50% 66%, rgba(255, 70, 40, .26), transparent 55%),
+    var(--mn-grain) 0 0 / 96px 96px,
+    linear-gradient(160deg, #343c4f 0%, #1c2231 52%, #0d1019 100%);
+  background-blend-mode: normal, normal, soft-light, normal;
+  box-shadow: inset 0 2px 0 rgba(220, 230, 255, .2), inset 0 -2px 0 rgba(0, 0, 0, .55), 0 4px 0 #0a0d14, 0 5px 0 #040509, 0 9px 12px rgba(0, 0, 0, .5);
+}
+.tile.is-mine .down svg { filter: drop-shadow(0 3px 3px rgba(0, 0, 0, .6)); }
+/* the fuse still burns: a spark flickers on its tip */
+.fuse {
+  position: absolute; left: 75.5%; top: 21%; width: 13%; aspect-ratio: 1; margin: -6.5% 0 0 -6.5%; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, #fff 0 18%, #ffe066 34%, rgba(255, 140, 0, .55) 56%, transparent 72%);
+  animation: mn-flicker .32s steps(2) infinite alternate;
+}
+@keyframes mn-flicker { from { transform: scale(.75); opacity: .75; } to { transform: scale(1.15); opacity: 1; } }
+/* the mine that was hit: a hot red tile with the burst left on it */
+.tile.is-boom .down {
+  background:
+    radial-gradient(150% 85% at 50% -24%, rgba(255, 255, 255, .32) 0 46%, rgba(255, 255, 255, 0) 60%),
+    var(--mn-grain) 0 0 / 96px 96px,
+    radial-gradient(circle at 50% 50%, #ff8a66 0%, #ff3b2e 30%, #d01626 62%, #7d000e 100%);
+  background-blend-mode: normal, soft-light, normal;
+  box-shadow: inset 0 2px 0 rgba(255, 220, 210, .65), inset 0 -2px 0 rgba(70, 0, 8, .55), 0 4px 0 #7a000e, 0 5px 0 #4d0008,
+    0 0 26px 4px rgba(255, 60, 30, .8), 0 9px 12px rgba(0, 0, 0, .45);
+}
+.tile.is-boom .down svg { display: none; }
+/* the tiles you didn't open, shown at the end: they stay navy and matt, with the star or bomb faded into them,
+   so the stars you found and the mine you hit stand out */
+.tile.is-ghost .down {
+  background:
+    radial-gradient(150% 85% at 50% -24%, rgba(255, 255, 255, .1) 0 46%, rgba(255, 255, 255, 0) 60%),
+    var(--mn-grain) 0 0 / 96px 96px,
+    linear-gradient(160deg, #1b4b8c 0%, #113769 55%, #0b2852 100%);
+  background-blend-mode: normal, soft-light, normal;
+  box-shadow: inset 0 2px 0 rgba(170, 210, 255, .3), inset 0 -2px 0 rgba(0, 14, 40, .5), 0 4px 0 #0a2147, 0 5px 0 #06152f, 0 8px 10px rgba(0, 0, 0, .45);
+}
+.tile.is-ghost.is-star .down svg { opacity: .5; filter: sepia(.3) saturate(1.6) hue-rotate(-12deg); }
+.tile.is-ghost.is-mine .down { background-color: #0d1a33; }
+.tile.is-ghost.is-mine .down svg { opacity: .85; }
+.tile.is-fresh .down { animation: mn-pop .5s .3s both; }
+@keyframes mn-pop {
+  0%, 100% { transform: rotateY(180deg) scale(1); }
+  45% { transform: rotateY(180deg) scale(1.14); }
+}
+
+/* a new star: glints flash around it and the multiplier floats up */
+.glint {
+  position: absolute; z-index: 4; width: 34%; aspect-ratio: 1; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle, #fff 0 8%, rgba(255, 245, 210, .9) 14%, transparent 42%);
+  clip-path: polygon(50% 0, 58% 42%, 100% 50%, 58% 58%, 50% 100%, 42% 58%, 0 50%, 42% 42%);
+  animation: mn-glint .75s ease-out both;
+}
+@keyframes mn-glint {
+  0% { opacity: 0; transform: scale(.2) rotate(0); }
+  35% { opacity: 1; transform: scale(1) rotate(45deg); }
+  100% { opacity: 0; transform: scale(.4) rotate(90deg); }
+}
+.float {
+  position: absolute; left: 50%; top: 2%; z-index: 7; pointer-events: none; white-space: nowrap;
+  font-size: .86rem; font-weight: 900; color: #ffe27a; letter-spacing: .02em;
+  text-shadow: 0 1px 0 #7a4a00, 0 0 8px rgba(255, 190, 40, .9), 0 2px 4px rgba(0, 0, 0, .8);
+  animation: mn-float 1s ease-out .3s both;
+}
+@keyframes mn-float {
+  0% { opacity: 0; transform: translate(-50%, 6px) scale(.8); }
+  20% { opacity: 1; transform: translate(-50%, -6px) scale(1.08); }
+  100% { opacity: 0; transform: translate(-50%, -30px) scale(1); }
+}
+
+/* ---------- the explosion: a white flash, the fireball (10 frames), a shockwave, sparks, smoke, and the burst left behind ---------- */
+.flash, .fire, .shock, .smoke, .blast {
+  position: absolute; left: 50%; top: 50%; pointer-events: none; transform: translate(-50%, -50%);
+}
+.flash {
+  z-index: 4; width: 260%; aspect-ratio: 1; border-radius: 50%; opacity: 0;
+  background: radial-gradient(circle, #fff 0 14%, rgba(255, 244, 200, .92) 24%, rgba(255, 170, 60, .35) 44%, transparent 64%);
+  animation: mn-flash .5s ease-out .26s both;
+}
+@keyframes mn-flash { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.25); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.25); } }
+.fire {
+  z-index: 5; width: 300%; aspect-ratio: 1; margin-top: -12%; opacity: 0;
+  background: url("mines-blast.webp") 0 0 / 1000% 100% no-repeat;
+  animation: mn-fire .8s steps(9) .28s both, mn-fire-show .8s linear .28s both;
+}
+@keyframes mn-fire { from { background-position: 0 0; } to { background-position: 100% 0; } }
+@keyframes mn-fire-show { 0%, 96% { opacity: 1; } 100% { opacity: 0; } }
+.shock {
+  z-index: 3; width: 100%; aspect-ratio: 1; border-radius: 50%; opacity: 0;
+  border: 3px solid rgba(255, 228, 170, .9); box-shadow: 0 0 14px rgba(255, 170, 60, .8), inset 0 0 10px rgba(255, 170, 60, .6);
+  animation: mn-shock .6s ease-out .3s both;
+}
+@keyframes mn-shock { 0% { opacity: 1; transform: translate(-50%, -50%) scale(.3); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(3.4); border-width: 1px; } }
+.smoke {
+  z-index: 4; width: 150%; aspect-ratio: 1; opacity: 0;
+  background: url("mines-smoke.webp") center / contain no-repeat;
+  animation: mn-smoke 2s ease-out both; animation-delay: var(--sd, .75s);
+}
+@keyframes mn-smoke {
+  0% { opacity: 0; transform: translate(calc(-50% + var(--sx, 0px)), -50%) scale(.6) rotate(0); }
+  25% { opacity: .7; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--sx, 0px)), -170%) scale(1.6) rotate(var(--sr, 40deg)); }
+}
+.spark {
+  position: absolute; left: 50%; top: 50%; z-index: 6; width: var(--s, 5px); height: var(--s, 5px); margin: calc(var(--s, 5px) / -2) 0 0 calc(var(--s, 5px) / -2);
+  border-radius: 50%; pointer-events: none; opacity: 0;
+  background: #fff1b8; box-shadow: 0 0 6px 1px #ff9800, 0 0 2px #fff;
+  animation: mn-spark var(--t, .8s) cubic-bezier(.15, .7, .35, 1) .3s both;
+}
+@keyframes mn-spark {
+  0% { opacity: 1; transform: rotate(var(--a)) translateY(0) scale(1); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--a)) translateY(calc(var(--r, 60px) * -1)) scale(.25); }
+}
+.blast { z-index: 3; width: 100%; aspect-ratio: 1; opacity: 0; transform: translate(-50%, -50%) scale(.3); }
+.blast svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 8px rgba(255, 150, 30, .9)); }
+.tile.is-boom .blast { animation: mn-settle .45s ease-out .82s both, mn-embers 1.2s ease-in-out 1.3s 4 alternate; }
+@keyframes mn-settle { from { opacity: 0; transform: translate(-50%, -50%) scale(.3) rotate(-10deg); } to { opacity: 1; transform: translate(-50%, -50%) scale(.95) rotate(0); } }
+@keyframes mn-embers { from { filter: brightness(1); } to { filter: brightness(1.25) saturate(1.2); } }
+
+.tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* glossy, raised buttons that press down */
+.random, .go { position: relative; overflow: hidden; isolation: isolate; }
+.random::before, .go::before {
+  content: ""; position: absolute; left: 4%; right: 4%; top: 3px; height: 44%; z-index: -1; pointer-events: none;
+  border-radius: 999px 999px 40% 40% / 999px 999px 14px 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .5), rgba(255, 255, 255, .06));
+}
+.random {
+  min-width: 108px; height: 44px; padding: 0 20px; border: 0; border-radius: 999px; cursor: pointer; color: #fff;
+  font-size: .9rem; font-weight: 900; letter-spacing: .07em; text-shadow: 0 1px 0 rgba(0, 30, 90, .6);
+  background: linear-gradient(180deg, #5cb4ff 0%, #2a8aec 46%, #1868cc 54%, #1257b0 100%);
+  box-shadow: inset 0 1px 0 rgba(220, 240, 255, .8), inset 0 -2px 0 rgba(0, 30, 90, .4), 0 4px 0 #0b3d80, 0 5px 0 #072a5a, 0 9px 14px rgba(0, 0, 0, .4);
+  transition: transform .08s ease, box-shadow .08s ease, filter .15s ease;
+}
+.round-btn {
+  flex: none; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; cursor: pointer; color: #e8f2ff;
+  border: 0; border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #7aa6e0 0%, #3a68ad 42%, #1c3f78 78%, #12305f 100%);
+  box-shadow: inset 0 1px 0 rgba(220, 238, 255, .7), inset 0 -2px 0 rgba(0, 10, 40, .45), 0 0 0 1px rgba(0, 0, 0, .45),
+    0 4px 0 #0a2550, 0 5px 0 #061936, 0 9px 14px rgba(0, 0, 0, .4);
+  transition: transform .08s ease, box-shadow .08s ease;
+}
+.round-btn .ic { width: 22px; height: 22px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .5)); }
+.random:active:not([aria-disabled="true"]), .round-btn:active:not([aria-disabled="true"]) {
+  transform: translateY(4px); box-shadow: inset 0 1px 0 rgba(220, 240, 255, .6), inset 0 -2px 0 rgba(0, 30, 90, .4), 0 1px 0 #0b3d80, 0 3px 6px rgba(0, 0, 0, .4);
+}
+.random[aria-disabled="true"], .round-btn[aria-disabled="true"], .switch[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.switch {
+  display: inline-flex; align-items: center; gap: 10px; padding: 6px 0; border: 0; background: none; cursor: pointer;
+  color: #fff; font: 800 .86rem var(--ff); text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+}
+.track {
+  position: relative; flex: none; width: 50px; height: 28px; border-radius: 999px;
+  background: linear-gradient(180deg, #021230, #0a2a56); border: 1px solid rgba(140, 195, 255, .3);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, .7), 0 1px 0 rgba(255, 255, 255, .08); transition: background .2s ease, box-shadow .2s ease;
+}
+.thumb {
+  position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffffff, #d6e2f2 60%, #a9bbd4);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .55), inset 0 -1px 1px rgba(0, 0, 0, .2); transition: transform .2s ease;
+}
+.switch[aria-checked="true"] .track {
+  background: linear-gradient(180deg, #1f7be0, #3d9bff); border-color: #8cc6ff;
+  box-shadow: inset 0 2px 4px rgba(0, 30, 90, .5), 0 0 12px rgba(60, 160, 255, .55);
+}
+.switch[aria-checked="true"] .thumb { transform: translateX(22px); }
+
+/* BET (green) turns into CASH OUT (orange) during a round */
+.go {
+  display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 64px; padding: 0 16px;
+  border: 0; border-radius: 18px; cursor: pointer; color: #fff; font: 900 1.5rem var(--ff); letter-spacing: .08em;
+  text-shadow: 0 2px 0 rgba(0, 80, 25, .55);
+  background: linear-gradient(180deg, #6cf392 0%, #34d25e 44%, #1bb246 54%, #12963a 100%);
+  box-shadow: inset 0 2px 0 rgba(225, 255, 230, .8), inset 0 -3px 0 rgba(0, 70, 25, .45), 0 6px 0 #0c6d2a, 0 7px 0 #08531f, 0 14px 22px rgba(0, 0, 0, .45);
+  transition: transform .08s ease, box-shadow .08s ease, filter .15s ease, opacity .2s ease;
+}
+.go::before { border-radius: 14px 14px 50% 50% / 14px 14px 18px 18px; }
+.go .ic { width: 26px; height: 26px; filter: drop-shadow(0 2px 0 rgba(0, 80, 25, .55)); }
+.go .ic .f { fill: #fff; }
+.go b { font-weight: 900; }
+.go:hover { filter: brightness(1.06); }
+.go:active:not([aria-disabled="true"]) {
+  transform: translateY(5px); box-shadow: inset 0 2px 0 rgba(225, 255, 230, .7), inset 0 -3px 0 rgba(0, 70, 25, .45), 0 1px 0 #0c6d2a, 0 2px 0 #08531f, 0 5px 10px rgba(0, 0, 0, .4);
+}
+.go[data-state="cash"] {
+  flex-direction: column; gap: 0; color: #3a1600; letter-spacing: .06em; text-shadow: 0 1px 0 rgba(255, 230, 180, .55);
+  background: linear-gradient(180deg, #ffd27a 0%, #ffa526 44%, #ff8a00 54%, #e87300 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 245, 215, .85), inset 0 -3px 0 rgba(140, 60, 0, .45), 0 6px 0 #a34a00, 0 7px 0 #7a3600, 0 14px 22px rgba(0, 0, 0, .45);
+}
+.go[data-state="cash"]:active:not([aria-disabled="true"]) {
+  box-shadow: inset 0 2px 0 rgba(255, 245, 215, .75), inset 0 -3px 0 rgba(140, 60, 0, .45), 0 1px 0 #a34a00, 0 2px 0 #7a3600, 0 5px 10px rgba(0, 0, 0, .4);
+}
+/* once there is something to take, the button glows to draw the eye */
+.go.is-ready { animation: mn-ready 1.5s ease-in-out infinite; }
+@keyframes mn-ready { 50% { filter: brightness(1.08); box-shadow: inset 0 2px 0 rgba(255, 245, 215, .85), inset 0 -3px 0 rgba(140, 60, 0, .45), 0 6px 0 #a34a00, 0 7px 0 #7a3600, 0 14px 22px rgba(0, 0, 0, .45), 0 0 26px 4px rgba(255, 170, 40, .55); } }
+.go[data-state="cash"] b { font-size: 1.3rem; line-height: 1.1; }
+.go[data-state="cash"] span { font-size: .95rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.go[aria-disabled="true"] { opacity: .55; cursor: not-allowed; filter: none; }
+
+
+/* a placed bet: the orange of Rendo Mines' CASH OUT button, waiting for 0:00 */
+.go[data-state="placed"] {
+  flex-direction: column; gap: 0; color: #3a1600; letter-spacing: .06em; text-shadow: 0 1px 0 rgba(255, 230, 180, .55);
+  background: linear-gradient(180deg, #ffd27a 0%, #ffa526 44%, #ff8a00 54%, #e87300 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 245, 215, .85), inset 0 -3px 0 rgba(140, 60, 0, .45), 0 6px 0 #a34a00, 0 7px 0 #7a3600, 0 14px 22px rgba(0, 0, 0, .45);
+}
+.go[data-state="placed"] b { font-size: 1.15rem; line-height: 1.1; }
+.go[data-state="placed"] span { font-size: .85rem; font-weight: 800; letter-spacing: .02em; }
+.go svg { width: 26px; height: 26px; fill: #fff; filter: drop-shadow(0 2px 0 rgba(0, 80, 25, .55)); }
+/* chosen and locked tiles: the gold ring and numbered gold coin of Rendo Mines' Auto Game */
+.tile.is-locked .up { filter: brightness(1.12); }
+/* the header balance: a glossy orange gem */
+.balance {
+  background:
+    radial-gradient(150% 85% at 50% -24%, rgba(255, 255, 255, .42) 0 46%, rgba(255, 255, 255, 0) 60%),
+    var(--mn-grain) 0 0 / 96px 96px,
+    radial-gradient(circle at 50% 58%, #ffd57e 0%, #ffa526 38%, #f47a00 70%, #d65a00 100%);
+  background-blend-mode: normal, soft-light, normal;
+  box-shadow: inset 0 2px 0 rgba(255, 245, 210, .85), inset 0 -2px 0 rgba(150, 50, 0, .55), 0 3px 0 #a54300, 0 0 0 2px rgba(255, 214, 140, .7), 0 0 18px 2px rgba(255, 140, 0, .55);
+  color: #2a1000;
+}
+.balance span { color: #5a2400; }
+.balance b { color: #fff; text-shadow: 0 1px 2px rgba(120, 40, 0, .7); }
+/* the panels: recessed royal-blue wells like Rendo Mines' bet box */
+.status, .panel, .betbar, .fair {
+  background: linear-gradient(180deg, #011230, #03214b); border-color: rgba(140, 195, 255, .16);
+  box-shadow: inset 0 2px 7px rgba(0, 0, 0, .65), 0 1px 0 rgba(255, 255, 255, .08);
+}
+.top { background: rgba(2, 20, 48, .92); box-shadow: 0 1px 0 rgba(140, 195, 255, .14), 0 8px 24px rgba(0, 0, 0, .35); }
+.clear {
+  background: linear-gradient(180deg, #2c5e9e 0%, #1a467f 55%, #133a6c 100%); border: 0;
+  box-shadow: inset 0 1px 0 rgba(200, 228, 255, .45), 0 0 0 1px rgba(0, 0, 0, .4), 0 3px 0 #0a2550, 0 6px 10px rgba(0, 0, 0, .35);
+}
+.betbar button {
+  border: 0; background: linear-gradient(180deg, #2c5e9e 0%, #1a467f 55%, #133a6c 100%);
+  box-shadow: inset 0 1px 0 rgba(200, 228, 255, .45), inset 0 -2px 0 rgba(0, 10, 40, .35), 0 0 0 1px rgba(0, 0, 0, .4), 0 3px 0 #0a2550, 0 6px 10px rgba(0, 0, 0, .35);
+}
+.betbar input { background: #010d24; box-shadow: inset 0 2px 5px rgba(0, 0, 0, .7); border-color: rgba(140, 195, 255, .2); }
+.toast.ok {
+  border: 1px solid rgba(255, 228, 150, .75); background: linear-gradient(180deg, #2bd168 0%, #14a347 55%, #0e8a3b 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 0 0 1px rgba(0, 0, 0, .35), 0 10px 26px rgba(0, 0, 0, .45), 0 0 26px rgba(40, 220, 110, .45);
+}
+/* the gold pill: dark lettering pressed into the metal (the old yellow-on-dark colour no longer applies) */
+.next b { color: #3d2600; }
+.next { color: #3d2600; }
+/* the pick number: a small gold coin on the tile's corner (clear the old right-hand position) */
+.order { right: auto; top: -6px; left: -6px; }
+/* the small lit gem in the middle of each covered tile (undo the old full-tile grain overlay) */
+.up::after { position: static; inset: auto; opacity: 1; mix-blend-mode: normal; }
+/* the balance figure itself: full size (the small-caps style is only for the "Fun credits" label) */
+.balance b span { font-size: 1.05rem; letter-spacing: 0; text-transform: none; color: #fff; font-variant-numeric: tabular-nums; }
+.balance b { font-size: .7rem; }
+
+/* =====================================================================================================================
+   Mirror finish: the covered tiles are polished chrome-glass. Each reflects the room — a bright sky band at the top,
+   the dark horizon line through the middle, a pale floor glow at the bottom — with a sharp light streak across the glass.
+   The streak and the horizon slide with the pointer (--mx, --my from app.js), as a real mirror shifts with your view.
+   The board stands on a glossy floor that reflects it.
+   ===================================================================================================================== */
+.board { --mx: .5; --my: .5; }
+.up, .tile.is-locked .up {
+  background:
+    /* the light streak across the glass */
+    linear-gradient(118deg, transparent calc(28% + var(--mx) * 22%), rgba(255, 255, 255, .85) calc(35% + var(--mx) * 22%),
+      rgba(255, 255, 255, .18) calc(38% + var(--mx) * 22%), transparent calc(44% + var(--mx) * 22%)),
+    /* a second, fainter streak */
+    linear-gradient(118deg, transparent calc(52% + var(--mx) * 18%), rgba(255, 255, 255, .35) calc(55% + var(--mx) * 18%), transparent calc(58% + var(--mx) * 18%)),
+    /* the room reflected in it: sky, horizon, floor */
+    linear-gradient(180deg,
+      #fbfdff 0%, #dfe8f4 calc(10% + var(--my) * 6%), #a9b8cc calc(30% + var(--my) * 8%),
+      #39465c calc(46% + var(--my) * 8%), #1b2333 calc(52% + var(--my) * 8%), #4a5870 calc(60% + var(--my) * 8%),
+      #9fb0c6 82%, #e3ebf5 100%),
+    #c9d3e0;
+  background-blend-mode: screen, screen, normal, normal;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, .95), inset 0 -2px 0 rgba(20, 30, 50, .55),
+    inset 2px 0 0 rgba(255, 255, 255, .5), inset -2px 0 0 rgba(30, 40, 60, .35),
+    inset 0 0 0 1px rgba(255, 255, 255, .25),
+    0 4px 0 #6d7a8f, 0 5px 0 #3a4558, 0 9px 12px rgba(0, 0, 0, .5);
+}
+/* no gem on a mirror — just the faint edge of the glass catching the light */
+.up::after {
+  content: ""; position: absolute; inset: 3px; width: auto; aspect-ratio: auto; border-radius: 10px; background: none;
+  border: 1px solid rgba(255, 255, 255, .35); box-shadow: none;
+}
+/* the sweeping light becomes a bright glint running over the glass */
+.up::before { background: linear-gradient(115deg, transparent 44%, rgba(255, 255, 255, .7) 50%, transparent 56%); }
+@media (hover: hover) {
+  .board[data-live="true"] .tile:not(.is-open):hover .up { filter: brightness(1.12) contrast(1.05); }
+}
+/* chosen tiles: the gold ring reflected in the glass */
+.tile.is-pick .up {
+  box-shadow: inset 0 0 0 2px #ffd54a, inset 0 2px 0 rgba(255, 255, 255, .95), 0 0 0 1px #8a5c00, 0 0 16px 2px rgba(255, 200, 40, .6),
+    0 4px 0 #6d7a8f, 0 5px 0 #3a4558, 0 9px 12px rgba(0, 0, 0, .5);
+}
+.tile.is-locked .up { filter: sepia(.35) saturate(1.4) brightness(1.05); }
+
+/* the frame: polished chrome all round, with the gold trim line inside */
+.board {
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(220, 235, 255, .12), transparent 62%) padding-box,
+    linear-gradient(180deg, #121a28, #0a0f19 60%, #06090f) padding-box,
+    linear-gradient(155deg, #ffffff 0%, #c7d1de 12%, #5f6b7d 30%, #e9eef5 48%, #7c889b 64%, #f4f7fb 82%, #8a96a8 100%) border-box;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .7), 0 22px 42px rgba(0, 0, 0, .55), 0 0 60px rgba(180, 210, 255, .18),
+    inset 0 5px 16px rgba(0, 0, 0, .8);
+  /* standing on a glossy floor: a faint, fading reflection of the board underneath (Chrome, Edge, Safari) */
+  -webkit-box-reflect: below 6px linear-gradient(transparent 72%, rgba(255, 255, 255, .16));
+}
+/* the sockets under the tiles: dark, like the mirror's backing */
+.tile::before { background: linear-gradient(180deg, rgba(0, 0, 0, .7), rgba(0, 0, 0, .45)); }
+
+/* =====================================================================================================================
+   Animations: living reflections and twinkles, the tap ripple, the lock-in shimmer, the last-seconds tension, the
+   reveal, the coin shower and newcomers sliding into the live list.
+   ===================================================================================================================== */
+
+/* a sparkle glinting off the glass now and then */
+.twinkle {
+  position: absolute; z-index: 3; width: 22%; aspect-ratio: 1; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle, #fff 0 10%, rgba(255, 255, 255, .7) 16%, transparent 46%);
+  clip-path: polygon(50% 0, 56% 44%, 100% 50%, 56% 56%, 50% 100%, 44% 56%, 0 50%, 44% 44%);
+  animation: twinkle 1s ease-in-out both;
+}
+@keyframes twinkle { 0% { opacity: 0; transform: scale(.2) rotate(0); } 45% { opacity: 1; transform: scale(1) rotate(40deg); } 100% { opacity: 0; transform: scale(.3) rotate(90deg); } }
+
+/* the tap: the tile clicks down, a ring of light runs out across the glass */
+.tile.press .flip { animation: press .28s ease-out; }
+@keyframes press { 0% { transform: translateY(0); } 35% { transform: translateY(4px) scale(.97); } 100% { transform: translateY(0); } }
+.tile.ripple .up { animation: ripple .55s ease-out; animation-delay: var(--rd, 0ms); }
+@keyframes ripple { 0% { filter: brightness(1); } 30% { filter: brightness(1.45) drop-shadow(0 0 6px rgba(200, 225, 255, .8)); } 100% { filter: brightness(1); } }
+
+/* the bet locked in: a gold shimmer sweeps across each chosen tile and it drops into place */
+.tile.lockin .up::before {
+  transform: translateX(-120%); animation: lockshine .7s ease-out both; animation-delay: var(--ld, 0ms);
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 214, 90, .95) 50%, transparent 62%);
+}
+@keyframes lockshine { to { transform: translateX(120%); } }
+.tile.lockin .flip { animation: settle-in .5s cubic-bezier(.3, 1.6, .5, 1) both; animation-delay: var(--ld, 0ms); }
+@keyframes settle-in { 0% { transform: translateY(-5px); } 100% { transform: translateY(0); } }
+
+/* the last ten seconds: the chrome rim pulses red, the clock throbs on every tick */
+.board.tense { animation: tense 1s ease-in-out infinite; }
+@keyframes tense {
+  50% { box-shadow: 0 0 0 1px rgba(0, 0, 0, .7), 0 22px 42px rgba(0, 0, 0, .55), 0 0 38px 6px rgba(255, 50, 50, .55), inset 0 5px 16px rgba(0, 0, 0, .8); }
+}
+.clock b.pop { animation: pop .45s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes pop { 0% { transform: scale(1.5); color: #fff; } 100% { transform: scale(1); } }
+
+/* the reveal: each tile lifts a touch as it turns over */
+.tile.is-open .flip { transition: transform .55s cubic-bezier(.3, 1.35, .5, 1); transition-delay: var(--d, 0ms); }
+
+/* gold coins raining down on a win */
+.coins { position: fixed; inset: 0; z-index: 60; width: 100%; height: 100%; pointer-events: none; }
+
+/* a newcomer in the live list slides in with a gold flash */
+.rows.new { animation: slide-in .5s cubic-bezier(.2, 1.2, .4, 1) both; }
+@keyframes slide-in { 0% { opacity: 0; transform: translateX(26px); background: rgba(255, 214, 10, .25); } 100% { opacity: 1; transform: none; } }
+/* the LIVE badge breathes */
+.live { box-shadow: 0 0 0 0 rgba(220, 38, 38, .7); animation: pulse 1.6s ease-in-out infinite, beacon 1.6s ease-out infinite; }
+@keyframes beacon { 0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, .6); } 100% { box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .twinkle, .tile.press .flip, .tile.ripple .up, .tile.lockin .flip, .tile.lockin .up::before, .board.tense, .clock b.pop, .rows.new, .live { animation: none; }
+}
+
+/* locked-in tiles stay mirror glass, warmed to gold (the earlier flat locked style no longer applies) */
+.tile.is-locked .up { filter: sepia(.55) saturate(1.7) hue-rotate(-10deg) brightness(1.06); }
+.note a { color: inherit; text-decoration: underline; }
+
+/* a win: a gold "Congratulations!" card springs up over a dimmed board, light rays turn behind it, the amount counts up */
+.winfx {
+  position: fixed; inset: 0; z-index: 55; display: grid; place-items: center; padding: 16px;
+  background: radial-gradient(circle at 50% 45%, rgba(40, 30, 0, .55), rgba(2, 6, 18, .82) 70%);
+}
+.winfx[hidden] { display: none; }
+.winfx.show { animation: winfx-fade .35s ease-out both; }
+.winfx-rays {
+  position: absolute; left: 50%; top: 45%; width: 1100px; height: 1100px; margin: -550px 0 0 -550px; pointer-events: none; filter: blur(6px);
+  background: repeating-conic-gradient(from 0deg, rgba(255, 220, 140, .16) 0deg, rgba(255, 220, 140, 0) 6deg 18deg, rgba(255, 220, 140, .16) 24deg);
+  -webkit-mask: radial-gradient(circle, #000 0, rgba(0, 0, 0, .5) 25%, transparent 60%); mask: radial-gradient(circle, #000 0, rgba(0, 0, 0, .5) 25%, transparent 60%);
+}
+.winfx-glow {
+  position: absolute; left: 50%; top: 45%; width: 620px; height: 620px; margin: -310px 0 0 -310px; pointer-events: none; mix-blend-mode: screen;
+  background: radial-gradient(circle, rgba(255, 236, 190, .55) 0, rgba(255, 190, 70, .22) 22%, rgba(255, 150, 20, .06) 45%, transparent 65%);
+}
+.winfx.show .winfx-rays { animation: winfx-spin 40s linear infinite, winfx-fade 1s ease-out both; }
+.winfx.show .winfx-glow { animation: winfx-breathe 3.2s ease-in-out infinite, winfx-fade .8s ease-out both; }
+
+/* the card: dark lacquered glass in a polished gold bezel (the bezel is the border box's metal, the glass the padding box) */
+.winfx-card {
+  position: relative; width: min(350px, 100%); padding: 46px 24px 22px; border-radius: 24px; text-align: center;
+  border: 5px solid transparent;
+  background:
+    radial-gradient(120% 70% at 50% -10%, rgba(120, 160, 255, .22), transparent 60%) padding-box,
+    linear-gradient(180deg, #11234f 0%, #0a1736 45%, #050c20 100%) padding-box,
+    linear-gradient(135deg, #fff4c8 0%, #d9a52e 14%, #7a4b06 28%, #f6d77a 42%, #b77d12 55%, #fff1b8 66%, #8c5a0a 80%, #e6b84a 92%, #6b3f03 100%) border-box;
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, .18), inset 0 0 0 1px rgba(0, 0, 0, .7), inset 0 -18px 40px rgba(0, 0, 0, .45),
+    0 0 0 1px rgba(40, 20, 0, .9), 0 2px 0 1px rgba(255, 230, 160, .25),
+    0 30px 70px rgba(0, 0, 0, .75), 0 0 90px rgba(255, 170, 40, .28);
+}
+/* a glass reflection across the top of the card */
+.winfx-card::before {
+  content: ""; position: absolute; inset: 0; border-radius: 19px; pointer-events: none;
+  background: linear-gradient(170deg, rgba(255, 255, 255, .13) 0%, rgba(255, 255, 255, .04) 32%, transparent 33%);
+}
+.winfx.show .winfx-card { animation: winfx-pop .7s cubic-bezier(.18, 1.35, .4, 1) both; }
+
+/* the medallion: a minted gold coin with a milled rim, the board's faceted star set in it */
+.winfx-star {
+  position: absolute; left: 50%; top: -44px; width: 84px; height: 84px; margin-left: -42px; border-radius: 50%;
+  display: grid; place-items: center;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 58%, rgba(60, 30, 0, .55) 59%, transparent 61%),
+    repeating-conic-gradient(from 0deg, rgba(255, 255, 255, .0) 0 3deg, rgba(70, 35, 0, .25) 3deg 6deg),
+    radial-gradient(circle at 34% 28%, #fffbe6 0, #ffe08a 14%, #e3a92c 38%, #a8690b 70%, #5e3602 100%);
+  box-shadow: inset 0 3px 2px rgba(255, 255, 240, .75), inset 0 -4px 6px rgba(60, 25, 0, .7), inset 0 0 0 1px rgba(80, 40, 0, .6),
+    0 0 0 4px #081430, 0 0 0 5px rgba(255, 210, 120, .5), 0 8px 18px rgba(0, 0, 0, .6), 0 0 34px rgba(255, 190, 60, .55);
+}
+.winfx-star::after { /* the glint that runs over the metal */
+  content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, .75) 48%, transparent 60%) no-repeat;
+  background-size: 300% 100%; background-position: 140% 0; mix-blend-mode: overlay;
+}
+.winfx-star svg { width: 54px; height: 54px; filter: drop-shadow(0 2px 1px rgba(90, 40, 0, .7)) drop-shadow(0 0 6px rgba(255, 240, 200, .8)); }
+.winfx.show .winfx-star { animation: winfx-star 1s .15s cubic-bezier(.2, 1.4, .4, 1) both; }
+.winfx.show .winfx-star::after { animation: winfx-glint 2.6s 1s ease-in-out infinite; }
+
+/* gold-leaf lettering: banded like polished metal, cut into the card, a shine sweeping across it */
+.winfx-title, .winfx-amount b {
+  background:
+    linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, .95) 50%, transparent 60%) no-repeat,
+    linear-gradient(180deg, #fffbe8 0%, #ffe9a6 22%, #f2c24d 44%, #a96a07 50%, #d99a22 58%, #ffe08a 78%, #fff3c8 100%);
+  background-size: 250% 100%, 100% 100%; background-position: 160% 0, 0 0;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 1px 0 #5a3300) drop-shadow(0 2px 0 #3d2200) drop-shadow(0 4px 6px rgba(0, 0, 0, .7));
+}
+.winfx-title { margin: 2px 0 0; font-size: 1.75rem; font-weight: 900; letter-spacing: .03em; text-transform: uppercase; line-height: 1.1; }
+.winfx.show .winfx-title { animation: winfx-rise .5s .25s ease-out both, winfx-shine 3s 1s ease-in-out infinite; }
+.winfx-sub { margin: 10px 0 0; color: #b9c6e8; font-weight: 700; letter-spacing: .3em; text-transform: uppercase; font-size: .72rem; text-shadow: 0 1px 2px #000; }
+.winfx.show .winfx-sub { animation: winfx-rise .5s .35s ease-out both; }
+.winfx-amount {
+  margin: 8px 0 0; padding: 8px 10px 6px; border-radius: 14px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1.1;
+  background: linear-gradient(180deg, rgba(0, 0, 0, .55), rgba(0, 0, 0, .25)); box-shadow: inset 0 2px 6px rgba(0, 0, 0, .8), 0 1px 0 rgba(255, 255, 255, .08);
+}
+.winfx-amount span { font-size: .95rem; color: #e8c770; letter-spacing: .08em; vertical-align: 0.9em; }
+.winfx-amount b { font-size: 2.6rem; display: inline-block; }
+.winfx-amount b.done { animation: winfx-thump .5s ease-out, winfx-shine 3s .6s ease-in-out infinite; }
+.winfx.show .winfx-amount { animation: winfx-rise .5s .42s ease-out both; }
+.winfx-mult { margin: 10px 0 18px; font-size: .8rem; color: #e8c770; font-weight: 700; letter-spacing: .04em; }
+
+/* a polished gold bar */
+.winfx-ok {
+  position: relative; overflow: hidden; width: 100%; padding: 13px; border: 0; border-radius: 12px; cursor: pointer;
+  font-weight: 900; letter-spacing: .14em; text-transform: uppercase; color: #3a2100; text-shadow: 0 1px 0 rgba(255, 245, 210, .7);
+  background: linear-gradient(180deg, #fff5cf 0%, #f7d872 18%, #e0a833 48%, #b97a12 52%, #d89c2a 78%, #f2c75a 100%);
+  box-shadow: inset 0 1px 0 #fffbe9, inset 0 -1px 0 rgba(90, 45, 0, .6), 0 0 0 1px #5a3300, 0 3px 0 #6e4000, 0 8px 18px rgba(0, 0, 0, .55);
+}
+.winfx-ok::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, .6) 50%, transparent 60%) no-repeat; background-size: 250% 100%; background-position: 160% 0;
+}
+.winfx.show .winfx-ok::after { animation: winfx-shine 3s 1.4s ease-in-out infinite; }
+.winfx-ok:active { transform: translateY(2px); box-shadow: inset 0 1px 0 #fffbe9, 0 0 0 1px #5a3300, 0 1px 0 #6e4000; }
+@keyframes winfx-fade { from { opacity: 0; } }
+@keyframes winfx-pop { from { opacity: 0; transform: scale(.55) translateY(30px); } }
+@keyframes winfx-star { from { opacity: 0; transform: perspective(300px) rotateY(-540deg) scale(.4); } }
+@keyframes winfx-rise { from { opacity: 0; transform: translateY(10px); } }
+@keyframes winfx-spin { to { transform: rotate(360deg); } }
+@keyframes winfx-thump { 40% { transform: scale(1.12); } }
+@keyframes winfx-shine { 0%, 55% { background-position: 160% 0, 0 0; } 100% { background-position: -60% 0, 0 0; } }
+@keyframes winfx-glint { 0%, 50% { background-position: 140% 0; } 100% { background-position: -40% 0; } }
+@keyframes winfx-breathe { 50% { opacity: .75; transform: scale(1.06); } }
+.winfx-ok:focus:not(:focus-visible) { outline: none; }
+.winfx-ok:focus-visible { outline: 2px solid #ffe9a6; outline-offset: 3px; }
+
+/* ---------- the top bar: hamburger · title · balance, in one tidy row ---------- */
+.top { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; padding: 10px max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left)); }
+.title { min-width: 0; white-space: nowrap; }
+.title-name { overflow: hidden; text-overflow: ellipsis; }
+.balance { min-width: 0; padding: 5px 12px; border-radius: 12px; }
+@media (max-width: 360px) { .top .title svg { display: none; } .top { gap: 8px; } }
+.burger {
+  position: relative; display: grid; align-content: center; gap: 4px; width: 42px; height: 42px; padding: 0 11px; border-radius: 12px; cursor: pointer;
+  border: 0; background: linear-gradient(180deg, #2c5e9e 0%, #1a467f 55%, #133a6c 100%);
+  box-shadow: inset 0 1px 0 rgba(200, 228, 255, .45), inset 0 -2px 0 rgba(0, 10, 40, .35), 0 0 0 1px rgba(0, 0, 0, .45), 0 3px 0 #0a2550, 0 6px 10px rgba(0, 0, 0, .35);
+}
+.burger span {
+  display: block; height: 3px; border-radius: 2px; background: linear-gradient(180deg, #fff, #c9dcff);
+  box-shadow: 0 1px 1px rgba(0, 10, 40, .6); transition: transform .25s ease, opacity .2s ease;
+}
+.burger:active { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(200, 228, 255, .45), 0 0 0 1px rgba(0, 0, 0, .45), 0 1px 0 #0a2550; }
+.burger[aria-expanded="true"] span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.burger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+.burger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+.burger:focus-visible, .menu-item:focus-visible, .menu-me:focus-visible, .menu-close:focus-visible { outline: 2px solid #ffd60a; outline-offset: 2px; }
+
+/* ---------- the menu ---------- */
+.menu { position: fixed; inset: 0; z-index: 40; }
+.menu[hidden] { display: none; }
+.menu-scrim { position: absolute; inset: 0; background: rgba(1, 6, 18, .6); backdrop-filter: blur(3px); opacity: 0; transition: opacity .25s ease; }
+.menu-panel {
+  position: absolute; top: 0; bottom: 0; left: 0; width: min(310px, 86vw); overflow-y: auto; padding: 12px 12px 24px;
+  display: flex; flex-direction: column; gap: 6px;
+  background: linear-gradient(180deg, #0a2350 0%, #061736 60%, #040f26 100%);
+  box-shadow: inset -1px 0 0 rgba(140, 195, 255, .18), 18px 0 40px rgba(0, 0, 0, .55);
+  transform: translateX(-104%); transition: transform .26s cubic-bezier(.2, .8, .3, 1);
+}
+.menu.open .menu-scrim { opacity: 1; }
+.menu.open .menu-panel { transform: none; }
+.menu-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.menu-close { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; cursor: pointer; border: 1px solid var(--line); background: rgba(255, 255, 255, .06); }
+.menu-close svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.menu-label { margin: 10px 6px 2px; font-size: .62rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+.menu-item, .menu-me {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 8px 12px; border-radius: 12px; cursor: pointer; text-align: left;
+  border: 1px solid transparent; background: transparent; color: var(--ink); text-decoration: none; font-size: .92rem;
+}
+.menu-item:hover, .menu-me:hover { background: rgba(255, 255, 255, .06); border-color: var(--line); }
+.menu-item > svg { flex: none; width: 22px; height: 22px; fill: none; stroke: #9fc4ff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.menu-txt { flex: 1; min-width: 0; display: grid; line-height: 1.2; }
+.menu-txt b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-txt small { font-size: .68rem; color: var(--dim); font-weight: 700; letter-spacing: .04em; }
+.menu-me { background: linear-gradient(180deg, #011230, #03214b); border-color: rgba(140, 195, 255, .16); box-shadow: inset 0 2px 7px rgba(0, 0, 0, .55); }
+.menu-me .avatar {
+  position: relative; flex: none; width: 40px; height: 40px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 36%, #d5e4ff 0 22%, transparent 23%), radial-gradient(ellipse at 50% 100%, #d5e4ff 0 46%, transparent 47%), linear-gradient(180deg, #2c5e9e, #133a6c);
+  box-shadow: inset 0 1px 0 rgba(200, 228, 255, .45), 0 0 0 2px rgba(255, 214, 10, .55);
+}
+.menu-me .dot { position: absolute; right: -1px; bottom: -1px; width: 11px; height: 11px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 2px #061736, 0 0 6px #22c55e; }
+.menu-aside { flex: none; font-size: .72rem; font-weight: 800; color: #ffd60a; }
+/* the sound switch: a lit track when on; the speaker shows waves or a cross */
+.sound-switch { flex: none; position: relative; width: 44px; height: 26px; border-radius: 13px; background: #0a1736; box-shadow: inset 0 2px 4px rgba(0, 0, 0, .7), 0 0 0 1px rgba(140, 195, 255, .2); transition: background .2s; }
+.sound-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(180deg, #fff, #c9d6ee); box-shadow: 0 2px 3px rgba(0, 0, 0, .5); transition: transform .2s; }
+#soundBtn[aria-pressed="true"] .sound-switch { background: linear-gradient(180deg, #2bd168, #14a347); }
+#soundBtn[aria-pressed="true"] .sound-switch::after { transform: translateX(18px); }
+#soundBtn .cross { display: none; }
+#soundBtn[aria-pressed="false"] .wave { display: none; }
+#soundBtn[aria-pressed="false"] .cross { display: inline; stroke: #f87171; }

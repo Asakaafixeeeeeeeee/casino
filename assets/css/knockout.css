@@ -1,0 +1,101 @@
+/* Rendo Knockout — on top of Rendo Crash's layout (crash.css): the arena stage, the "Round Start!" call, the
+   bets HUD, the gold win banner, the Classic / ColorGo bar, the colour picker on each panel, the 1/2 · 2x · All In
+   buttons, the ColorGo tags in the bets list and the Stats tab. */
+.ko-logo { font: 900 italic 1.15rem/1 "Arial Black", Arial, sans-serif; letter-spacing: .02em; color: #fff; white-space: nowrap; text-shadow: 0 2px 0 #7a0710; }
+.ko-logo b { color: #ff3b30; text-shadow: 0 2px 0 #3a0004, 0 0 14px rgba(255, 59, 48, .5); }
+.ko-logo { display: inline-flex; align-items: center; gap: 8px; }
+.ko-mark { width: 28px; height: 28px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(255, 255, 255, .15), 0 2px 8px rgba(0, 0, 0, .5); }
+.ko-back { width: 20px; height: 20px; margin-right: 6px; color: #fff; }
+.cg-brand { display: inline-flex; align-items: center; }
+
+.cg-stage { background: #05040a; }
+.ko-start {
+  font: 900 italic clamp(1.2rem, 5vw, 1.9rem)/1 "Arial Black", Arial, sans-serif; color: #ffd60a; letter-spacing: .03em;
+  text-shadow: 0 3px 0 #7a3a00, 0 0 22px rgba(255, 214, 10, .6); animation: ko-call .6s cubic-bezier(.2, 1.5, .4, 1) both;
+}
+@keyframes ko-call { from { transform: scale(1.8); opacity: 0; } }
+.cg-flew { font-style: italic; }
+.cg-mult { text-shadow: 0 4px 0 rgba(0, 0, 0, .5), 0 0 24px rgba(255, 255, 255, .25); }
+.ko-wait-sub { font-size: .85rem; font-weight: 700; color: #ffd60a; letter-spacing: .04em; }
+
+.ko-hud {
+  position: absolute; left: 8px; bottom: 8px; z-index: 3; display: grid; gap: 1px; padding: 4px 8px; border-radius: 8px;
+  background: rgba(0, 0, 0, .55); font-size: .62rem; font-weight: 700; color: rgba(255, 255, 255, .7); backdrop-filter: blur(3px);
+}
+.ko-hud b { color: #fff; font-variant-numeric: tabular-nums; margin-left: 4px; }
+
+.ko-banner {
+  position: absolute; left: 50%; top: 12px; z-index: 5; transform: translateX(-50%); white-space: nowrap;
+  padding: 9px 18px; border-radius: 14px; font: 900 .95rem/1.1 var(--ff); color: #3a1d00; letter-spacing: .03em;
+  background: linear-gradient(180deg, #fff3b0, #ffd60a 45%, #f0a000); border: 1px solid #fff3b0;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .5), 0 0 30px rgba(255, 214, 10, .55);
+}
+.ko-banner b { font-size: 1.1rem; }
+.ko-banner span { margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: rgba(58, 29, 0, .85); color: #ffd60a; font-size: .8rem; }
+.ko-banner.show { animation: ko-drop .45s cubic-bezier(.2, 1.4, .4, 1) both; }
+@keyframes ko-drop { from { opacity: 0; transform: translate(-50%, -18px) scale(.9); } }
+
+/* Classic | ColorGo */
+.ko-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: #141418; border: 1px solid rgba(255, 255, 255, .08); }
+.ko-modes button {
+  display: grid; justify-items: center; gap: 1px; padding: 7px; border: 0; border-radius: 9px; cursor: pointer;
+  background: transparent; color: rgba(255, 255, 255, .6); font: 800 .9rem var(--ff);
+}
+.ko-modes button small { font-size: .62rem; font-weight: 700; opacity: .7; }
+.ko-modes button[aria-pressed="true"] { background: linear-gradient(180deg, #2b2b33, #1c1c22); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1); }
+.ko-modes button[data-betmode="colorgo"][aria-pressed="true"] { background: linear-gradient(90deg, #1e3a8a, #6d28d9, #b91c1c); }
+
+/* the colour picker on a panel */
+.ko-colors { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0; }
+.ko-colors[hidden] { display: none; }
+.ko-c {
+  display: grid; justify-items: center; gap: 1px; padding: 6px 2px; border-radius: 10px; cursor: pointer; color: #fff;
+  border: 2px solid transparent; font-family: var(--ff); opacity: .65; transition: opacity .15s, transform .15s;
+}
+.ko-c b { font-size: .82rem; font-weight: 900; }
+.ko-c span { font-size: .6rem; opacity: .85; }
+.ko-c em { font-style: normal; font-size: .78rem; font-weight: 900; color: #ffd60a; }
+.ko-c.ko-blue { background: linear-gradient(180deg, #2563eb, #1e3a8a); }
+.ko-c.ko-purple { background: linear-gradient(180deg, #8b5cf6, #5b21b6); }
+.ko-c.ko-red { background: linear-gradient(180deg, #ef4444, #991b1b); }
+.ko-c[aria-checked="true"] { opacity: 1; border-color: #ffd60a; transform: translateY(-2px); box-shadow: 0 6px 14px rgba(0, 0, 0, .4); }
+.ko-c:disabled { cursor: default; }
+.cg-cta.ko-wait { background: linear-gradient(180deg, #3a3a44, #26262d); color: #fff; cursor: default; }
+
+/* 1/2 · 2x · All In */
+.cg-presets button[data-quick] { font-weight: 800; }
+
+/* the bets list: ColorGo tags and the Stats tab */
+.ko-tag { margin-left: 6px; padding: 1px 6px; border-radius: 6px; font-size: .6rem; font-weight: 800; color: #fff; white-space: nowrap; }
+.ko-tag.ko-blue { background: #1d4ed8; }
+.ko-tag.ko-purple { background: #6d28d9; }
+.ko-tag.ko-red { background: #b91c1c; }
+.ko-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px; }
+.ko-stat { display: grid; gap: 2px; padding: 10px; border-radius: 12px; text-align: center; color: #fff; }
+.ko-stat.ko-blue { background: linear-gradient(180deg, rgba(37, 99, 235, .45), rgba(30, 58, 138, .3)); }
+.ko-stat.ko-purple { background: linear-gradient(180deg, rgba(139, 92, 246, .45), rgba(91, 33, 182, .3)); }
+.ko-stat.ko-red { background: linear-gradient(180deg, rgba(239, 68, 68, .45), rgba(153, 27, 27, .3)); }
+.ko-stat b { font-size: 1.4rem; font-weight: 900; }
+.ko-stat span { font-size: .7rem; font-weight: 700; }
+.ko-stat em { font-style: normal; font-size: .64rem; opacity: .7; }
+.ko-stat-note { grid-column: 1 / -1; margin: 0; font-size: .72rem; color: rgba(255, 255, 255, .55); text-align: center; }
+.ko-sub { margin: 6px 10px; font-size: .8rem; color: rgba(255, 255, 255, .7); }
+
+/* ---------- layout on top of crash.css ---------- */
+.ko-logo { font-size: 1rem; }
+@media (max-width: 420px) {
+  .ko-logo { font-size: .95rem; }
+  .ko-logo .ko-word { display: none; }
+}
+/* a taller arena so the boxers have room */
+.knockout-page .cg-stage { aspect-ratio: 5 / 4; max-height: 64vh; }
+@media (min-width: 900px) { .knockout-page .cg-stage { aspect-ratio: auto; height: clamp(380px, 56vh, 560px); } }
+/* between rounds the call sits at the top so the boxers stay in view */
+.knockout-page .cg-wait {
+  justify-content: flex-start; padding-top: 14px; gap: 4px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, .78), rgba(0, 0, 0, .35) 42%, transparent 60%);
+}
+.knockout-page .cg-wait-title { font-size: 1.15rem; }
+.knockout-page .cg-wait-bar { width: min(60%, 260px); }
+.knockout-page .cg-center { justify-content: flex-start; padding-top: 9%; }
+.knockout-page .cg-mult { font-size: clamp(2.2rem, 11vw, 4.2rem); }

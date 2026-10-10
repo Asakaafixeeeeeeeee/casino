@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#000000">
+<title>Crash — RendoWin</title>
+<meta name="description" content="Crash: place up to two bets, watch the multiplier climb and cash out before the plane flies away. Play with real credits.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/crash.css">
+<link rel="icon" href="assets/img/volta-crash-icon.svg" type="image/svg+xml">
+<script src="assets/js/data.js?v=50"></script>
+<!-- the splash screen: the game's picture and a loading bar, shown before the page draws -->
+<script src="assets/js/splash.js?v=33"></script>
+</head>
+<body class="game-page" data-shell="game">
+
+<header class="cg-header">
+  <a class="cg-brand" href="games.html?category=Live%20Casino" aria-label="Back to live casino games">
+    <img class="cg-wordmark" id="cgWordmark" src="assets/img/rendo-crash-logo.svg" alt="" width="207" height="40">
+    <span class="cg-logo" id="cgLogo" aria-hidden="true" hidden><img src="assets/img/plane.svg" alt="" width="240" height="110"></span>
+    <span class="cg-title" id="cgTitle" hidden>Crash</span>
+  </a>
+  <div class="cg-head-actions">
+    <span class="cg-balance"><span class="cg-bal-label" id="cgFun">Credits</span><span class="cg-bal-amount"><b id="cgBalance">0.00</b> GHS</span></span>
+    <button class="cg-icon-btn" type="button" id="cgChat" aria-label="Live chat"><i data-icon="chat"></i></button>
+    <button class="cg-icon-btn" type="button" id="cgMenuBtn" aria-label="Game menu" aria-expanded="false" aria-controls="cgMenu"><i data-icon="menu"></i></button>
+  </div>
+  <nav class="cg-menu" id="cgMenu" aria-label="Game menu" hidden>
+    <div class="cg-menu-label">Play with</div>
+    <div class="cg-modes">
+      <button type="button" data-mode="fun" aria-pressed="true">Credits</button>
+      <button type="button" data-mode="real" aria-pressed="false">Wallet</button>
+    </div>
+    <button type="button" id="cgTopUp"><i data-icon="plus"></i>Top up credits</button>
+    <button type="button" id="cgRulesBtn"><i data-icon="info"></i>How to play</button>
+    <a href="wallet.html"><i data-icon="wallet"></i>Deposit</a>
+    <a href="games.html?category=Live%20Casino"><i data-icon="arrowLeft"></i>Back to the lobby</a>
+  </nav>
+</header>
+
+<main class="cg-layout">
+  <section class="cg-game" aria-label="Game">
+    <div class="cg-history" id="cgHistory" aria-label="Recent results"></div>
+
+    <div class="cg-stage" id="cgStage">
+      <canvas id="cgCanvas" aria-hidden="true"></canvas>
+      <div class="cg-center">
+        <div class="cg-flew" id="cgFlew" hidden>FLEW AWAY!</div>
+        <div class="cg-mult" id="cgMult" aria-hidden="true" hidden>1.00x</div>
+      </div>
+      <div class="cg-wait" id="cgWait">
+        <span class="cg-wait-plane" aria-hidden="true"><img src="assets/img/plane.svg" alt="" width="240" height="110"><i class="cg-prop"></i></span>
+        <span class="cg-wait-kicker">RendoWin Originals</span>
+        <strong class="cg-wait-title">Place your bets</strong>
+        <div class="cg-wait-bar"><i id="cgWaitBar"></i></div>
+        <span class="cg-wait-time" id="cgWaitTime">Next round in 5.0s</span>
+      </div>
+      <div class="cg-online" title="Players online"><i data-icon="user"></i><span id="cgOnline">3,502</span></div>
+    </div>
+
+    <div class="cg-panels" id="cgPanels"></div>
+  </section>
+
+  <aside class="cg-bets" aria-label="Live bets">
+    <div class="cg-tabs" role="tablist" aria-label="Bets">
+      <button type="button" role="tab" aria-selected="true" data-list="all">All Bets</button>
+      <button type="button" role="tab" aria-selected="false" data-list="previous">Previous</button>
+      <button type="button" role="tab" aria-selected="false" data-list="top">Top</button>
+    </div>
+    <div class="cg-prev" id="cgPrev" hidden></div>
+    <div class="cg-cols" aria-hidden="true"><span>User</span><span class="cg-num">Bet GHS</span><span class="cg-xcell">X</span><span class="cg-num">Win GHS</span></div>
+    <div class="cg-list" id="cgList"></div>
+    <div class="cg-foot"><span id="cgCount">0/0 Bets</span><span><b id="cgTotal">0.00</b> Total win GHS</span></div>
+  </aside>
+</main>
+
+<p class="cg-note">RTP <span id="cgRtp"></span>.</p>
+
+<div class="sr-only" id="cgLive" aria-live="polite"></div>
+
+<dialog class="cg-dialog" id="cgRules" aria-labelledby="cgRulesTitle">
+  <h2 id="cgRulesTitle">How to play</h2>
+  <ol>
+    <li>Place one or two bets during the 5-second countdown.</li>
+    <li>The plane takes off and the multiplier climbs from 1.00x.</li>
+    <li>Cash out before the plane flies away to win your bet × the multiplier.</li>
+    <li>If the plane flies away first, that bet is lost.</li>
+  </ol>
+  <p><b>Auto:</b> switch a panel to Auto to bet every round and cash out at a multiplier you choose.</p>
+  <p><b>Fairness:</b> the chance of reaching any multiplier <i>m</i> is RTP ÷ <i>m</i>, so every strategy returns <span id="cgRulesRtp"></span> on average over many rounds. Playing for real money, our server runs your rounds: it fixes where each one ends before betting closes, tells no one until it's over, and judges a cash-out at the moment it arrives.</p>
+  <form method="dialog"><button class="btn btn-primary btn-block">Got it</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/crash.js?v=35"></script>
+</body>
+</html>

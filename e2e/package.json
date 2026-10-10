@@ -1,0 +1,17 @@
+{
+  "name": "rendowin-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "End-to-end tests: the real site, the real accounts server and the real balance service on in-memory databases, with a stand-in payment gateway, driven in Google Chrome by Playwright.",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "embedded-postgres": "^18.4.0-beta.17",
+    "pg": "^8.23.1"
+  }
+}

@@ -1,0 +1,161 @@
+/* Rendo Crossing — a dark slate page: the road on its canvas (crossing-art.js), the win pop-up over a lane, and the
+   bet panel (Cash out, bet amount with ½ and 2×, Bet / Go, difficulty). On wide screens the panel sits to the left
+   of the road. Also sets the colours of the shared mini-game parts (minigame.css). */
+.crossing-page {
+  --cx-card: linear-gradient(180deg, #1a2438, #121b2b);
+  --cx-edge: rgba(148, 163, 184, .16);
+  --cx-ink: #94a3b8;
+  --cx-blue: #2563eb;
+  --mg-accent: #3b82f6;
+  --mg-line: rgba(148, 163, 184, .16);
+  --mg-line-strong: rgba(148, 163, 184, .4);
+  --mg-bar: rgba(15, 23, 42, .95);
+  --mg-raised: #172033;
+  --mg-hover: #22304a;
+  --mg-cover: rgba(15, 23, 42, .92);
+  --mg-note: rgba(148, 163, 184, .7);
+  background: #0f172a;
+  background-color: #0f172a;
+}
+body.crossing-page { padding-bottom: calc(16px + var(--safe-bottom)); }
+
+/* ---------- header ---------- */
+.cx-bal {
+  position: relative; flex: none; display: grid; justify-items: end; line-height: 1.15; text-align: right;
+  padding: 3px 10px; border-radius: 10px; background: rgba(2, 6, 23, .6);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, .6), 0 1px 0 rgba(255, 255, 255, .06);
+}
+.cx-bal .mg-bal-label { font-size: .54rem; }
+.cx-bal .mg-balance { font-size: .64rem; white-space: nowrap; }
+.cx-bal .mg-balance b { font-size: .96rem; }
+.cx-bal .mg-delta { left: auto; right: 0; transform: none; animation-name: cx-delta; }
+@keyframes cx-delta {
+  0% { opacity: 0; transform: translateY(10px); }
+  14% { opacity: 1; transform: none; }
+  72% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-8px); }
+}
+@media (max-width: 419px) { .cx-brandword { display: none; } }
+
+/* ---------- layout ---------- */
+.cx-main {
+  max-width: 560px; margin: 0 auto; padding: 12px 12px 0;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px;
+}
+.cx-stage {
+  position: relative; overflow: hidden; border-radius: 16px; background: #0b1120; line-height: 0;
+  height: clamp(290px, 74vw, 430px);
+  border: 1px solid rgba(148, 163, 184, .14);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .5), 0 18px 40px rgba(0, 0, 0, .5);
+}
+.cx-canvas { display: block; width: 100%; height: 100%; cursor: pointer; touch-action: manipulation; }
+
+@media (min-width: 900px) {
+  .cx-main { max-width: 1120px; grid-template-columns: 300px minmax(0, 1fr); align-items: start; padding-top: 18px; }
+  .cx-stage { grid-column: 2; grid-row: 1; height: min(560px, calc(100vh - 110px)); }
+  .cx-panel { grid-column: 1; grid-row: 1; }
+}
+
+/* ---------- the win pop-up, over the lane where the hen cashed out ---------- */
+.cx-pop {
+  position: absolute; z-index: 3; display: grid; justify-items: center; gap: 1px; padding: 9px 16px 10px;
+  transform: translateX(-50%); pointer-events: none; line-height: 1.15; white-space: nowrap;
+  border-radius: 14px; border: 1px solid rgba(134, 239, 172, .55);
+  background: linear-gradient(180deg, #22c55e, #15803d);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), 0 12px 30px rgba(0, 0, 0, .5), 0 0 34px rgba(34, 197, 94, .45), inset 0 1px 0 rgba(255, 255, 255, .35);
+  color: #fff; text-shadow: 0 1px 0 rgba(0, 60, 20, .6);
+}
+.cx-pop::after {
+  content: ""; position: absolute; left: 50%; top: -7px; width: 12px; height: 12px; transform: translateX(-50%) rotate(45deg);
+  background: #22c55e; border-left: 1px solid rgba(134, 239, 172, .55); border-top: 1px solid rgba(134, 239, 172, .55);
+}
+.cx-pop b { font-size: 1.35rem; font-weight: 900; letter-spacing: .01em; font-variant-numeric: tabular-nums; }
+.cx-pop span { font-size: .8rem; font-weight: 800; opacity: .95; font-variant-numeric: tabular-nums; }
+.cx-pop.show { animation: cx-pop .5s cubic-bezier(.2, 1.5, .4, 1) both; }
+@keyframes cx-pop { from { opacity: 0; transform: translate(-50%, 16px) scale(.6); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+
+/* ---------- the panel ---------- */
+.cx-panel {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px; border-radius: 16px;
+  background: #131c2e; border: 1px solid var(--cx-edge);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 12px 28px rgba(0, 0, 0, .35);
+}
+.cx-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; padding: 10px; border-radius: 12px; background: var(--cx-card); border: 1px solid var(--cx-edge); }
+.cx-k { font-size: .72rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--cx-ink); }
+.cx-field {
+  display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 8px; border-radius: 10px;
+  background: #0b1222; border: 1px solid rgba(148, 163, 184, .2);
+}
+.cx-field:focus-within { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, .25); }
+.cx-token {
+  flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #4ade80, #16a34a 60%, #14532d); color: #fff; font-size: .78rem; font-weight: 900;
+  box-shadow: inset 0 -1px 2px rgba(0, 0, 0, .4);
+}
+.cx-input {
+  flex: 1; min-width: 0; height: 36px; padding: 0 4px; border: 0; outline: 0; background: transparent; color: #fff;
+  font: 800 1.02rem var(--ff); font-variant-numeric: tabular-nums;
+}
+.cx-input:disabled { color: var(--cx-ink); }
+.cx-quick {
+  flex: none; min-width: 42px; height: 34px; border-radius: 8px; cursor: pointer;
+  border: 1px solid rgba(148, 163, 184, .2); background: #1e293b; color: #e2e8f0; font: 800 .92rem var(--ff);
+}
+.cx-quick:hover:not(:disabled) { background: #273449; }
+.cx-quick:disabled { opacity: .45; cursor: default; }
+
+.cx-diff { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.cx-diff .cx-k { grid-column: 1 / -1; }
+.cx-select {
+  min-width: 0; height: 40px; padding: 0 34px 0 12px; border-radius: 10px; cursor: pointer; appearance: none; -webkit-appearance: none;
+  border: 1px solid rgba(148, 163, 184, .2); color: #fff; font: 800 .95rem var(--ff);
+  background: #0b1222 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center / 16px;
+}
+.cx-select:focus-visible { outline: 0; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, .25); }
+.cx-select:disabled { color: var(--cx-ink); cursor: default; }
+.cx-maxx { font-size: .78rem; font-weight: 700; color: var(--cx-ink); white-space: nowrap; }
+.cx-maxx b { color: #fbbf24; }
+
+/* Bet / Go: blue when it's yours to press, slate while the hen is moving */
+.cx-go, .cx-cash {
+  position: relative; display: grid; justify-items: center; align-content: center; gap: 1px; width: 100%; min-height: 56px;
+  border-radius: 12px; cursor: pointer; font-family: var(--ff); line-height: 1.15; color: #fff; overflow: hidden;
+  transition: filter .15s, transform .08s, background .2s;
+}
+.cx-go b, .cx-cash b { font-size: 1.12rem; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+.cx-go span, .cx-cash span { font-size: .78rem; font-weight: 700; opacity: .85; font-variant-numeric: tabular-nums; }
+.cx-go {
+  border: 1px solid rgba(147, 197, 253, .4);
+  background: linear-gradient(180deg, #3b82f6, #1d4ed8);
+  box-shadow: 0 8px 22px rgba(37, 99, 235, .4), inset 0 1px 0 rgba(255, 255, 255, .3), inset 0 -2px 0 rgba(0, 0, 0, .25);
+}
+.cx-go:hover { filter: brightness(1.08); }
+.cx-go:active { transform: translateY(1px); }
+.cx-go[aria-disabled="true"] {
+  cursor: default; filter: none; transform: none; border-color: rgba(148, 163, 184, .2);
+  background: linear-gradient(180deg, #334155, #1e293b); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+.cx-cash {
+  border: 1px solid rgba(148, 163, 184, .2); background: #1e293b; color: #64748b;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05);
+}
+.cx-cash[aria-disabled="true"] { cursor: default; }
+.cx-cash.is-ready {
+  color: #052e16; border-color: rgba(187, 247, 208, .6);
+  background: linear-gradient(180deg, #4ade80, #16a34a);
+  box-shadow: 0 8px 22px rgba(22, 163, 74, .4), inset 0 1px 0 rgba(255, 255, 255, .45), inset 0 -2px 0 rgba(0, 0, 0, .2);
+}
+.cx-cash.is-ready:hover { filter: brightness(1.06); }
+.cx-cash.is-ready::before {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .45) 50%, transparent 70%);
+  animation: cx-sheen 2.2s ease-in-out infinite;
+}
+@keyframes cx-sheen { 60%, 100% { transform: translateX(100%); } }
+.cx-panel .mg-note { margin: 0; text-align: center; }
+
+/* ---------- rules ---------- */
+.cx-odds { width: 100%; margin: 4px 0 10px; border-collapse: collapse; font-size: .84rem; font-variant-numeric: tabular-nums; }
+.cx-odds th, .cx-odds td { padding: 5px 6px; text-align: right; border-bottom: 1px solid var(--mg-line); }
+.cx-odds th:first-child { text-align: left; }
+.cx-odds thead th { font-size: .7rem; color: var(--cx-ink); text-transform: uppercase; letter-spacing: .05em; }

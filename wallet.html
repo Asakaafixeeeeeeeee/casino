@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#0d0e10">
+<title>Deposit | RendoWin</title>
+<meta name="description" content="Fund your RendoWin wallet with mobile money, bank transfer or card.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+</head>
+<body>
+
+<div class="pay-topbar">
+  <a class="pt-back" href="me.html"><i data-icon="chevronLeft"></i>Me</a>
+  <span class="pt-title">Deposit</span>
+  <button class="pt-help" type="button" data-open-chat aria-label="Help"><i data-icon="help"></i></button>
+</div>
+
+<main class="pay-wrap">
+  <div class="pay-tabs" role="tablist">
+    <button class="pay-tab on" type="button" role="tab" data-paytab="momo">Mobile Money</button>
+    <button class="pay-tab" type="button" role="tab" data-paytab="paybill">Paybill</button>
+    <button class="pay-tab" type="button" role="tab" data-paytab="card">Card</button>
+  </div>
+
+  <div class="pay-body">
+    <div id="msg" aria-live="polite"></div>
+
+    <!-- MOBILE MONEY -->
+    <section class="pay-panel" data-panel="momo">
+      <div class="pay-row pay-phone-edit">
+        <i data-icon="phone"></i>
+        <input id="depPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="16"
+               placeholder="Mobile money number" aria-label="Mobile money number to pay from" aria-describedby="depPhoneHint">
+        <button class="pay-phone-mine" type="button" id="depPhoneMine" hidden>Use my number</button>
+      </div>
+      <div class="pay-err" id="depPhoneErr"></div>
+      <p class="pay-phone-hint" id="depPhoneHint">Pay from any mobile money number — tap it to change.</p>
+
+      <button class="pay-row pay-provider" type="button" id="provBtn" aria-expanded="false">
+        <span class="prov-logo" id="provLogo">MTN</span>
+        <span class="prov-name" id="provName">MTN Mobile Money</span>
+        <span class="prov-switch">Switch<i data-icon="chevronRight"></i></span>
+      </button>
+      <div class="pay-menu" id="provMenu" hidden></div>
+
+      <div class="pay-balance">Balance (GHS) <b data-wallet-balance-num>0.00</b></div>
+
+      <div class="pay-amount">
+        <input id="depAmount" type="number" min="100" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
+        <span class="pay-min">min. 10.00</span>
+      </div>
+      <div class="pay-err" id="depAmountErr"></div>
+
+      <div class="pay-incr" id="quick">
+        <button type="button" data-add="50">+50</button>
+        <button type="button" data-add="100">+100</button>
+        <button type="button" data-add="200">+200</button>
+        <button type="button" data-add="500">+500</button>
+        <button type="button" data-add="1000">+1,000</button>
+      </div>
+
+      <button class="btn-topup" type="button" id="depSubmit" disabled>Top Up Now</button>
+
+      <ol class="pay-notes">
+        <li>Maximum per transaction is GHS 50,000.00</li>
+        <li>Minimum per transaction is GHS 100.00<span id="depMinUsd"></span></li>
+        <li>Deposit is free, no transaction fees.</li>
+        <li>Your balance can only be withdrawn to the mobile number that you registered with.</li>
+        <li>You can deposit from another mobile money number: change the number at the top. The prompt goes to that phone.</li>
+      </ol>
+      <p class="pay-note-extra">Note: For MTN users, if a bill prompt isn't received, dial *170#, then select 6 and 3 to approve the transaction.</p>
+    </section>
+
+    <!-- PAYBILL -->
+    <section class="pay-panel" data-panel="paybill" hidden>
+      <div class="pay-balance">Balance (GHS) <b data-wallet-balance-num>0.00</b></div>
+      <div class="pay-amount">
+        <input id="pbAmount" type="number" min="100" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
+        <span class="pay-min">min. 10.00</span>
+      </div>
+      <div class="pay-err" id="pbAmountErr"></div>
+      <button class="btn-topup" type="button" id="pbSubmit">Continue</button>
+      <ol class="pay-notes">
+        <li>Enter the amount and continue to pay from your mobile money menu.</li>
+        <li>You'll approve the payment with your mobile money PIN.</li>
+        <li>Your balance is credited once the payment is confirmed.</li>
+      </ol>
+    </section>
+
+    <!-- CARD -->
+    <section class="pay-panel" data-panel="card" hidden>
+      <div class="pay-balance">Balance (GHS) <b data-wallet-balance-num>0.00</b></div>
+      <div class="pay-amount">
+        <input id="cdAmount" type="number" min="100" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
+        <span class="pay-min">min. 10.00</span>
+      </div>
+      <div class="pay-err" id="cdAmountErr"></div>
+      <button class="btn-topup" type="button" id="cdSubmit">Continue to secure payment</button>
+      <ol class="pay-notes">
+        <li>Visa and Mastercard are accepted.</li>
+        <li>Your card is verified with 3-D Secure on your bank's page.</li>
+        <li>Deposit is free, no transaction fees.</li>
+      </ol>
+    </section>
+
+    <section class="pay-history" id="depHistoryWrap" hidden>
+      <h2 class="pay-history-title">Recent deposits</h2>
+      <div class="tx-list" id="depHistory"></div>
+    </section>
+  </div>
+</main>
+
+<script src="assets/js/data.js?v=50"></script>
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/pay-fx.js?v=33"></script>
+<script src="assets/js/wallet.js?v=35"></script>
+</body>
+</html>

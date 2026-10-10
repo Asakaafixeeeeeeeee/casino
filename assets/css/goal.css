@@ -1,0 +1,236 @@
+/* Rendo Goal — a floodlit football pitch: mown stripes and chalk lines with the goal on the right, a grid of tiles
+   (one column per stride up the pitch), the glowing live column, ball / bomb flips, the explosion (shared with
+   Rendo Mines), the field selector and Next pill, RANDOM / reset / Auto Game, BET → CASH OUT, and the bet bar.
+   Also sets the shared mini-game colours (minigame.css). */
+.goal-page {
+  --gl-orange: linear-gradient(180deg, #ffb347, #f08a00);
+  --mg-accent: #22c55e;
+  --mg-line: rgba(187, 247, 208, .18);
+  --mg-line-strong: rgba(187, 247, 208, .4);
+  --mg-bar: rgba(4, 30, 14, .95);
+  --mg-raised: #0d3a1e;
+  --mg-hover: #145229;
+  --mg-cover: rgba(4, 30, 14, .92);
+  --mg-note: rgba(187, 247, 208, .55);
+  background: radial-gradient(120% 60% at 50% 0%, #11692f, #06351a 60%, #031d0e);
+  background-color: #06351a;
+}
+body.goal-page { padding-bottom: calc(14px + var(--safe-bottom)); }
+.gl-sprite { position: absolute; }
+.gl-x { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.gl-title { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.gl-logo { width: 24px; height: 24px; }
+@media (max-width: 419px) { .gl-brandword { display: none; } }
+.gl-bal {
+  flex: none; display: grid; justify-items: end; line-height: 1.15; padding: 3px 10px; border-radius: 10px;
+  background: rgba(0, 0, 0, .4); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .6);
+}
+.gl-bal .mg-bal-label { font-size: .54rem; }
+.gl-bal .mg-balance { font-size: .64rem; white-space: nowrap; }
+.gl-bal .mg-balance b { font-size: .96rem; }
+
+.gl-main {
+  justify-content: center;
+  max-width: 520px; margin: 0 auto; padding: 12px 12px 0; display: flex; flex-direction: column; gap: 12px;
+  min-height: calc(100vh - 66px - var(--safe-bottom)); min-height: calc(100dvh - 66px - var(--safe-bottom));
+}
+
+/* ---------- field + Next ---------- */
+.gl-info { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.gl-field { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; font-weight: 800; color: #bbf7d0; }
+.gl-select {
+  height: 36px; padding: 0 30px 0 12px; border-radius: 10px; appearance: none; -webkit-appearance: none; cursor: pointer;
+  border: 1px solid rgba(187, 247, 208, .3); color: #fff; font: 800 .86rem var(--ff);
+  background: rgba(0, 0, 0, .35) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23bbf7d0' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center / 14px;
+}
+.gl-select:disabled { opacity: .6; cursor: default; }
+.gl-next {
+  padding: 7px 14px; border-radius: 999px; font-size: .82rem; font-weight: 800; color: #3a1d00; white-space: nowrap;
+  background: var(--gl-orange); box-shadow: 0 4px 12px rgba(240, 138, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .5);
+}
+.gl-next b { font-size: 1rem; }
+
+/* ---------- the pitch ---------- */
+.gl-pitch {
+  flex: 1 1 auto; display: flex; flex-direction: column; min-height: 250px; max-height: min(50vh, 470px);
+  position: relative; padding: 14px 54px 30px 14px; border-radius: 18px; overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(255, 255, 255, .12), transparent 70%),
+    repeating-linear-gradient(90deg, #2f9e44 0 calc(100% / 8), #278a3a calc(100% / 8) calc(100% / 4)),
+    #2f9e44;
+  border: 3px solid #0a3d1c;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .08), 0 16px 34px rgba(0, 0, 0, .5), inset 0 0 40px rgba(0, 0, 0, .35);
+}
+.gl-pitch::before {   /* grass texture: fine blades */
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background-image:
+    repeating-linear-gradient(80deg, rgba(0, 0, 0, .05) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(100deg, rgba(255, 255, 255, .04) 0 1px, transparent 1px 5px);
+}
+.gl-pitch.is-shaking { animation: gl-shake .45s ease; }
+@keyframes gl-shake { 20% { transform: translate(-6px, 3px); } 40% { transform: translate(5px, -4px); } 60% { transform: translate(-4px, 2px); } 80% { transform: translate(3px, -1px); } }
+/* chalk: the halfway line and circle on the left, the box and the goal on the right */
+.gl-lines { position: absolute; inset: 8px; pointer-events: none; border: 2px solid rgba(255, 255, 255, .55); border-radius: 4px; }
+.gl-lines i { position: absolute; border: 2px solid rgba(255, 255, 255, .55); }
+.gl-half { left: -2px; top: -2px; bottom: -2px; width: 0; border-width: 0 2px 0 0 !important; }
+.gl-circle { left: -14%; top: 50%; width: 30%; aspect-ratio: 1; border-radius: 50%; transform: translateY(-50%); }
+.gl-box { right: -2px; top: 18%; bottom: 18%; width: 17%; }
+.gl-box6 { right: -2px; top: 34%; bottom: 34%; width: 7%; }
+.gl-net {
+  right: -10px; top: 38%; bottom: 38%; width: 14px; border-color: rgba(255, 255, 255, .9) !important; border-left: 0 !important;
+  background: repeating-linear-gradient(45deg, rgba(255, 255, 255, .5) 0 1px, transparent 1px 4px), repeating-linear-gradient(-45deg, rgba(255, 255, 255, .5) 0 1px, transparent 1px 4px);
+}
+
+.gl-grid {
+  position: relative; z-index: 1; display: grid; gap: 8px;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); grid-template-rows: repeat(var(--rows), minmax(0, 1fr));
+  flex: 1 1 auto;
+}
+.gl-pitch[data-field="large"] .gl-grid { gap: 6px; }
+.gl-tile { position: relative; padding: 0; border: 0; background: none; cursor: pointer; perspective: 500px; }
+.gl-tile:disabled { cursor: default; }
+.gl-flip { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform .45s cubic-bezier(.3, 1.3, .5, 1); transition-delay: var(--d, 0ms); }
+.gl-tile.is-open .gl-flip { transform: rotateY(180deg); }
+.gl-face { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 10px; backface-visibility: hidden; }
+/* the covered tile: light green turf, raised */
+.gl-up {
+  background: linear-gradient(180deg, rgba(220, 255, 220, .55), rgba(160, 230, 160, .35));
+  border: 1px solid rgba(255, 255, 255, .55);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .45), inset 0 -3px 6px rgba(0, 60, 20, .25), 0 3px 6px rgba(0, 40, 10, .35);
+  transition: filter .2s, opacity .3s, box-shadow .2s;
+}
+.gl-down { transform: rotateY(180deg); background: rgba(0, 50, 20, .35); border: 1px solid rgba(255, 255, 255, .25); box-shadow: inset 0 2px 8px rgba(0, 0, 0, .35); }
+.gl-down svg { width: 82%; height: 82%; }
+.gl-tile.is-ball .gl-down { background: radial-gradient(circle, rgba(255, 255, 255, .25), rgba(0, 60, 20, .3) 70%); }
+.gl-tile.is-boom .gl-down { background: radial-gradient(circle, rgba(255, 90, 40, .55), rgba(120, 0, 0, .55) 70%); border-color: #ff6b4a; }
+.gl-tile.is-ghost .gl-down { opacity: .6; }
+/* the live column glows and pulses; columns ahead are dimmed */
+.gl-tile.is-live .gl-up { animation: gl-live 1.1s ease-in-out infinite alternate; }
+@keyframes gl-live { to { filter: brightness(1.25); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .6), 0 0 0 2px #fde047, 0 0 16px rgba(253, 224, 71, .7); } }
+.gl-tile.is-live:hover .gl-up { filter: brightness(1.4); }
+.gl-tile.is-ahead .gl-up { opacity: .4; filter: saturate(.5); }
+.gl-tile.is-pick .gl-up { box-shadow: inset 0 0 0 3px #fde047, 0 0 12px rgba(253, 224, 71, .7); }
+.gl-tile.is-pick .gl-up::after { content: "⚽"; font-size: 1.1rem; opacity: .85; }
+.gl-float {
+  position: absolute; left: 50%; top: 0; z-index: 7; padding: 2px 8px; border-radius: 999px; pointer-events: none; white-space: nowrap;
+  background: var(--gl-orange); color: #3a1d00; font: 900 .78rem var(--ff); animation: gl-float 1.3s ease-out both;
+}
+@keyframes gl-float { from { opacity: 0; transform: translate(-50%, 0); } 20% { opacity: 1; } to { opacity: 0; transform: translate(-50%, -34px); } }
+/* the ball rolling on to the next column */
+.gl-runner { position: absolute; left: 0; top: 0; z-index: 8; pointer-events: none; filter: drop-shadow(0 4px 4px rgba(0, 0, 0, .45)); }
+.gl-runner svg { width: 100%; height: 100%; }
+/* before a round, the first column invites a tap */
+.gl-pitch:not(.is-live) .gl-tile[data-c="0"] .gl-up { animation: gl-invite 1.6s ease-in-out infinite alternate; }
+@keyframes gl-invite { to { box-shadow: inset 0 2px 0 rgba(255, 255, 255, .5), 0 0 0 2px rgba(253, 224, 71, .55), 0 0 12px rgba(253, 224, 71, .4); } }
+/* the multiplier under each column */
+.gl-mults {
+  position: absolute; left: 14px; right: 54px; bottom: 6px; z-index: 1; display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 8px;
+  font: 800 .66rem var(--ff); text-align: center; color: rgba(255, 255, 255, .7);
+}
+.gl-mults span { padding: 1px 0; border-radius: 6px; background: rgba(0, 0, 0, .25); }
+.gl-mults .is-done { background: rgba(34, 197, 94, .7); color: #fff; }
+.gl-mults .is-next { background: var(--gl-orange); color: #3a1d00; }
+
+/* ---------- controls ---------- */
+.gl-controls { display: grid; gap: 12px; }
+.gl-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.gl-random {
+  min-width: 110px; height: 42px; padding: 0 18px; border-radius: 12px; cursor: pointer; border: 0; color: #fff; font: 900 .9rem var(--ff); letter-spacing: .06em;
+  background: linear-gradient(180deg, #34d058, #16a34a); box-shadow: 0 4px 0 #0c6b30, 0 8px 14px rgba(0, 0, 0, .35);
+}
+.gl-random:active { transform: translateY(2px); box-shadow: 0 2px 0 #0c6b30; }
+.gl-round { width: 42px; height: 42px; border-radius: 50%; cursor: pointer; display: grid; place-items: center; color: #fff; border: 1px solid rgba(187, 247, 208, .3); background: rgba(0, 0, 0, .35); }
+.gl-round .ic { width: 20px; height: 20px; }
+.gl-switch { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; color: #dcfce7; font: 800 .86rem var(--ff); cursor: pointer; }
+.gl-track { position: relative; width: 44px; height: 24px; border-radius: 999px; background: rgba(0, 0, 0, .45); border: 1px solid rgba(187, 247, 208, .35); }
+.gl-thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #94a3b8; transition: transform .2s, background .2s; }
+.gl-switch[aria-checked="true"] .gl-track { background: #16a34a; }
+.gl-switch[aria-checked="true"] .gl-thumb { transform: translateX(20px); background: #fff; }
+[aria-disabled="true"].gl-random, [aria-disabled="true"].gl-round, [aria-disabled="true"].gl-switch { opacity: .45; cursor: default; }
+
+.gl-go {
+  display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 64px; border-radius: 16px; cursor: pointer; border: 0;
+  color: #fff; font: 900 1.3rem var(--ff); letter-spacing: .06em; transition: filter .15s, transform .08s;
+}
+.gl-go .ic { width: 22px; height: 22px; }
+.gl-go span { font-size: .95rem; font-weight: 800; }
+.gl-go[data-state="bet"] { background: linear-gradient(180deg, #34d058, #15803d); box-shadow: 0 5px 0 #0b5d2a, 0 10px 20px rgba(0, 0, 0, .4); }
+.gl-go[data-state="cash"] { color: #3a1d00; background: linear-gradient(180deg, #ffd166, #f08a00); box-shadow: 0 5px 0 #a35a00, 0 10px 20px rgba(0, 0, 0, .4), 0 0 22px rgba(255, 179, 71, .45); }
+.gl-go[aria-disabled="true"] { filter: grayscale(.4) brightness(.8); cursor: default; }
+.gl-go:active:not([aria-disabled="true"]) { transform: translateY(2px); }
+
+.gl-betbox { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 8px 8px 16px; border-radius: 14px; background: rgba(0, 0, 0, .35); border: 1px solid rgba(187, 247, 208, .18); }
+.gl-bet-label { font-size: .86rem; font-weight: 700; color: #bbf7d0; }
+.gl-bet-label b { color: #fff; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.gl-cur { font-size: .72rem; }
+.gl-bet-ctl { display: flex; gap: 8px; }
+.gl-bet-ctl button { width: 42px; height: 42px; border-radius: 12px; cursor: pointer; display: grid; place-items: center; color: #fff; border: 1px solid rgba(187, 247, 208, .3); background: rgba(255, 255, 255, .08); }
+.gl-bet-ctl button:disabled { opacity: .4; cursor: default; }
+.gl-bet-ctl .ic { width: 20px; height: 20px; }
+.gl-quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 8px; }
+.gl-quick button { min-height: 42px; border-radius: 12px; cursor: pointer; border: 1px solid var(--mg-line); background: rgba(255, 255, 255, .06); color: #fff; font: 800 .95rem var(--ff); }
+.gl-sheet .mg-chips { flex-wrap: wrap; justify-content: center; gap: 10px; }
+
+/* the floating banner */
+.gl-banner {
+  position: fixed; left: 50%; top: 64px; z-index: 80; transform: translateX(-50%); max-width: calc(100% - 24px);
+  padding: 10px 18px; border-radius: 14px; font: 800 .95rem var(--ff); color: #fff; text-align: center;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .45); animation: gl-drop .4s cubic-bezier(.2, 1.4, .4, 1) both;
+}
+.gl-banner.win { background: linear-gradient(180deg, #22c55e, #15803d); border: 1px solid #86efac; }
+.gl-banner.loss { background: linear-gradient(180deg, #ef4444, #991b1b); border: 1px solid #fca5a5; }
+@keyframes gl-drop { from { opacity: 0; transform: translate(-50%, -20px); } }
+.gl-odds { width: 100%; border-collapse: collapse; font-size: .78rem; margin-bottom: 10px; }
+.gl-odds th, .gl-odds td { padding: 4px 4px; border-bottom: 1px solid var(--mg-line); text-align: left; vertical-align: top; }
+.gl-odds th { white-space: nowrap; }
+
+/* ---------- the explosion: a white flash, the fireball (10 frames), a shockwave, sparks, smoke, and the burst left behind ---------- */
+.gl-flash, .gl-fire, .gl-shock, .gl-smoke, .gl-blast {
+  position: absolute; left: 50%; top: 50%; pointer-events: none; transform: translate(-50%, -50%);
+}
+.gl-flash {
+  z-index: 4; width: 260%; aspect-ratio: 1; border-radius: 50%; opacity: 0;
+  background: radial-gradient(circle, #fff 0 14%, rgba(255, 244, 200, .92) 24%, rgba(255, 170, 60, .35) 44%, transparent 64%);
+  animation: gl-flash .5s ease-out .26s both;
+}
+@keyframes gl-flash { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.25); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.25); } }
+.gl-fire {
+  z-index: 5; width: 300%; aspect-ratio: 1; margin-top: -12%; opacity: 0;
+  background: url("../img/mines-blast.webp") 0 0 / 1000% 100% no-repeat;
+  animation: gl-fire .8s steps(9) .28s both, gl-fire-show .8s linear .28s both;
+}
+@keyframes gl-fire { from { background-position: 0 0; } to { background-position: 100% 0; } }
+@keyframes gl-fire-show { 0%, 96% { opacity: 1; } 100% { opacity: 0; } }
+.gl-shock {
+  z-index: 3; width: 100%; aspect-ratio: 1; border-radius: 50%; opacity: 0;
+  border: 3px solid rgba(255, 228, 170, .9); box-shadow: 0 0 14px rgba(255, 170, 60, .8), inset 0 0 10px rgba(255, 170, 60, .6);
+  animation: gl-shock .6s ease-out .3s both;
+}
+@keyframes gl-shock { 0% { opacity: 1; transform: translate(-50%, -50%) scale(.3); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(3.4); border-width: 1px; } }
+.gl-smoke {
+  z-index: 4; width: 150%; aspect-ratio: 1; opacity: 0;
+  background: url("../img/mines-smoke.webp") center / contain no-repeat;
+  animation: gl-smoke 2s ease-out both; animation-delay: var(--sd, .75s);
+}
+@keyframes gl-smoke {
+  0% { opacity: 0; transform: translate(calc(-50% + var(--sx, 0px)), -50%) scale(.6) rotate(0); }
+  25% { opacity: .7; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--sx, 0px)), -170%) scale(1.6) rotate(var(--sr, 40deg)); }
+}
+.gl-spark {
+  position: absolute; left: 50%; top: 50%; z-index: 6; width: var(--s, 5px); height: var(--s, 5px); margin: calc(var(--s, 5px) / -2) 0 0 calc(var(--s, 5px) / -2);
+  border-radius: 50%; pointer-events: none; opacity: 0;
+  background: #fff1b8; box-shadow: 0 0 6px 1px #ff9800, 0 0 2px #fff;
+  animation: gl-spark var(--t, .8s) cubic-bezier(.15, .7, .35, 1) .3s both;
+}
+@keyframes gl-spark {
+  0% { opacity: 1; transform: rotate(var(--a)) translateY(0) scale(1); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--a)) translateY(calc(var(--r, 60px) * -1)) scale(.25); }
+}
+.gl-blast { z-index: 3; width: 100%; aspect-ratio: 1; opacity: 0; transform: translate(-50%, -50%) scale(.3); }
+.gl-blast svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 8px rgba(255, 150, 30, .9)); }
+.gl-tile.is-boom .gl-blast { animation: gl-settle .45s ease-out .82s both, gl-embers 1.2s ease-in-out 1.3s 4 alternate; }
+@keyframes gl-settle { from { opacity: 0; transform: translate(-50%, -50%) scale(.3) rotate(-10deg); } to { opacity: 1; transform: translate(-50%, -50%) scale(.95) rotate(0); } }
+@keyframes gl-embers { from { filter: brightness(1); } to { filter: brightness(1.25) saturate(1.2); } }
+

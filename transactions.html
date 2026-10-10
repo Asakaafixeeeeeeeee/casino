@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#0d0e10">
+<title>Transaction records | RendoWin</title>
+<meta name="description" content="Your RendoWin deposits and withdrawals with their status.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+</head>
+<body>
+
+<div class="pay-topbar">
+  <a class="pt-back" href="me.html"><i data-icon="chevronLeft"></i>Me</a>
+  <span class="pt-title">Transaction records</span>
+  <button class="pt-help" type="button" data-open-chat aria-label="Help"><i data-icon="help"></i></button>
+</div>
+
+<main class="pay-wrap">
+  <div class="pay-tabs" role="tablist" aria-label="Type">
+    <button class="pay-tab on" type="button" role="tab" aria-selected="true" data-kind="all">All</button>
+    <button class="pay-tab" type="button" role="tab" aria-selected="false" data-kind="deposit">Deposits</button>
+    <button class="pay-tab" type="button" role="tab" aria-selected="false" data-kind="withdrawal">Withdrawals</button>
+  </div>
+
+  <div class="pay-body">
+    <div class="txr-status" role="group" aria-label="Status">
+      <button class="chip on" type="button" aria-pressed="true" data-status="all">All</button>
+      <button class="chip" type="button" aria-pressed="false" data-status="success">Success</button>
+      <button class="chip" type="button" aria-pressed="false" data-status="pending">Pending</button>
+      <button class="chip" type="button" aria-pressed="false" data-status="failed">Failed</button>
+    </div>
+    <div id="msg" aria-live="polite"></div>
+    <p class="txr-count" id="txrCount" aria-live="polite"></p>
+    <div id="txrList"></div>
+  </div>
+</main>
+
+<script src="assets/js/data.js?v=50"></script>
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/transactions.js?v=33"></script>
+</body>
+</html>

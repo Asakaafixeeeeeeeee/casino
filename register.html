@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#0d0e10">
+<title>Log in or register — RendoWin</title>
+<meta name="description" content="Log in or create your RendoWin account with your mobile number.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+</head>
+<body>
+
+<header class="site-header" data-shell="header"></header>
+
+<main class="container auth-page">
+  <div class="auth-card">
+    <img class="auth-logo" src="assets/img/rendowin-mark.svg" alt="" width="56" height="56">
+    <h1 class="auth-title" id="authTitle">Create your account</h1>
+    <p class="auth-lead" id="authLead">It takes less than a minute.</p>
+
+    <!-- shown instead of the forms when someone is already signed in -->
+    <div class="signed-in" id="signedIn" hidden>
+      <div class="signed-in-badge" aria-hidden="true">✓</div>
+      <p class="muted" id="signedInAs"></p>
+      <a class="btn btn-primary btn-lg btn-block" href="index.html">Go to the lobby</a>
+      <button class="btn btn-ghost btn-lg btn-block" type="button" id="signOutBtn">Log out</button>
+    </div>
+
+    <div id="authForms">
+      <div class="tabs auth-tabs" role="tablist" aria-label="Account">
+        <button type="button" role="tab" data-mode="login" aria-pressed="false">Log in</button>
+        <button class="on" type="button" role="tab" data-mode="register" aria-pressed="true">Register</button>
+      </div>
+
+      <!-- REGISTER: full name, number, password, date of birth -->
+      <form id="regForm" novalidate>
+        <div class="field">
+          <label for="fullName">Full name</label>
+          <input id="fullName" type="text" placeholder="e.g. Ama Mensah" autocomplete="name" autocapitalize="words" spellcheck="false" maxlength="60">
+          <span class="hint">Your first and last name, as on your ID.</span>
+          <span class="err" id="fullNameErr"></span>
+        </div>
+        <div class="field">
+          <label for="country">Country</label>
+          <select id="country" class="select"></select>
+        </div>
+        <div class="field">
+          <label for="phone">Mobile number</label>
+          <div class="input-wrap">
+            <span class="prefix" id="phonePrefix" aria-hidden="true">🇬🇭</span>
+            <input id="phone" type="tel" inputmode="tel" placeholder="024 123 4567" autocomplete="tel" maxlength="20">
+            <span class="net" id="phoneNet" hidden></span>
+          </div>
+          <span class="err" id="phoneErr"></span>
+        </div>
+        <div class="field">
+          <label for="pw">Password</label>
+          <div class="input-wrap">
+            <input id="pw" type="password" placeholder="At least 8 characters" autocomplete="new-password">
+            <button type="button" class="eye" data-eye="pw" aria-label="Show password">👁</button>
+          </div>
+          <span class="err" id="pwErr"></span>
+        </div>
+        <div class="field">
+          <label for="age">Date of birth</label>
+          <input id="age" type="date" autocomplete="bday">
+          <span class="err" id="ageErr"></span>
+        </div>
+        <div class="field">
+          <label for="currency">Account currency</label>
+          <select id="currency" class="select">
+            <option value="USD" selected>US Dollar ($)</option>
+            <option value="GHS">Ghana Cedi (₵)</option>
+          </select>
+          <span class="hint">The currency your balance is shown in. Deposits are made in cedis and converted at the day's rate.</span>
+        </div>
+        <label class="checkbox auth-terms"><input type="checkbox" id="terms"><span>I'm 18 or older and accept the
+          <a href="terms.html" target="_blank" rel="noopener">terms</a> and <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a>.</span></label>
+        <span class="err" id="termsErr"></span>
+        <button class="btn btn-primary btn-lg btn-block" type="submit" id="regBtn">Create account</button>
+      </form>
+
+      <!-- LOG IN -->
+      <form id="loginForm" novalidate hidden>
+        <div class="field">
+          <label for="lphone">Mobile number</label>
+          <div class="input-wrap">
+            <span class="prefix" aria-hidden="true">🇬🇭</span>
+            <input id="lphone" type="tel" inputmode="numeric" placeholder="024 123 4567" autocomplete="username" maxlength="16">
+          </div>
+          <span class="err" id="lphoneErr"></span>
+        </div>
+        <div class="field">
+          <label for="lpw">Password</label>
+          <div class="input-wrap">
+            <input id="lpw" type="password" autocomplete="current-password">
+            <button type="button" class="eye" data-eye="lpw" aria-label="Show password">👁</button>
+          </div>
+          <span class="err" id="lpwErr"></span>
+        </div>
+        <a class="auth-forgot" href="#forgot" data-goto="forgot">Forgot password?</a>
+        <button class="btn btn-primary btn-lg btn-block" type="submit" id="loginBtn">Log in</button>
+      </form>
+
+      <!-- FORGOT PASSWORD -->
+      <form id="forgotForm" novalidate hidden>
+        <div class="field">
+          <label for="fphone">Mobile number</label>
+          <div class="input-wrap">
+            <span class="prefix" aria-hidden="true">🇬🇭</span>
+            <input id="fphone" type="tel" inputmode="numeric" placeholder="024 123 4567" autocomplete="username" maxlength="16">
+          </div>
+          <span class="err" id="fphoneErr"></span>
+        </div>
+        <div class="field">
+          <label for="fdob">Date of birth</label>
+          <input id="fdob" type="date" autocomplete="bday">
+          <span class="err" id="fdobErr"></span>
+        </div>
+        <div class="field">
+          <label for="fpw">New password</label>
+          <div class="input-wrap">
+            <input id="fpw" type="password" placeholder="At least 8 characters" autocomplete="new-password">
+            <button type="button" class="eye" data-eye="fpw" aria-label="Show password">👁</button>
+          </div>
+          <span class="err" id="fpwErr"></span>
+        </div>
+        <button class="btn btn-primary btn-lg btn-block" type="submit" id="forgotBtn">Reset password</button>
+        <a class="auth-switch" href="#login" data-goto="login">Back to log in</a>
+      </form>
+    </div>
+
+    <div id="formMsg" aria-live="polite"></div>
+  </div>
+
+  <p class="auth-foot"><span class="me-18">18+</span> Play responsibly · <a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a></p>
+</main>
+
+<script src="assets/js/data.js?v=50"></script>
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/register.js?v=36"></script>
+</body>
+</html>

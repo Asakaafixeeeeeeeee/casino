@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#0f172a">
+<title>Crossing — RendoWin</title>
+<meta name="description" content="Crossing: help the hen across a busy night road one lane at a time — every lane raises the multiplier, cash out before a car gets her. Play with real credits.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/minigame.css">
+<link rel="stylesheet" href="assets/css/crossing.css">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+<script src="assets/js/data.js?v=50"></script>
+<!-- the splash screen: the game's picture and a loading bar, shown before the page draws -->
+<script src="assets/js/splash.js?v=33"></script>
+</head>
+<body class="game-page mg-page crossing-page" data-shell="game">
+
+<header class="mg-header">
+  <a class="mg-icon-btn" href="games.html?category=Instant%20Win" aria-label="Back to the lobby"><i data-icon="arrowLeft"></i></a>
+  <h1 class="mg-title cx-title"><span class="cx-brandword">Rendo </span>Crossing</h1>
+  <div class="cx-bal">
+    <span class="mg-bal-label" id="cxBalLabel">Credits</span>
+    <span class="mg-balance"><b id="cxBalance">0.00</b> GHS</span>
+    <span class="mg-delta" id="cxDelta" aria-hidden="true"></span>
+  </div>
+  <button class="mg-icon-btn" type="button" id="cxChat" aria-label="Live chat"><i data-icon="chat"></i></button>
+  <button class="mg-icon-btn" type="button" id="cxMenuBtn" aria-label="Game menu" aria-expanded="false" aria-controls="cxMenu"><i data-icon="menu"></i></button>
+  <nav class="mg-menu" id="cxMenu" aria-label="Game menu" hidden>
+    <div class="mg-menu-label">Play with</div>
+    <div class="mg-modes">
+      <button type="button" data-mode="fun" aria-pressed="true">Credits</button>
+      <button type="button" data-mode="real" aria-pressed="false">Wallet</button>
+    </div>
+    <button type="button" id="cxTopUp"><i data-icon="plus"></i>Top up credits</button>
+    <button type="button" id="cxSound" aria-pressed="true"><i data-icon="sound"></i><span>Sound: on</span></button>
+    <button type="button" id="cxRulesBtn"><i data-icon="info"></i>How to play</button>
+    <a href="wallet.html"><i data-icon="wallet"></i>Deposit</a>
+    <a href="games.html?category=Instant%20Win"><i data-icon="arrowLeft"></i>Back to the lobby</a>
+  </nav>
+</header>
+
+<main class="cx-main">
+  <!-- the road at night, drawn on the canvas at the screen's full resolution -->
+  <section class="cx-stage" id="cxStage" aria-label="The road">
+    <canvas class="cx-canvas" id="cxCanvas" role="img" aria-label="A hen waits on the sidewalk by a traffic light. Lanes of traffic lie ahead, each with a multiplier."></canvas>
+    <div class="cx-pop" id="cxPop" hidden></div>
+  </section>
+
+  <div class="cx-panel">
+    <button class="cx-cash" type="button" id="cxCash" aria-disabled="true"><b>Cash out</b></button>
+
+    <div class="cx-card">
+      <label class="cx-k" for="cxBet">Bet amount</label>
+      <div class="cx-field">
+        <span class="cx-token" aria-hidden="true">₵</span>
+        <input class="cx-input" id="cxBet" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="0.10">
+        <button type="button" class="cx-quick" id="cxHalf" aria-label="Halve the bet">½</button>
+        <button type="button" class="cx-quick" id="cxDouble" aria-label="Double the bet">2×</button>
+      </div>
+    </div>
+
+    <button class="cx-go" type="button" id="cxGo" data-state="bet"><b>Bet</b></button>
+
+    <div class="cx-card cx-diff">
+      <label class="cx-k" for="cxDiff">Difficulty</label>
+      <select class="cx-select" id="cxDiff"></select>
+      <span class="cx-maxx">Top: <b id="cxMax">—</b></span>
+    </div>
+
+    <p class="mg-note">Live play · RTP <span id="cxRtp">97%</span></p>
+  </div>
+</main>
+
+<canvas class="mg-confetti" id="cxConfetti" aria-hidden="true"></canvas>
+<div class="sr-only" id="cxLive" aria-live="polite"></div>
+
+<dialog class="mg-dialog cx-rules" id="cxRules" aria-labelledby="cxRulesTitle">
+  <h2 id="cxRulesTitle">How to play</h2>
+  <ol>
+    <li>Set your bet and pick a difficulty, then press <b>Bet</b>: the hen steps into the first lane.</li>
+    <li>Each lane she gets through is marked by a blue barricade and raises the multiplier. Press <b>Go</b> (or tap the glowing manhole) to step into the next lane.</li>
+    <li>Press <b>Cash out</b> any time after the first lane to take your bet × the current multiplier. If a car hits her, the bet is lost. Reaching the far side cashes out by itself.</li>
+  </ol>
+  <table class="cx-odds">
+    <thead><tr><th></th><th>Lanes</th><th>First</th><th>Safe</th><th>Top</th></tr></thead>
+    <tbody id="cxOdds"></tbody>
+  </table>
+  <p><b>Fairness:</b> how far the hen gets is drawn once, at random, the moment you press Bet; the road then just plays it out and nothing is steered. The chance of getting through a lane and every lane before it is <span id="cxRulesRtp">97%</span> divided by that lane's multiplier, so whenever you cash out the game returns 97% on average. The most one round can pay is GHS 100,000 — reaching it cashes out by itself, and on high-stake bets far up the road the cap lowers the average return.</p>
+  <form method="dialog"><button class="btn btn-primary btn-block">Got it</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/minigame.js?v=34"></script>
+<script src="assets/js/crossing-art.js?v=33"></script>
+<script src="assets/js/crossing.js?v=33"></script>
+</body>
+</html>

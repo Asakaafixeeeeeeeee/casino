@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#0d0e10">
+<title>Withdraw | RendoWin</title>
+<meta name="description" content="Withdraw your RendoWin balance to your registered mobile money wallet.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+</head>
+<body>
+
+<div class="pay-topbar">
+  <a class="pt-back" href="me.html"><i data-icon="chevronLeft"></i>Me</a>
+  <span class="pt-title">Withdraw</span>
+  <button class="pt-help" type="button" data-open-chat aria-label="Help"><i data-icon="help"></i></button>
+</div>
+
+<main class="pay-wrap">
+  <div class="pay-tabs" role="tablist">
+    <button class="pay-tab on" type="button" role="tab" data-paytab="momo">Mobile Money</button>
+  </div>
+
+  <div class="pay-body">
+    <div id="msg" aria-live="polite"></div>
+
+    <section class="pay-panel" data-panel="momo">
+      <div class="pay-row">
+        <i data-icon="phone"></i>
+        <span class="pay-phone-num" id="wdPhoneMasked">—</span>
+      </div>
+
+      <button class="pay-row pay-provider" type="button" id="provBtn" aria-expanded="false">
+        <span class="prov-logo" id="provLogo">MTN</span>
+        <span class="prov-name" id="provName">MTN Mobile Money</span>
+        <span class="prov-switch">Switch<i data-icon="chevronRight"></i></span>
+      </button>
+      <div class="pay-menu" id="provMenu" hidden></div>
+
+      <div class="pay-balance">Balance (GHS) <b data-wallet-balance-num>0.00</b></div>
+
+      <div class="pay-amount">
+        <input id="wdAmount" type="number" min="20" max="50000" step="0.01" placeholder="Amount (GHS)" inputmode="decimal">
+        <span class="pay-min">min. 20.00</span>
+      </div>
+      <div class="pay-err" id="wdAmountErr"></div>
+
+      <div class="pay-incr" id="wquick">
+        <button type="button" data-add="5">+5</button>
+        <button type="button" data-add="10">+10</button>
+        <button type="button" data-add="50">+50</button>
+        <button type="button" data-add="100">+100</button>
+        <button type="button" data-add="max">Max</button>
+      </div>
+
+      <button class="btn-topup" type="button" id="wdSubmit" disabled>Withdraw Now</button>
+
+      <ol class="pay-notes">
+        <li>Maximum per transaction is GHS 50,000.00</li>
+        <li>Minimum per transaction is GHS 20.00</li>
+        <li>Withdrawals are paid to the mobile number you registered with.</li>
+        <li>Mobile money payouts are usually approved within a few minutes during business hours.</li>
+      </ol>
+    </section>
+  </div>
+</main>
+
+<script src="assets/js/data.js?v=50"></script>
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/wallet.js?v=35"></script>
+</body>
+</html>

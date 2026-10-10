@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#121212">
+<title>Game — RendoWin</title>
+<meta name="description" content="Game details, RTP, volatility and play for RendoWin lobby titles.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+</head>
+<body>
+
+<header class="site-header" data-shell="header"></header>
+
+<main class="container">
+  <a class="back-link" href="games.html"><i data-icon="arrowLeft"></i>Back to lobby</a>
+
+  <div class="game-hero">
+    <div class="thumb game-poster" id="poster" aria-hidden="true"><span class="thumb-emoji">🎰</span></div>
+
+    <div class="game-heading">
+      <h1 id="title">Game</h1>
+      <div class="row-wrap">
+        <span class="tag" id="tagCat">Category</span>
+        <span class="tag" id="tagVol">Volatility</span>
+        <span class="tag tag-rtp" id="tagRtp">RTP</span>
+      </div>
+    </div>
+
+    <div class="game-main">
+      <p id="blurb"></p>
+
+      <div class="cta-row">
+        <button class="btn btn-primary btn-lg" type="button" id="playReal"><i data-icon="play"></i>PLAY</button>
+        <button class="btn btn-ghost btn-lg" type="button" id="playDemo">Try free</button>
+      </div>
+      <div class="game-actions">
+        <button class="btn btn-ghost btn-sm fav-toggle" type="button" id="favBtn" aria-pressed="false">Add to My Games</button>
+        <button class="btn btn-ghost btn-sm" type="button" id="shareBtn"><i data-icon="share"></i>Share</button>
+      </div>
+
+      <div class="game-panels">
+        <div class="panel">
+          <div class="panel-title">Game information</div>
+          <div class="info-rows" id="info"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Return to player</div>
+          <div class="spread"><span class="muted" id="rtpVal">—</span><span class="dim" style="font-size:.8rem">Industry average 96%</span></div>
+          <div class="rtp-bar"><i id="rtpBar" style="width:0%"></i></div>
+          <p class="hint" style="margin:12px 0 0">RTP is the theoretical average returned over thousands of plays. Individual sessions vary widely — a high RTP is not a guarantee of a return.</p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">About this title</div>
+          <p id="about" style="margin-bottom:0"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="block" aria-labelledby="similarTitle">
+    <div class="section-head">
+      <h2 class="section-title" id="similarTitle">Similar games</h2>
+      <a class="view-all" id="similarAll" href="games.html">View All<i data-icon="chevronRight"></i></a>
+    </div>
+    <div class="game-grid" id="related"></div>
+  </section>
+</main>
+
+<!-- FREE PLAY MODAL -->
+<div class="modal-backdrop" id="demo" role="dialog" aria-modal="true" aria-labelledby="demoTitle">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="demoTitle">Free play</h3>
+      <button class="modal-close" type="button" data-close aria-label="Close game"><i data-icon="close"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="alert" id="demoNote">Free play mode — no real credits are wagered. Deposit to play for real.</div>
+      <div class="demo-stage" id="stage">
+        <div>
+          <div class="big-emoji" id="stageIcon">🎲</div>
+          <h3 id="stageTitle" style="margin-bottom:6px">Ready when you are</h3>
+          <p class="muted" id="stageMsg" style="margin:0">Place a bet and press spin.</p>
+        </div>
+      </div>
+      <div class="demo-bar">
+        <label class="hint" for="bet">Bet</label>
+        <input class="bet-input" id="bet" type="number" min="1" step="1" value="10">
+        <div class="row-wrap">
+          <button class="btn btn-ghost btn-sm" type="button" data-bet="10">10</button>
+          <button class="btn btn-ghost btn-sm" type="button" data-bet="50">50</button>
+          <button class="btn btn-ghost btn-sm" type="button" data-bet="100">100</button>
+          <button class="btn btn-ghost btn-sm" type="button" data-bet="500">500</button>
+        </div>
+        <button class="btn btn-primary" type="button" id="spin" style="margin-left:auto">SPIN</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="site-footer" data-shell="footer"></footer>
+
+<script src="assets/js/data.js?v=50"></script>
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/game.js?v=34"></script>
+</body>
+</html>

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#1b0f3a">
+<title>Olympus — RendoWin</title>
+<meta name="description" content="Olympus: a 6×5 pay-anywhere slot on Mount Olympus — tumbling wins, multiplier orbs and free spins from the Zeus scatter. Play with real credits.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/minigame.css">
+<link rel="stylesheet" href="assets/css/olympus.css?v=2">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+<script src="assets/js/data.js?v=50"></script>
+<!-- the splash screen: the game's picture and a loading bar, shown before the page draws -->
+<script src="assets/js/splash.js?v=33"></script>
+</head>
+<body class="game-page mg-page olympus-page" data-shell="game">
+
+<canvas class="ol-sky" id="olSky" aria-hidden="true"></canvas>
+
+<header class="mg-header">
+  <a class="mg-icon-btn" href="games.html?category=Slots" aria-label="Back to the lobby"><i data-icon="arrowLeft"></i></a>
+  <h1 class="mg-title">Olympus</h1>
+  <button class="mg-icon-btn" type="button" id="olChat" aria-label="Live chat"><i data-icon="chat"></i></button>
+  <button class="mg-icon-btn" type="button" id="olMenuBtn" aria-label="Game menu" aria-expanded="false" aria-controls="olMenu"><i data-icon="menu"></i></button>
+  <nav class="mg-menu" id="olMenu" aria-label="Game menu" hidden>
+    <div class="mg-menu-label">Play with</div>
+    <div class="mg-modes">
+      <button type="button" data-mode="fun" aria-pressed="true">Credits</button>
+      <button type="button" data-mode="real" aria-pressed="false">Wallet</button>
+    </div>
+    <button type="button" id="olTopUp"><i data-icon="plus"></i>Top up credits</button>
+    <button type="button" id="olSound" aria-pressed="true"><i data-icon="sound"></i><span>Sound: on</span></button>
+    <button type="button" id="olTurbo" aria-pressed="false"><i data-icon="bolt"></i><span>Quick spin: off</span></button>
+    <button type="button" id="olRulesBtn"><i data-icon="info"></i>Paytable &amp; rules</button>
+    <a href="wallet.html"><i data-icon="wallet"></i>Deposit</a>
+    <a href="games.html?category=Slots"><i data-icon="arrowLeft"></i>Back to the lobby</a>
+  </nav>
+</header>
+
+<main class="ol-main">
+  <div class="ol-top">
+    <div class="ol-logo" aria-hidden="true"><span>Rendo</span><b>OLYMPUS</b></div>
+    <div class="ol-banner" id="olBanner" aria-live="off">WIN UP TO 15,000X BET</div>
+    <canvas class="ol-zeus" id="olZeus" aria-hidden="true"></canvas>
+  </div>
+
+  <div class="ol-stage">
+    <div class="ol-side ol-side-buy">
+      <button class="ol-feature" type="button" id="olBuy">
+        <span class="ol-feature-k">Buy<br>free spins</span>
+        <b id="olBuyCost">₵20.00</b>
+      </button>
+    </div>
+
+    <div class="ol-frame" id="olFrame">
+      <span class="ol-pillar ol-pillar-l" aria-hidden="true"></span>
+      <span class="ol-pillar ol-pillar-r" aria-hidden="true"></span>
+      <i class="ol-ruby" style="--x:0%;--y:0%" aria-hidden="true"></i>
+      <i class="ol-ruby" style="--x:100%;--y:0%" aria-hidden="true"></i>
+      <i class="ol-ruby" style="--x:0%;--y:100%" aria-hidden="true"></i>
+      <i class="ol-ruby" style="--x:100%;--y:100%" aria-hidden="true"></i>
+      <i class="ol-ruby ol-ruby-sm" style="--x:50%;--y:0%" aria-hidden="true"></i>
+      <i class="ol-ruby ol-ruby-sm" style="--x:50%;--y:100%" aria-hidden="true"></i>
+      <div class="ol-grid" id="olGrid" role="img" aria-label="The reels"></div>
+      <div class="ol-tumble" id="olTumble" hidden><span>TUMBLE WIN</span> <b id="olTumbleAmt">₵0.00</b></div>
+      <div class="ol-fshud" id="olFsHud" hidden>
+        <span>FREE SPINS <b id="olFsLeft">15</b></span>
+        <span>MULTIPLIER <b id="olFsMult">x0</b></span>
+      </div>
+    </div>
+
+    <div class="ol-side ol-side-ante">
+      <button class="ol-feature ol-ante" type="button" role="switch" aria-checked="false" id="olAnte">
+        <span class="ol-feature-k">Ante bet</span>
+        <span class="ol-ante-note">Double chance to win feature</span>
+        <span class="ol-toggle" aria-hidden="true"><span></span></span>
+        <b id="olAnteCost">₵0.25</b>
+      </button>
+    </div>
+  </div>
+
+  <div class="ol-foot">
+    <p class="ol-prompt" id="olPrompt">PLACE YOUR BETS!</p>
+    <div class="ol-spinrow">
+      <button class="ol-step" type="button" id="olMinus" aria-label="Lower the bet">−</button>
+      <button class="ol-spin" type="button" id="olSpin" aria-label="Spin">
+        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M50 30a18 18 0 0 0-31.6-11.2"/><path d="M14 34a18 18 0 0 0 31.6 11.2"/><path d="M17 10.5v9h9"/><path d="M47 53.5v-9h-9"/></svg>
+      </button>
+      <button class="ol-step" type="button" id="olPlus" aria-label="Raise the bet">+</button>
+    </div>
+    <div class="ol-status">
+      <span>CREDIT <b><span id="olBalance">0.00</span></b> <span class="mg-bal-label" id="olBalLabel">Credits</span></span>
+      <span>BET <b id="olBet">₵0.20</b></span>
+    </div>
+    <p class="mg-note">Live play · RTP <span id="olRtp">96.1%</span></p>
+  </div>
+</main>
+
+<!-- the round's win: a winged gold badge, the tier word and the amount counting up -->
+<div class="ol-win" id="olWin" hidden>
+  <div class="ol-win-inner">
+    <svg class="ol-trophy" viewBox="0 0 220 120" aria-hidden="true">
+      <defs>
+        <linearGradient id="olGold" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#fff6c9"/><stop offset=".35" stop-color="#f7cf55"/><stop offset=".6" stop-color="#a86f12"/><stop offset="1" stop-color="#ffe28a"/>
+        </linearGradient>
+        <radialGradient id="olRuby" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#ff9aa5"/><stop offset=".4" stop-color="#e3122e"/><stop offset="1" stop-color="#5c0010"/></radialGradient>
+      </defs>
+      <g fill="url(#olGold)" stroke="#5a3605" stroke-width="1.5">
+        <path d="M92 62C70 40 40 34 6 40c18 6 30 12 38 20-14-2-26 0-36 6 18 2 30 6 38 14-10 0-18 4-24 10 22-2 46-4 70-16z"/>
+        <path d="M128 62c22-22 52-28 86-22-18 6-30 12-38 20 14-2 26 0 36 6-18 2-30 6-38 14 10 0 18 4 24 10-22-2-46-4-70-16z"/>
+        <path d="M110 18l30 14v30c0 22-14 38-30 46-16-8-30-24-30-46V32z"/>
+      </g>
+      <path d="M110 30l20 9v22c0 15-9 27-20 33-11-6-20-18-20-33V39z" fill="url(#olRuby)" stroke="#fff3c0" stroke-width="1.2"/>
+      <path d="M104 40l-6 22h8l-4 20 14-26h-8l6-16z" fill="#fff8d6"/>
+    </svg>
+    <div class="ol-win-word" id="olWinWord">NICE!</div>
+    <div class="ol-win-amt" id="olWinAmt">₵0.00</div>
+    <div class="ol-win-hint">Tap to continue</div>
+  </div>
+</div>
+
+<!-- free spins won / feature summary -->
+<div class="ol-win ol-fsintro" id="olFsIntro" hidden>
+  <div class="ol-win-inner">
+    <div class="ol-win-word ol-fs-big" id="olFsTitle">15 FREE SPINS</div>
+    <div class="ol-win-amt" id="olFsSub">Multiplier orbs add up for the whole feature</div>
+    <div class="ol-win-hint">Tap to continue</div>
+  </div>
+</div>
+
+<canvas class="mg-confetti" id="olConfetti" aria-hidden="true"></canvas>
+<div class="sr-only" id="olLive" aria-live="polite"></div>
+
+<dialog class="mg-dialog" id="olBuyDlg" aria-labelledby="olBuyTitle">
+  <h2 id="olBuyTitle">Buy free spins</h2>
+  <p>Start the free spins feature now for <b id="olBuyDlgCost">₵20.00</b> (100 × your bet). You get 15 free spins started by 4–6 Zeus scatters, which also pay.</p>
+  <div class="ol-dlg-row">
+    <button class="btn btn-ghost" type="button" id="olBuyNo">Cancel</button>
+    <button class="btn btn-primary" type="button" id="olBuyYes">Buy</button>
+  </div>
+</dialog>
+
+<dialog class="mg-dialog ol-rules" id="olRules" aria-labelledby="olRulesTitle">
+  <h2 id="olRulesTitle">Paytable &amp; rules</h2>
+  <p><b>Pay anywhere.</b> 8 or more of the same symbol anywhere on the 6×5 grid win. Pays are × your bet:</p>
+  <table class="ol-pays" id="olPays"></table>
+  <p><b>Tumble.</b> Winning symbols explode and the others fall to fill the gaps, with new ones dropping in from the top. This repeats as long as new wins form.</p>
+  <p><b>Multiplier orbs</b> (2x to 1000x) stay on the grid. If the spin won, all orbs on the grid are added together and multiply the spin's whole tumble win.</p>
+  <p><b>Zeus scatter.</b> 4, 5 or 6 scatters pay 3×, 5× or 100× your bet and start <b>15 free spins</b>. In free spins every orb that lands in a winning spin adds to a total multiplier that stays for the rest of the feature and multiplies every later win; 3+ scatters give 5 more spins.</p>
+  <p><b>Ante bet</b> costs 25% more per spin and makes scatters land more often (feature about 1 in 209 spins instead of 1 in 468). <b>Buy free spins</b> costs 100 × the bet (not with Ante bet).</p>
+  <p><b>Fairness:</b> every symbol is drawn at random and the whole round — every tumble, orb and free spin — is decided the moment you spin; the animation just plays it out. For real money our server plays the round and pays it, and the page replays that same round. The return was measured over <span id="olRulesN">50,000,000</span> spins of the base game and of Ante bet, and <span id="olRulesBuyN">1,000,000</span> bought features: base game <span id="olRtpBase">96.0%</span>, Ante bet <span id="olRtpAnte">95.0%</span>, bought feature <span id="olRtpBuy">96.2%</span> (each ±<span id="olRtpMargin">0.3</span>%). One round pays at most 15,000 × the bet.</p>
+  <form method="dialog"><button class="btn btn-primary btn-block">Got it</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/minigame.js?v=34"></script>
+<script src="assets/js/olympus-math.js?v=33"></script>
+<script src="assets/js/olympus-art.js?v=33"></script>
+<script src="assets/js/olympus.js?v=34"></script>
+</body>
+</html>

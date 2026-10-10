@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#2a1a0a">
+<title>Bottle — RendoWin</title>
+<meta name="description" content="Bottle: spin the bottle and call UP or DOWN — a correct call pays 2x. Play with real credits.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/minigame.css">
+<link rel="stylesheet" href="assets/css/bottle.css">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+<script src="assets/js/data.js?v=50"></script>
+<!-- the splash screen: the game's picture and a loading bar, shown before the page draws -->
+<script src="assets/js/splash.js?v=33"></script>
+</head>
+<body class="game-page mg-page bottle-page" data-shell="game">
+
+<header class="mg-header">
+  <a class="mg-icon-btn" href="games.html?category=Instant%20Win" aria-label="Back to the lobby"><i data-icon="arrowLeft"></i></a>
+  <h1 class="mg-title" id="sbTitle">Bottle</h1>
+  <button class="mg-icon-btn" type="button" id="sbChat" aria-label="Live chat"><i data-icon="chat"></i></button>
+  <button class="mg-icon-btn" type="button" id="sbMenuBtn" aria-label="Game menu" aria-expanded="false" aria-controls="sbMenu"><i data-icon="menu"></i></button>
+  <nav class="mg-menu" id="sbMenu" aria-label="Game menu" hidden>
+    <div class="mg-menu-label">Play with</div>
+    <div class="mg-modes">
+      <button type="button" data-mode="fun" aria-pressed="true">Credits</button>
+      <button type="button" data-mode="real" aria-pressed="false">Wallet</button>
+    </div>
+    <button type="button" id="sbTopUp"><i data-icon="plus"></i>Top up credits</button>
+    <button type="button" id="sbSound" aria-pressed="true"><i data-icon="sound"></i><span>Sound: on</span></button>
+    <button type="button" id="sbRulesBtn"><i data-icon="info"></i>How to play</button>
+    <a href="wallet.html"><i data-icon="wallet"></i>Deposit</a>
+    <a href="games.html?category=Instant%20Win"><i data-icon="arrowLeft"></i>Back to the lobby</a>
+  </nav>
+</header>
+
+<div class="mg-subheader">
+  <span class="mg-bal-label" id="sbBalLabel">Credits</span>
+  <span class="mg-balance">GHS <b id="sbBalance">0.00</b></span>
+  <span class="mg-delta" id="sbDelta" aria-hidden="true"></span>
+</div>
+
+<main class="mg-main">
+  <!-- the table: UP (top) and DOWN (bottom) halves; the thin MIDDLE wedges on the line are drawn at their true size -->
+  <section class="sb-table" id="sbTable" aria-label="Bottle table">
+    <svg class="sb-wheel" viewBox="0 0 400 400" aria-hidden="true">
+      <defs>
+        <radialGradient id="sbUpFill" cx="50%" cy="100%" r="100%">
+          <stop offset="0" stop-color="#72cc76"/><stop offset=".55" stop-color="#4caf50"/><stop offset="1" stop-color="#2b7530"/>
+        </radialGradient>
+        <radialGradient id="sbDownFill" cx="50%" cy="0%" r="100%">
+          <stop offset="0" stop-color="#ffbd55"/><stop offset=".55" stop-color="#ff9800"/><stop offset="1" stop-color="#d84d00"/>
+        </radialGradient>
+        <linearGradient id="sbBrass" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#fff0bf"/><stop offset=".35" stop-color="#d9a640"/><stop offset=".7" stop-color="#8a5f12"/><stop offset="1" stop-color="#e2b65a"/>
+        </linearGradient>
+        <!-- turned wooden rim: concentric bands catching the light -->
+        <radialGradient id="sbRim" cx="50%" cy="50%" r="50%">
+          <stop offset=".9" stop-color="#241306"/><stop offset=".935" stop-color="#5e3615"/><stop offset=".958" stop-color="#a06a35"/>
+          <stop offset=".975" stop-color="#6b3f19"/><stop offset=".99" stop-color="#3a200b"/><stop offset="1" stop-color="#1c0e04"/>
+        </radialGradient>
+        <radialGradient id="sbLight" cx="42%" cy="30%" r="62%">
+          <stop offset="0" stop-color="#fff" stop-opacity=".17"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="sbVignette" cx="50%" cy="50%" r="50%">
+          <stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/>
+        </radialGradient>
+        <radialGradient id="sbPin" cx="35%" cy="32%" r="70%">
+          <stop offset="0" stop-color="#fff3c4"/><stop offset=".45" stop-color="#d4a140"/><stop offset="1" stop-color="#6b4709"/>
+        </radialGradient>
+        <!-- felt grain: the pre-rendered speckle tile, multiplied over the felt colours (white = no change) -->
+        <pattern id="sbFeltTex" patternUnits="userSpaceOnUse" width="128" height="128">
+          <image href="assets/img/felt.jpg" width="128" height="128"/>
+        </pattern>
+        <filter id="sbBlur"><feGaussianBlur stdDeviation="3.2"/></filter>
+        <clipPath id="sbFeltClip"><circle cx="200" cy="200" r="186"/></clipPath>
+        <path id="sbArcTop" d="M42 200A158 158 0 0 1 358 200"/>
+        <path id="sbArcBottom" d="M30 200A170 170 0 0 0 370 200"/>
+      </defs>
+      <!-- turned wooden rim with a brass bead -->
+      <circle cx="200" cy="200" r="199.5" fill="url(#sbRim)"/>
+      <circle cx="200" cy="200" r="198.4" fill="none" stroke="url(#sbBrass)" stroke-width="1.4" opacity=".85"/>
+      <!-- felt: the UP and DOWN halves and the red MIDDLE wedges on the line, then the grain over them
+           (under the printed markings, so the lettering stays crisp) -->
+      <path class="sb-half sb-up" d="M14 200A186 186 0 0 1 386 200Z" fill="url(#sbUpFill)"/>
+      <path class="sb-half sb-down" d="M14 200A186 186 0 0 0 386 200Z" fill="url(#sbDownFill)"/>
+      <path class="sb-middle" d="M200 200L385.6 188.3A186 186 0 0 1 385.6 211.7Z"/>
+      <path class="sb-middle" d="M200 200L14.4 211.7A186 186 0 0 1 14.4 188.3Z"/>
+      <circle cx="200" cy="200" r="186" fill="url(#sbFeltTex)" style="mix-blend-mode: multiply"/>
+      <!-- brass strip along the line and brass edges on the wedges -->
+      <path d="M14 200H386" stroke="#000" stroke-opacity=".4" stroke-width="3.6"/>
+      <path d="M14 200H386" stroke="url(#sbBrass)" stroke-width="2"/>
+      <path d="M385.6 188.3L200 200L385.6 211.7M14.4 188.3L200 200L14.4 211.7" fill="none" stroke="url(#sbBrass)" stroke-width="1.3"/>
+      <!-- printed markings -->
+      <text class="sb-label" x="200" y="132">UP</text>
+      <text class="sb-label" x="200" y="300">DOWN</text>
+      <text class="sb-arc"><textPath href="#sbArcTop" startOffset="50%" text-anchor="middle">PAYS 2X</textPath></text>
+      <text class="sb-arc"><textPath href="#sbArcBottom" startOffset="50%" text-anchor="middle">LOSE IF BOTTLE STOPS AT MIDDLE</textPath></text>
+      <!-- lighting: a soft overhead lamp, darker towards the edge, the felt sunk into the rim -->
+      <g clip-path="url(#sbFeltClip)" pointer-events="none">
+        <circle cx="200" cy="200" r="186" fill="url(#sbLight)"/>
+        <circle cx="200" cy="200" r="186" fill="url(#sbVignette)"/>
+        <circle cx="200" cy="200" r="189" fill="none" stroke="#000" stroke-opacity=".6" stroke-width="8" filter="url(#sbBlur)"/>
+      </g>
+      <circle cx="200" cy="200" r="186.4" fill="none" stroke="url(#sbBrass)" stroke-width="1.5"/>
+      <!-- brass centre pin -->
+      <circle cx="200" cy="200" r="13" fill="url(#sbPin)" stroke="#5a3b07" stroke-width="1"/>
+      <circle cx="196" cy="196" r="3.4" fill="#fff" opacity=".55"/>
+    </svg>
+    <!-- the wrapper doesn't rotate, so the bottle's shadow always falls the same way -->
+    <div class="sb-bottle-wrap"><img class="sb-bottle" id="sbBottle" src="assets/img/bottle.svg" alt="" width="300" height="100"></div>
+  </section>
+
+  <!-- bet controls; the result card covers them once a round ends -->
+  <section class="mg-bet" id="sbBet" aria-label="Your bet">
+    <div class="mg-amount"><span>Bet</span> <span class="mg-coin" aria-hidden="true"></span> <b id="sbAmount">0.50</b></div>
+    <input class="mg-slider" id="sbSlider" type="range" min="0" max="1000" step="1" value="0" aria-label="Bet amount">
+    <div class="mg-chips" id="sbChips"></div>
+    <div class="mg-limits"><span>Min: 0.50</span> <span>Max: 50K</span></div>
+    <div class="mg-result" id="sbResult" hidden>
+      <span class="mg-badge" id="sbBadge">UP</span>
+      <p class="mg-msg" id="sbMsg"></p>
+    </div>
+  </section>
+  <p class="mg-note">Live play · RTP <span id="sbRtp">96%</span></p>
+</main>
+
+<div class="mg-actions" id="sbActions">
+  <button class="mg-act sb-act-up" type="button" data-side="UP"><b>UP</b> <span>Pays 2x</span></button>
+  <button class="mg-act sb-act-down" type="button" data-side="DOWN"><b>DOWN</b> <span>Pays 2x</span></button>
+  <button class="mg-act sb-act-up" type="button" id="sbRebet" hidden><b>Rebet</b> <span id="sbRebetInfo"></span></button>
+  <button class="mg-act sb-act-new" type="button" id="sbNew" hidden><b>New Round</b> <span>Change your bet</span></button>
+</div>
+
+<canvas class="mg-confetti" id="sbConfetti" aria-hidden="true"></canvas>
+<div class="sr-only" id="sbLive" aria-live="polite"></div>
+
+<dialog class="mg-dialog" id="sbRules" aria-labelledby="sbRulesTitle">
+  <h2 id="sbRulesTitle">How to play</h2>
+  <ol>
+    <li>Choose your bet with the slider or a chip.</li>
+    <li>Tap <b>UP</b> or <b>DOWN</b> — the bottle spins.</li>
+    <li>If the neck stops in your half, you win 2× your bet.</li>
+    <li>If it stops on the <b>MIDDLE</b> line (the thin red wedges), every bet loses.</li>
+  </ol>
+  <p><b>Fairness:</b> the bottle stops at a random angle. UP and DOWN each cover 48% of the circle and the MIDDLE wedges 4%, so the game returns <span id="sbRulesRtp">96%</span> on average.</p>
+  <form method="dialog"><button class="btn btn-primary btn-block">Got it</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/minigame.js?v=34"></script>
+<script src="assets/js/bottle.js?v=33"></script>
+</body>
+</html>

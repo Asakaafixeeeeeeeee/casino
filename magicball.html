@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#000000">
+<title>Magic Ball — RendoWin</title>
+<meta name="description" content="Magic Ball: three cups, one ball. Bet on up to two spots — the right spot pays 2.9x. Play with real credits.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/minigame.css">
+<link rel="stylesheet" href="assets/css/magicball.css">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+<script src="assets/js/data.js?v=50"></script>
+<!-- the splash screen: the game's picture and a loading bar, shown before the page draws -->
+<script src="assets/js/splash.js?v=33"></script>
+</head>
+<body class="game-page mg-page magicball-page" data-shell="game">
+
+<!-- the red cup, drawn once: an upside-down party cup seen from slightly above, lit from the top left -->
+<svg class="mb-sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="mbCupBody" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5c0007"/><stop offset=".16" stop-color="#b3101c"/><stop offset=".32" stop-color="#ff4b4b"/>
+      <stop offset=".48" stop-color="#dd1622"/><stop offset=".78" stop-color="#9c0a14"/><stop offset="1" stop-color="#43000a"/>
+    </linearGradient>
+    <linearGradient id="mbCupTop" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e5323a"/><stop offset=".6" stop-color="#a50d17"/><stop offset="1" stop-color="#6e0610"/>
+    </linearGradient>
+    <linearGradient id="mbCupSpec" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".25" stop-color="#fff" stop-opacity=".55"/>
+      <stop offset=".7" stop-color="#fff" stop-opacity=".3"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="mbCupLip" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6d0009"/><stop offset=".3" stop-color="#ff5a5a"/><stop offset=".55" stop-color="#e01c26"/><stop offset="1" stop-color="#55000a"/>
+    </linearGradient>
+  </defs>
+  <symbol id="mbCupArt" viewBox="0 0 100 120">
+    <!-- body: the base (now on top) seen as an ellipse, the sides widening down to the opening -->
+    <path d="M4 110L21 12A29 6 0 0 1 79 12L96 110A46 8 0 0 1 4 110Z" fill="url(#mbCupBody)"/>
+    <!-- the rolled lip round the opening -->
+    <path d="M5 104A45 7.9 0 0 0 95 104L96 110A46 8 0 0 1 4 110Z" fill="url(#mbCupLip)"/>
+    <path d="M5 104A45 7.9 0 0 0 95 104" fill="none" stroke="#ff9a9a" stroke-opacity=".55" stroke-width="1"/>
+    <!-- the two stepped rings every party cup has -->
+    <path d="M10.9 70A39.1 7.2 0 0 0 89.1 70" fill="none" stroke="#ffb0b0" stroke-opacity=".38" stroke-width="1.2"/>
+    <path d="M10.6 72A39.4 7.2 0 0 0 89.4 72" fill="none" stroke="#3d0006" stroke-opacity=".45" stroke-width="1.4"/>
+    <path d="M7.8 88A42.2 7.6 0 0 0 92.2 88" fill="none" stroke="#ffb0b0" stroke-opacity=".34" stroke-width="1.2"/>
+    <path d="M7.5 90A42.5 7.6 0 0 0 92.5 90" fill="none" stroke="#3d0006" stroke-opacity=".45" stroke-width="1.4"/>
+    <!-- the base: a shallow ring pressed into it -->
+    <ellipse cx="50" cy="12" rx="29" ry="6" fill="url(#mbCupTop)"/>
+    <ellipse cx="50" cy="12.4" rx="21" ry="4.2" fill="none" stroke="#5c0008" stroke-opacity=".55" stroke-width="1.2"/>
+    <ellipse cx="50" cy="11.8" rx="21" ry="4.2" fill="none" stroke="#ff8a8a" stroke-opacity=".35" stroke-width=".8"/>
+    <ellipse cx="50" cy="12" rx="29" ry="6" fill="none" stroke="#ff7b7b" stroke-opacity=".6" stroke-width="1"/>
+    <!-- gloss: a long highlight down the lit side, a faint rim light on the other -->
+    <path d="M27.5 19L34 19L26.5 101L19.5 101Z" fill="url(#mbCupSpec)"/>
+    <path d="M37 20L39.5 20L36 98L33.5 98Z" fill="url(#mbCupSpec)" opacity=".5"/>
+    <path d="M74.5 18L76.5 18L90 102L88 102Z" fill="url(#mbCupSpec)" opacity=".35"/>
+  </symbol>
+</svg>
+
+<header class="mg-header mb-header">
+  <a class="mg-icon-btn" href="games.html?category=Instant%20Win" aria-label="Close the game"><i data-icon="close"></i></a>
+  <div class="mb-bal">
+    <span class="mg-bal-label" id="mbBalLabel">Credits</span>
+    <span class="mg-balance">GHS <b id="mbBalance">0.00</b></span>
+    <span class="mg-delta" id="mbDelta" aria-hidden="true"></span>
+  </div>
+  <h1 class="mg-title mb-title">Magic Ball</h1>
+  <button class="mg-icon-btn" type="button" id="mbChat" aria-label="Live chat"><i data-icon="chat"></i></button>
+  <button class="mg-icon-btn" type="button" id="mbMenuBtn" aria-label="Game menu" aria-expanded="false" aria-controls="mbMenu"><i data-icon="menu"></i></button>
+  <nav class="mg-menu" id="mbMenu" aria-label="Game menu" hidden>
+    <div class="mg-menu-label">Play with</div>
+    <div class="mg-modes">
+      <button type="button" data-mode="fun" aria-pressed="true">Credits</button>
+      <button type="button" data-mode="real" aria-pressed="false">Wallet</button>
+    </div>
+    <button type="button" id="mbTopUp"><i data-icon="plus"></i>Top up credits</button>
+    <button type="button" id="mbSound" aria-pressed="true"><i data-icon="sound"></i><span>Sound: on</span></button>
+    <button type="button" id="mbRulesBtn"><i data-icon="info"></i>How to play</button>
+    <a href="wallet.html"><i data-icon="wallet"></i>Deposit</a>
+    <a href="games.html?category=Instant%20Win"><i data-icon="arrowLeft"></i>Back to the lobby</a>
+  </nav>
+</header>
+
+<main class="mb-main">
+  <!-- the stage: a round walnut pedestal table under a spotlight, three cups, one ball -->
+  <section class="mb-stage" id="mbStage" aria-label="The table">
+    <svg class="mb-table" viewBox="0 0 400 260" aria-hidden="true">
+      <defs>
+        <!-- the walnut texture, squashed top to bottom: a round top seen at an angle -->
+        <pattern id="mbWood" patternUnits="userSpaceOnUse" width="512" height="118" patternTransform="translate(-56 44)">
+          <image href="assets/img/cups-wood.jpg" width="512" height="118" preserveAspectRatio="none"/>
+        </pattern>
+        <radialGradient id="mbTopLight" cx="50%" cy="34%" r="62%">
+          <stop offset="0" stop-color="#fff2d6" stop-opacity=".3"/><stop offset=".5" stop-color="#ffd9a0" stop-opacity=".06"/>
+          <stop offset="1" stop-color="#000" stop-opacity=".45"/>
+        </radialGradient>
+        <linearGradient id="mbSheen" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".2"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="mbRim" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#7a4520"/><stop offset=".3" stop-color="#4a270f"/><stop offset="1" stop-color="#1c0d04"/>
+        </linearGradient>
+        <linearGradient id="mbRimSide" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#000" stop-opacity=".7"/><stop offset=".28" stop-color="#000" stop-opacity="0"/>
+          <stop offset=".62" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".75"/>
+        </linearGradient>
+        <linearGradient id="mbStem" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#140902"/><stop offset=".3" stop-color="#5a3216"/><stop offset=".45" stop-color="#8a5228"/>
+          <stop offset=".7" stop-color="#3d210c"/><stop offset="1" stop-color="#0d0601"/>
+        </linearGradient>
+        <radialGradient id="mbFloor" cx="50%" cy="50%" r="50%">
+          <stop offset="0" stop-color="#000" stop-opacity=".9"/><stop offset="1" stop-color="#000" stop-opacity="0"/>
+        </radialGradient>
+        <clipPath id="mbTopClip"><ellipse cx="200" cy="110" rx="190" ry="62"/></clipPath>
+      </defs>
+      <!-- the floor shadow, the foot and the turned column -->
+      <ellipse cx="200" cy="247" rx="130" ry="12" fill="url(#mbFloor)"/>
+      <path d="M146 238Q200 224 254 238L266 246Q200 258 134 246Z" fill="url(#mbStem)"/>
+      <path d="M146 238Q200 224 254 238" fill="none" stroke="#b9773f" stroke-opacity=".45"/>
+      <path d="M174 168L226 168L219 228Q200 236 181 228Z" fill="url(#mbStem)"/>
+      <path d="M180 196Q200 201 220 196" fill="none" stroke="#000" stroke-opacity=".35" stroke-width="2"/>
+      <!-- the edge of the top, its thickness showing in front -->
+      <path d="M10 110A190 62 0 0 0 390 110L390 125A190 62 0 0 1 10 125Z" fill="url(#mbRim)"/>
+      <path d="M10 110A190 62 0 0 0 390 110L390 125A190 62 0 0 1 10 125Z" fill="url(#mbRimSide)"/>
+      <path d="M10 110A190 62 0 0 0 390 110" fill="none" stroke="#d7a06a" stroke-opacity=".5" stroke-width="1.2"/>
+      <!-- the polished top: walnut, the spotlight, a long reflection, darker towards the edge -->
+      <ellipse cx="200" cy="110" rx="190" ry="62" fill="url(#mbWood)"/>
+      <g clip-path="url(#mbTopClip)">
+        <ellipse cx="200" cy="110" rx="190" ry="62" fill="url(#mbTopLight)"/>
+        <ellipse cx="200" cy="82" rx="140" ry="9" fill="url(#mbSheen)"/>
+        <ellipse cx="200" cy="110" rx="189" ry="61" fill="none" stroke="#000" stroke-opacity=".45" stroke-width="4"/>
+      </g>
+      <!-- the three spots, painted in gold on the top -->
+      <g class="mb-marks">
+        <g class="mb-mark" data-spot="1"><ellipse cx="88" cy="147" rx="27" ry="8.5"/><text transform="translate(88 160) scale(1 .62)">1</text></g>
+        <g class="mb-mark" data-spot="2"><ellipse cx="200" cy="149" rx="27" ry="8.5"/><text transform="translate(200 162) scale(1 .62)">2</text></g>
+        <g class="mb-mark" data-spot="3"><ellipse cx="312" cy="147" rx="27" ry="8.5"/><text transform="translate(312 160) scale(1 .62)">3</text></g>
+      </g>
+    </svg>
+    <div class="mb-cups" id="mbCups">
+      <span class="mb-ball" id="mbBall"></span>
+      <span class="mb-cup" style="--slot: 0"><span class="mb-cup-shadow"></span><svg viewBox="0 0 100 120" aria-hidden="true"><use href="#mbCupArt"/></svg></span>
+      <span class="mb-cup" style="--slot: 1"><span class="mb-cup-shadow"></span><svg viewBox="0 0 100 120" aria-hidden="true"><use href="#mbCupArt"/></svg></span>
+      <span class="mb-cup" style="--slot: 2"><span class="mb-cup-shadow"></span><svg viewBox="0 0 100 120" aria-hidden="true"><use href="#mbCupArt"/></svg></span>
+    </div>
+  </section>
+
+  <button class="mb-reshuffle" type="button" id="mbReshuffle">Reshuffle</button>
+  <div class="mb-status">
+    <span class="mb-badge" id="mbBadge" hidden></span>
+    <p class="mb-msg" id="mbMsg">Pays 2.9x | You can bet on up to two SPOTS</p>
+  </div>
+
+  <div class="mb-spots" id="mbSpots" role="group" aria-label="Spots: tap one to put your chip on it">
+    <button class="mb-spot" type="button" data-spot="1"><span class="mb-spot-name">SPOT 1</span><span class="mb-spot-chip" hidden></span></button>
+    <button class="mb-spot" type="button" data-spot="2"><span class="mb-spot-name">SPOT 2</span><span class="mb-spot-chip" hidden></span></button>
+    <button class="mb-spot" type="button" data-spot="3"><span class="mb-spot-name">SPOT 3</span><span class="mb-spot-chip" hidden></span></button>
+  </div>
+
+  <div class="mb-chipbar">
+    <button class="mb-clear" type="button" id="mbClear" aria-label="Clear all chips"><i data-icon="trash"></i></button>
+    <div class="mg-chips mb-chips" id="mbChips" role="group" aria-label="Chip value"></div>
+  </div>
+  <div class="mg-limits"><span>Min 0.2</span> <span>Max 10K</span></div>
+  <p class="mg-note">Live play · RTP <span id="mbRtp">96.7%</span></p>
+</main>
+
+<div class="mg-actions mb-actions">
+  <button class="mg-act mb-go" type="button" id="mbGo" data-state="shuffling"></button>
+</div>
+
+<canvas class="mg-confetti" id="mbConfetti" aria-hidden="true"></canvas>
+<div class="sr-only" id="mbLive" aria-live="polite"></div>
+
+<dialog class="mg-dialog" id="mbRules" aria-labelledby="mbRulesTitle">
+  <h2 id="mbRulesTitle">How to play</h2>
+  <ol>
+    <li>Pick a chip, then tap <b>SPOT 1</b>, <b>2</b> or <b>3</b> to put it there — tap again to add more. You can cover up to two spots.</li>
+    <li>Press <b>Place Bet</b>: the three cups lift together to show where the ball is.</li>
+    <li>If the ball is under one of your spots, that spot pays <b>2.9×</b> its chips. The bin clears your chips.</li>
+    <li><b>Shuffle Again</b> (or Reshuffle) brings the cups down and shuffles for the next round. Your chips stay where they are.</li>
+  </ol>
+  <p><b>Fairness:</b> the ball's spot is drawn at random when you place your bet — one time in three for each spot. The shuffle is for show, so following the cups doesn't help, and nothing is steered. A spot pays 2.9× at odds of 1 in 3, so the game returns <span id="mbRulesRtp">96.7%</span> on average, whether you cover one spot or two. A spot takes at most GHS 10,000.</p>
+  <form method="dialog"><button class="btn btn-primary btn-block">Got it</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/minigame.js?v=34"></script>
+<script src="assets/js/magicball.js?v=34"></script>
+</body>
+</html>

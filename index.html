@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#0d0e10">
+<title>RendoWin — Ghana Casino Lobby</title>
+<meta name="description" content="Play premium Ghanaian casino games — crash, instant-win, slots and live-style tables.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+</head>
+<body>
+
+<header class="site-header" data-shell="header"></header>
+
+<main>
+  <!-- PROMO CAROUSEL -->
+  <div class="container">
+    <section class="hero-carousel" id="carousel" aria-roledescription="carousel" aria-label="Promotions"></section>
+  </div>
+
+  <!-- CATEGORY BAR -->
+  <nav class="cat-bar" data-shell="categories" aria-label="Game categories" style="margin-top:12px"></nav>
+
+  <div class="container">
+    <!-- FOR YOU -->
+    <section class="block" aria-labelledby="forYouTitle">
+      <div class="section-head">
+        <h2 class="section-title plain" id="forYouTitle"><i data-icon="heart" class="tone-red"></i>For You</h2>
+      </div>
+      <div class="mini-row" id="forYou"></div>
+    </section>
+
+    <!-- LIVE WINNER BANNER -->
+    <section class="winner-card" id="winner" aria-label="Recent wins">
+      <span class="thumb winner-thumb" aria-hidden="true"></span>
+      <div class="winner-body"></div>
+      <a class="btn btn-primary winner-play" href="games.html">PLAY</a>
+    </section>
+
+    <!-- HOT / NEW / SLOTS / LIVE / BONUS -->
+    <div id="sections"></div>
+
+    <!-- ALL GAMES -->
+    <section class="block" id="allGames" aria-labelledby="allGamesTitle">
+      <div class="section-head">
+        <h2 class="section-title" id="allGamesTitle">All games</h2>
+        <a class="view-all" href="games.html">Browse all<i data-icon="chevronRight"></i></a>
+      </div>
+      <div class="game-grid" id="allGamesGrid"></div>
+    </section>
+
+    <!-- PAYMENTS -->
+    <section class="block" aria-labelledby="payTitle" hidden>
+      <div class="section-head">
+        <h2 class="section-title" id="payTitle">Pay with</h2>
+        <a class="view-all" href="wallet.html">Deposit<i data-icon="chevronRight"></i></a>
+      </div>
+      <div class="strip" id="payGrid"></div>
+    </section>
+  </div>
+</main>
+
+<footer class="site-footer" data-shell="footer"></footer>
+
+<script src="assets/js/data.js?v=50"></script>
+<!-- the site splash: the RendoWin mark and a loading bar, shown once per visit before the lobby draws -->
+<script src="assets/js/site-splash.js?v=2"></script>
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/home.js?v=35"></script>
+</body>
+</html>

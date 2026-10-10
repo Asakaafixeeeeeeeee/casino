@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#000000">
+<title>Knockout — RendoWin</title>
+<meta name="description" content="Knockout: two boxers slug it out while the multiplier climbs — cash out before the knockout, or call the colour with ColorGo. Play with real credits.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/crash.css">
+<link rel="stylesheet" href="assets/css/knockout.css">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+<script src="assets/js/data.js?v=50"></script>
+<!-- the splash screen: the game's picture and a loading bar, shown before the page draws -->
+<script src="assets/js/splash.js?v=33"></script>
+</head>
+<body class="game-page knockout-page" data-shell="game">
+
+<header class="cg-header">
+  <a class="cg-brand" href="games.html?category=Live%20Casino" aria-label="Back to live casino games">
+    <i class="ko-back" data-icon="arrowLeft"></i><span class="ko-logo"><img class="ko-mark" src="assets/img/knockout-mark.png" alt="" width="28" height="28"><b>KNOCKOUT</b></span>
+  </a>
+  <div class="cg-head-actions">
+    <span class="cg-balance"><span class="cg-bal-label" id="cgFun">Credits</span><span class="cg-bal-amount"><b id="cgBalance">0.00</b> GHS</span></span>
+    <button class="cg-icon-btn" type="button" id="cgChat" aria-label="Live chat"><i data-icon="chat"></i></button>
+    <button class="cg-icon-btn" type="button" id="cgMenuBtn" aria-label="Game menu" aria-expanded="false" aria-controls="cgMenu"><i data-icon="menu"></i></button>
+  </div>
+  <nav class="cg-menu" id="cgMenu" aria-label="Game menu" hidden>
+    <div class="cg-menu-label">Play with</div>
+    <div class="cg-modes">
+      <button type="button" data-mode="fun" aria-pressed="true">Credits</button>
+      <button type="button" data-mode="real" aria-pressed="false">Wallet</button>
+    </div>
+    <button type="button" id="cgTopUp"><i data-icon="plus"></i>Top up credits</button>
+    <button type="button" id="cgRulesBtn"><i data-icon="info"></i>How to play</button>
+    <a href="wallet.html"><i data-icon="wallet"></i>Deposit</a>
+    <a href="games.html?category=Live%20Casino"><i data-icon="arrowLeft"></i>Back to the lobby</a>
+  </nav>
+</header>
+
+<main class="cg-layout">
+  <section class="cg-game" aria-label="Game">
+    <div class="cg-history" id="cgHistory" aria-label="Recent results"></div>
+
+    <div class="cg-stage" id="cgStage">
+      <canvas id="cgCanvas" aria-hidden="true"></canvas>
+      <div class="cg-center">
+        <div class="ko-start" id="koStart" hidden>Round Start!</div>
+        <div class="cg-flew" id="cgFlew" hidden>Round End!</div>
+        <div class="cg-mult" id="cgMult" aria-hidden="true" hidden>1.00x</div>
+      </div>
+      <div class="cg-wait" id="cgWait">
+        <span class="cg-wait-kicker">RendoWin Originals</span>
+        <strong class="cg-wait-title">Waiting for Next Round</strong>
+        <span class="ko-wait-sub">Place Your Bet Now</span>
+        <div class="cg-wait-bar"><i id="cgWaitBar"></i></div>
+        <span class="cg-wait-time" id="cgWaitTime">Next round in 5.0s</span>
+      </div>
+      <div class="ko-hud" aria-label="This round's bets"><span>Total Bets <b id="koTotal">0</b></span><span>Left Bets <b id="koLeft">0</b></span></div>
+      <div class="ko-banner" id="koBanner" role="status" hidden></div>
+      <div class="cg-online" title="Players online"><i data-icon="user"></i><span id="cgOnline">3,502</span></div>
+    </div>
+
+    <div class="ko-modes" id="koModes" role="group" aria-label="Bet mode">
+      <button type="button" data-betmode="classic" aria-pressed="true">Classic <small>cash out</small></button>
+      <button type="button" data-betmode="colorgo" aria-pressed="false">ColorGo <small>call the colour</small></button>
+    </div>
+    <div class="cg-panels" id="cgPanels"></div>
+  </section>
+
+  <aside class="cg-bets" aria-label="Live bets">
+    <div class="cg-tabs" role="tablist" aria-label="Bets">
+      <button type="button" role="tab" aria-selected="true" data-list="all">All Bets</button>
+      <button type="button" role="tab" aria-selected="false" data-list="my">My Bets</button>
+      <button type="button" role="tab" aria-selected="false" data-list="stats">Stats</button>
+    </div>
+    <div class="cg-prev" id="cgPrev" hidden></div>
+    <div class="cg-cols" aria-hidden="true"><span>Users</span><span class="cg-num">Bet</span><span class="cg-xcell">Mult.</span><span class="cg-num">Return</span></div>
+    <div class="cg-list" id="cgList"></div>
+    <div class="cg-foot"><span id="cgCount">0/0 Bets</span><span><b id="cgTotal">0.00</b> Total win GHS</span></div>
+  </aside>
+</main>
+
+<p class="cg-note">RTP <span id="cgRtp"></span>.</p>
+
+<div class="sr-only" id="cgLive" aria-live="polite"></div>
+
+<dialog class="cg-dialog" id="cgRules" aria-labelledby="cgRulesTitle">
+  <h2 id="cgRulesTitle">How to play</h2>
+  <ol>
+    <li>While the bell is about to ring ("Waiting for Next Round"), set an amount on one or both panels and press <b>BET</b>. Press <b>CANCEL</b> to take a bet back before the round starts.</li>
+    <li><b>Classic:</b> when the fight starts the multiplier climbs from 1.00x. Press <b>CASH OUT</b> any time to win your bet × the multiplier. At the knockout, every bet not cashed out is lost. <b>Auto</b> can place your bet every round and cash out at a multiplier you choose.</li>
+    <li><b>ColorGo:</b> call the colour the round ends in — <b>Blue</b> (knockout below 2x), <b>Purple</b> (2x – 9.99x) or <b>Red</b> (10x or more). Pays: <span id="koPays"></span>. Red pays the moment the fight reaches 10x.</li>
+  </ol>
+  <p><b>Fairness:</b> the knockout point is drawn at random when the round starts; the chance of the fight lasting to any multiplier <i>m</i> is RTP ÷ <i>m</i>, so every Classic strategy returns <span id="cgRulesRtp"></span> on average. Each ColorGo colour pays the RTP divided by its chance, rounded down, so it returns at most the same. Playing for real money, our server runs your rounds: it fixes where each one ends before betting closes, tells no one until it's over, and judges a cash-out at the moment it arrives.</p>
+  <form method="dialog"><button class="btn btn-primary btn-block">Got it</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/knockout-art.js?v=33"></script>
+<script src="assets/js/knockout.js?v=33"></script>
+</body>
+</html>

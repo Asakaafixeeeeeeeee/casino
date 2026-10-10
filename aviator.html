@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#1b1c1d">
+<title>Aviator — RendoWin</title>
+<meta name="description" content="Aviator: one live round for everyone. Bet before take-off, watch the multiplier climb and cash out before the plane flies away.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/aviator.css?v=3">
+<link rel="icon" href="assets/img/plane.svg" type="image/svg+xml">
+<script src="assets/js/data.js?v=50"></script>
+<!-- the splash screen: the game's picture and a loading bar, shown before the page draws -->
+<script src="assets/js/splash.js?v=33"></script>
+</head>
+<body class="game-page sr-page" data-shell="game">
+
+<header class="sr-head">
+  <button class="sr-me" type="button" id="srMe" aria-label="Your player and the game settings" aria-controls="srMenu" aria-expanded="false">
+    <img id="srMeAva" alt="" width="34" height="34">
+  </button>
+  <a class="sr-logo" href="games.html?category=Live%20Casino" aria-label="Aviator — back to the live casino games">
+    <img src="assets/img/aviator-logo.svg" alt="Aviator" width="240" height="48">
+  </a>
+  <div class="sr-head-right">
+    <span class="sr-balance" aria-live="polite"><span class="sr-amt"><b id="srBalance">0.00</b> <span class="sr-cur">GHS</span></span></span>
+    <button class="sr-round-btn" type="button" id="srChat" aria-label="Live chat with support">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.5h15a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 3.5V17.5H4.5A1.5 1.5 0 0 1 3 16V7a1.5 1.5 0 0 1 1.5-1.5z"/></svg>
+    </button>
+    <button class="sr-round-btn" type="button" id="srMenuBtn" aria-label="Game menu" aria-controls="srMenu" aria-expanded="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </div>
+
+  <nav class="sr-menu" id="srMenu" aria-label="Game menu" hidden>
+    <div class="sr-menu-me">
+      <img id="srMenuAva" alt="" width="40" height="40">
+      <div><b id="srMenuName">Guest</b></div>
+    </div>
+    <div class="sr-menu-modes" id="srModes">
+      <span>Play with</span>
+      <div class="sr-seg">
+        <button type="button" data-mode="fun" aria-pressed="true">Credits</button>
+        <button type="button" data-mode="real" aria-pressed="false">Wallet</button>
+      </div>
+    </div>
+    <label class="sr-menu-row"><span><i data-icon="sound"></i>Sound</span><input type="checkbox" class="sr-toggle" id="srSound" checked></label>
+    <label class="sr-menu-row"><span><i data-icon="sparkle"></i>Animation</span><input type="checkbox" class="sr-toggle" id="srAnim" checked></label>
+    <button type="button" class="sr-menu-row" id="srTopUp"><span><i data-icon="plus"></i>Top up credits</span></button>
+    <a class="sr-menu-row" href="transactions.html"><span><i data-icon="receipt"></i>My bet history</span></a>
+    <button type="button" class="sr-menu-row" data-open="srLimits"><span><i data-icon="filters"></i>Game limits</span></button>
+    <button type="button" class="sr-menu-row" data-open="srHow"><span><i data-icon="help"></i>How to play</span></button>
+    <button type="button" class="sr-menu-row" data-open="srRules"><span><i data-icon="info"></i>Game rules</span></button>
+    <button type="button" class="sr-menu-row" data-open="srFair"><span><i data-icon="shield"></i>Provably fair</span></button>
+    <a class="sr-menu-row" href="wallet.html"><span><i data-icon="wallet"></i>Deposit</span></a>
+    <a class="sr-menu-row" href="games.html?category=Live%20Casino"><span><i data-icon="arrowLeft"></i>Back to the lobby</span></a>
+  </nav>
+</header>
+
+<main class="sr-layout">
+  <section class="sr-game" aria-label="Game">
+    <div class="sr-history-wrap">
+      <div class="sr-history" id="srHistory" aria-label="Recent rounds — tap one to check it"></div>
+      <button class="sr-history-more" type="button" id="srHistoryMore" aria-label="All recent rounds" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18" cy="12" r="1.8"/></svg>
+      </button>
+      <div class="sr-history-all" id="srHistoryAll" hidden>
+        <div class="sr-history-all-head"><span>Round history</span><button type="button" id="srHistoryClose" aria-label="Close">✕</button></div>
+        <div class="sr-history-grid" id="srHistoryGrid"></div>
+      </div>
+    </div>
+
+    <div class="sr-stage" id="srStage">
+      <canvas id="srCanvas" aria-hidden="true"></canvas>
+      <div class="sr-center" id="srCenter">
+        <div class="sr-flew" id="srFlew" hidden>FLEW AWAY!</div>
+        <div class="sr-mult" id="srMult" hidden>1.00x</div>
+      </div>
+      <div class="sr-wait" id="srWait">
+        <img class="sr-wait-prop" src="assets/img/plane.svg" alt="" width="88" height="88">
+        <strong class="sr-wait-title" id="srWaitTitle">WAITING FOR NEXT ROUND</strong>
+        <div class="sr-wait-bar"><i id="srWaitBar"></i></div>
+      </div>
+      <div class="sr-crowd" id="srCrowd" hidden>
+        <span class="sr-crowd-avas" id="srCrowdAvas"></span><b id="srCrowdCount">0</b>
+      </div>
+    </div>
+
+    <div class="sr-panels" id="srPanels"></div>
+  </section>
+
+  <aside class="sr-side" aria-label="Bets">
+    <div class="sr-tabs" role="tablist" aria-label="Bets">
+      <button type="button" role="tab" aria-selected="true" data-list="all">All Bets</button>
+      <button type="button" role="tab" aria-selected="false" data-list="previous">Previous</button>
+      <button type="button" role="tab" aria-selected="false" data-list="top">Top</button>
+    </div>
+
+    <div class="sr-sum" id="srSum">
+      <div class="sr-sum-row">
+        <div class="sr-sum-left"><span class="sr-sum-avas" id="srSumAvas"></span><span><b id="srSumCashed">0</b>/<span id="srSumCount">0</span> Bets</span></div>
+        <div class="sr-sum-right"><b id="srSumWin">0.00</b><span>Total win GHS</span></div>
+      </div>
+      <div class="sr-sum-bar"><i id="srSumBar"></i></div>
+    </div>
+
+    <div class="sr-prev" id="srPrev" hidden></div>
+
+    <div class="sr-top-tabs" id="srTopTabs" hidden>
+      <div class="sr-seg sr-seg-wide" role="tablist" aria-label="Leaderboard">
+        <button type="button" data-board="wins" aria-pressed="true">Huge wins</button>
+        <button type="button" data-board="multipliers" aria-pressed="false">Biggest wins</button>
+        <button type="button" data-board="rounds" aria-pressed="false">Multipliers</button>
+      </div>
+      <div class="sr-periods" role="tablist" aria-label="Period">
+        <button type="button" data-period="day" aria-pressed="true">Day</button>
+        <button type="button" data-period="month" aria-pressed="false">Month</button>
+        <button type="button" data-period="year" aria-pressed="false">Year</button>
+      </div>
+    </div>
+
+    <div class="sr-cols" id="srCols" aria-hidden="true"><span>Player</span><span class="sr-num">Bet GHS</span><span class="sr-xc">X</span><span class="sr-num">Win GHS</span></div>
+    <div class="sr-list" id="srList"></div>
+  </aside>
+</main>
+
+<div class="sr-foot-note">RTP 97% · <button type="button" class="sr-link" data-open="srFair">Provably fair</button> · <button type="button" class="sr-link" data-open="srRules">Rules</button></div>
+
+<div class="sr-only" id="srLive" aria-live="polite"></div>
+
+<dialog class="sr-dialog" id="srHow" aria-labelledby="srHowTitle">
+  <h2 id="srHowTitle">How to play</h2>
+  <ol class="sr-steps">
+    <li><b>Make a bet</b> — or two at once — before take-off. A bet made while the plane is flying waits for the next round.</li>
+    <li><b>Watch the plane</b> climb: the multiplier starts at 1.00x and keeps rising.</li>
+    <li><b>Cash out</b> before the plane flies away to win your bet × the multiplier. If it flies away first, the bet is lost.</li>
+  </ol>
+  <p><b>Auto:</b> on a panel's Auto tab you can bet every round, and cash out by itself at a multiplier you choose.</p>
+  <p><b>One round for everyone:</b> every player sees the same plane. The bets list shows real players' bets in this round; names are masked.</p>
+  <form method="dialog"><button class="sr-dialog-btn">Got it</button></form>
+</dialog>
+
+<dialog class="sr-dialog" id="srRules" aria-labelledby="srRulesTitle">
+  <h2 id="srRulesTitle">Game rules</h2>
+  <ul class="sr-rules">
+    <li>A round takes bets for 8 seconds after the last plane flew away. Then the plane takes off and the multiplier climbs: e<sup>0.09 × seconds</sup>, so 2x after about 8 seconds, 10x after about 26.</li>
+    <li>Each round's crash point is set before take-off and told to no one until the plane has flown away.</li>
+    <li>The chance the plane reaches any multiplier <i>m</i> is 97% ÷ <i>m</i>. About 4 rounds in 100 fly away at 1.00x. Whichever way you play, bets return 97% on average over many rounds (RTP 97%).</li>
+    <li>A cash-out pays your bet × the multiplier at the moment our server receives it, rounded down to the cent. An auto cash-out pays exactly its multiplier.</li>
+    <li>A bet can win at most <span data-max-win>GHS 250,000</span>: it cashes itself out when it gets there. The highest round is 10,000x.</li>
+    <li>If your connection drops, your bets still count: auto cash-outs still pay, and a bet nobody cashed out loses when the plane flies away.</li>
+    <li>Playing with free credits uses the same rounds and odds; credits are not money and can't be withdrawn.</li>
+  </ul>
+  <form method="dialog"><button class="sr-dialog-btn">Close</button></form>
+</dialog>
+
+<dialog class="sr-dialog" id="srLimits" aria-labelledby="srLimitsTitle">
+  <h2 id="srLimitsTitle">Game limits</h2>
+  <dl class="sr-limits">
+    <div><dt>Minimum bet</dt><dd>GHS 1.00</dd></div>
+    <div><dt>Maximum bet</dt><dd>GHS 1,000.00</dd></div>
+    <div><dt>Maximum win per bet</dt><dd data-max-win>GHS 250,000.00</dd></div>
+    <div><dt>Highest round</dt><dd>10,000x</dd></div>
+  </dl>
+  <form method="dialog"><button class="sr-dialog-btn">Close</button></form>
+</dialog>
+
+<dialog class="sr-dialog" id="srFair" aria-labelledby="srFairTitle">
+  <h2 id="srFairTitle">Provably fair</h2>
+  <p>Before each round takes off we publish a fingerprint (SHA-256 hash) of a secret seed. After the plane flies away we show the seed itself. The crash point comes from the seed, so you can check that it was fixed before the round and not changed after.</p>
+  <div class="sr-fair-now"><span>Next round's fingerprint</span><code id="srFairHash">…</code></div>
+  <p class="sr-fair-how">To check a round, tap its multiplier in the strip above the plane. Your browser works out the crash point from the seed: HMAC-SHA256 with the seed as key over “sky-rush:” and the round number; the first 13 hex digits, divided by 2<sup>52</sup>, give <i>u</i>; the crash point is ⌊97 ÷ (1 − <i>u</i>)⌋ ÷ 100, at least 1.00x.</p>
+  <form method="dialog"><button class="sr-dialog-btn">Close</button></form>
+</dialog>
+
+<dialog class="sr-dialog" id="srRound" aria-labelledby="srRoundTitle">
+  <h2 id="srRoundTitle">Round</h2>
+  <div class="sr-round-x" id="srRoundX"></div>
+  <dl class="sr-round-facts">
+    <div><dt>Seed fingerprint, published before take-off</dt><dd><code id="srRoundHash"></code></dd></div>
+    <div><dt>Seed, shown after the plane flew away</dt><dd><code id="srRoundSeed"></code></dd></div>
+  </dl>
+  <p class="sr-round-check" id="srRoundCheck">Checking…</p>
+  <form method="dialog"><button class="sr-dialog-btn">Close</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/aviator.js?v=2"></script>
+</body>
+</html>

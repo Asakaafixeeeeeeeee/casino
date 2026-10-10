@@ -1,0 +1,162 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" width="1080" height="1080">
+  <!-- Rendo Crash profile picture with name. Platforms crop avatars to a circle, so everything
+       sits inside the red ring. Export to PNG at 1080 x 1080. -->
+  <defs>
+    <radialGradient id="bg" cx="30%" cy="72%" r="85%">
+      <stop offset="0" stop-color="#3b0614"/>
+      <stop offset=".5" stop-color="#14070b"/>
+      <stop offset="1" stop-color="#060607"/>
+    </radialGradient>
+    <radialGradient id="corner" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#e91e63" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#e91e63" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff8fa6"/><stop offset=".35" stop-color="#ff1744"/>
+      <stop offset=".7" stop-color="#c2185b"/><stop offset="1" stop-color="#ff5a7a"/>
+    </linearGradient>
+    <linearGradient id="trail" x1="128" y1="0" x2="330" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e91e63" stop-opacity=".35"/><stop offset="1" stop-color="#ff1744"/>
+    </linearGradient>
+    <linearGradient id="prop" x1="0" y1="8" x2="0" y2="96" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d2d8e4" stop-opacity="0"/><stop offset=".5" stop-color="#d2d8e4" stop-opacity=".38"/>
+      <stop offset="1" stop-color="#d2d8e4" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="silver" x1="0" y1="0" x2="0" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c3c8d3"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="0" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff6a86"/><stop offset=".5" stop-color="#ff1744"/><stop offset="1" stop-color="#c2185b"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="10"/></filter>
+    <filter id="planeGlow" x="-30%" y="-40%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="0" stdDeviation="9" flood-color="#ff1744" flood-opacity=".55"/>
+    </filter>
+    <filter id="textGlow" x="-20%" y="-40%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="0" stdDeviation="1.1" flood-color="#ff1744" flood-opacity=".65"/>
+    </filter>
+    <clipPath id="disc"><circle cx="540" cy="540" r="488"/></clipPath>
+  </defs>
+
+  <rect width="1080" height="1080" fill="url(#bg)"/>
+
+  <g clip-path="url(#disc)">
+    <path transform="translate(202 567)" d="M0 0L1500 0L1487 196ZM0 0L1449 388L1386 574ZM0 0L1299 750L1190 913ZM0 0L1061 1061L913 1190ZM0 0L750 1299L574 1386ZM0 0L388 1449L196 1487ZM0 0L0 1500L-196 1487ZM0 0L-388 1449L-574 1386ZM0 0L-750 1299L-913 1190ZM0 0L-1061 1061L-1190 913ZM0 0L-1299 750L-1386 574ZM0 0L-1449 388L-1487 196ZM0 0L-1500 0L-1487 -196ZM0 0L-1449 -388L-1386 -574ZM0 0L-1299 -750L-1190 -913ZM0 0L-1061 -1061L-913 -1190ZM0 0L-750 -1299L-574 -1386ZM0 0L-388 -1449L-196 -1487ZM0 0L-0 -1500L196 -1487ZM0 0L388 -1449L574 -1386ZM0 0L750 -1299L913 -1190ZM0 0L1061 -1061L1190 -913ZM0 0L1299 -750L1386 -574ZM0 0L1449 -388L1487 -196Z" fill="#ff3d63" opacity=".075"/>
+    <circle cx="202" cy="567" r="560" fill="url(#corner)"/>
+  </g>
+  <g transform="translate(540 452) scale(0.82) translate(-540 -560)">
+    <!-- the take-off curve, glowing -->
+    <path d="M128 700C230 700 247.8 666.6 330 630" fill="none" stroke="#ff1744" stroke-width="34" stroke-linecap="round" opacity=".35" filter="url(#soft)"/>
+    <path d="M128 700C230 700 247.8 666.6 330 630" fill="none" stroke="url(#trail)" stroke-width="15" stroke-linecap="round"/>
+    <!-- the game's plane -->
+    <g transform="translate(330 630) rotate(-24) scale(2.45) translate(-14 -47.5)" filter="url(#planeGlow)">
+  
+  <defs>
+    <linearGradient id="pl-body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff7b8a"/>
+      <stop offset=".3" stop-color="#ff2350"/>
+      <stop offset=".7" stop-color="#d4002d"/>
+      <stop offset="1" stop-color="#7a0018"/>
+    </linearGradient>
+    <linearGradient id="pl-wing" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ef1440"/>
+      <stop offset="1" stop-color="#860019"/>
+    </linearGradient>
+    <linearGradient id="pl-fin" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff5d70"/>
+      <stop offset="1" stop-color="#b30027"/>
+    </linearGradient>
+    <linearGradient id="pl-glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e6f4ff"/>
+      <stop offset=".45" stop-color="#7cb2df"/>
+      <stop offset="1" stop-color="#15233f"/>
+    </linearGradient>
+    <linearGradient id="pl-cowl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5b5f68"/>
+      <stop offset=".4" stop-color="#2a2c32"/>
+      <stop offset="1" stop-color="#0e0f12"/>
+    </linearGradient>
+    <linearGradient id="pl-spinner" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".45" stop-color="#cfd4dc"/>
+      <stop offset="1" stop-color="#596070"/>
+    </linearGradient>
+    <linearGradient id="pl-stripe" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#d9dde4"/>
+    </linearGradient>
+  </defs>
+
+  
+  <path d="M50 42 L30 14 Q27 10 22 10 L11 10 Q7 10 7 14 L10 46 Z" fill="url(#pl-fin)" stroke="#6d0016" stroke-width=".8"/>
+  <path d="M17.5 11 L18.5 45" stroke="#7a0018" stroke-width=".8" opacity=".6"/>
+  <circle cx="26" cy="29" r="6.2" fill="#fff"/>
+  <path d="M22.6 26 L26 33 L29.4 26" fill="none" stroke="#d50032" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  
+  <path d="M60 54 L23 62.5 Q15 64.5 18.5 67.5 L31 67.5 L66 58.5 Z" fill="url(#pl-wing)" stroke="#5e0012" stroke-width=".7"/>
+
+  
+  <path d="M14 45 C50 41 90 37 118 36 L176 35 C192 35 203 39 208 45 L208 59 C203 64 192 67 176 67
+           C140 67 100 64 66 59 C42 55 24 52 16 50.6 Q11.5 49.6 11.8 47.6 Q12.2 45.4 14 45 Z" fill="url(#pl-body)" stroke="#6d0016" stroke-width=".9"/>
+
+  
+  <path d="M24 48.6 C60 46.8 110 45 176 45 L205 45.8 L205 49.8 L176 50 C110 50.2 60 51.8 24 52.2 Z" fill="url(#pl-stripe)"/>
+  <path d="M24 52.2 C60 51.8 110 50.2 176 50 L205 49.8" fill="none" stroke="#8a001b" stroke-width=".7" opacity=".7"/>
+
+  
+  <g stroke="#5a0012" stroke-width=".7" opacity=".45" fill="none">
+    <path d="M80 39.6 L79 61"/>
+    <path d="M118 36.4 L116.5 64.5"/>
+    <path d="M150 35.3 L149.5 66.6"/>
+  </g>
+
+  
+  <path d="M120 36 C126 22 146 17 162 22 C170 25 175 30 177 35 Z" fill="url(#pl-glass)"/>
+  <circle cx="147" cy="28.5" r="5.4" fill="#0f1420" opacity=".55"/>
+  <path d="M140.5 33 Q147 30.5 153.5 33" fill="none" stroke="#0f1420" stroke-width="2.4" opacity=".4"/>
+  <path d="M120 36 C126 22 146 17 162 22 C170 25 175 30 177 35 Z" fill="none" stroke="#2a0a12" stroke-width="1.1"/>
+  <path d="M140.5 19.2 L143.5 35.8 M159 20.8 L163 35.2" stroke="#2a0a12" stroke-width="1.1"/>
+  <path d="M126.5 31.5 C131 24.5 140 21.2 149 20.8" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" opacity=".75"/>
+
+  
+  <path d="M182 35.5 C194 36 203 39.5 208 45 L208 59 C203 64 194 66.5 182 66.8 C185.5 56 185.5 46 182 35.5 Z" fill="url(#pl-cowl)"/>
+  <path d="M184 37.5 C194 38.5 201 41.5 205 45.5" fill="none" stroke="#9aa0ab" stroke-width="1" opacity=".55" stroke-linecap="round"/>
+  <g fill="#242529" stroke="#0b0b0d" stroke-width=".5">
+    <rect x="170" y="53.2" width="7" height="3.2" rx="1.6"/>
+    <rect x="161" y="53.6" width="7" height="3.2" rx="1.6"/>
+    <rect x="152" y="54" width="7" height="3.2" rx="1.6"/>
+  </g>
+
+  
+  <path d="M30 44.6 C70 41.2 110 38.6 176 37.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".38"/>
+
+  
+  <path d="M162 61.5 L106 60.5 L82.5 86 Q79.5 91 86 91 L110 91 L172 65.5 Z" fill="url(#pl-wing)" stroke="#5e0012" stroke-width=".8"/>
+  <path d="M170 66 L110.5 90" stroke="#fff" stroke-width="1.3" stroke-linecap="round" opacity=".4"/>
+  <path d="M104 73 L91 86.5" stroke="#5a0012" stroke-width=".7" opacity=".55"/>
+
+  
+  <path d="M208 44.5 C220 46 228 49.5 233 52 C228 54.5 220 58 208 59.5 Z" fill="url(#pl-spinner)" stroke="#3d424c" stroke-width=".8"/>
+
+    <ellipse cx="208.5" cy="52" rx="3.4" ry="44" fill="url(#prop)"/>
+    <path d="M208.5 44.5V12 M208.5 59.5V88" stroke="#1e2026" stroke-opacity=".8" stroke-width="3.4" stroke-linecap="round"/>
+    </g>
+    <path d="M236 300Q236 330 266 330Q236 330 236 360Q236 330 206 330Q236 330 236 300Z" fill="#ffd1da" opacity="0.9"/><path d="M760 228Q760 250 782 250Q760 250 760 272Q760 250 738 250Q760 250 760 228Z" fill="#ff8fa6" opacity="0.85"/><path d="M842 706Q842 742 878 742Q842 742 842 778Q842 742 806 742Q842 742 842 706Z" fill="#ffd1da" opacity="0.9"/>
+    <path d="M196 498Q196 512 210 512Q196 512 196 526Q196 512 182 512Q196 512 196 498Z" fill="#ffffff" opacity="0.7"/><path d="M612 800Q612 812 624 812Q612 812 612 824Q612 812 600 812Q612 812 612 800Z" fill="#ffffff" opacity="0.6"/>
+  </g>
+  <!-- the name, from the Rendo Crash logo -->
+  <g transform="translate(241 770) scale(3.6)">
+    <g transform="translate(5 2) skewX(-12)" stroke-width="5" stroke-linejoin="miter" stroke-miterlimit="2" fill="none">
+      <g transform="translate(1.2 1.5)" stroke="#4a0012">
+        <path d="M2.5 0V20 M2.5 2.5H9.5Q11.5 2.5 11.5 4.5V9Q11.5 11 9.5 11H2.5 M19.6 0V20 M19.6 2.5H29.1 M19.6 10H27.6 M19.6 17.5H29.1 M34.1 0V20 M43.1 0V20 M50.6 0V20 M50.6 2.5H55.6Q59.6 2.5 59.6 6.5V13.5Q59.6 17.5 55.6 17.5H50.6 M69.1 2.5H74.1Q76.1 2.5 76.1 4.5V15.5Q76.1 17.5 74.1 17.5H69.1Q67.1 17.5 67.1 15.5V4.5Q67.1 2.5 69.1 2.5Z"/><path transform="translate(5.1 0)" d="M93.5 2.5H85Q83 2.5 83 4.5V15.5Q83 17.5 85 17.5H93.5 M98.5 20V2.5H105.5Q107.5 2.5 107.5 4.5V9Q107.5 11 105.5 11H98.5 M103 11L107.5 15.5V20 M115 20V6Q115 2.5 118.5 2.5H120.5Q124 2.5 124 6V20 M115 12H124 M142 2.5H133.5Q131.5 2.5 131.5 4.5V8Q131.5 10 133.5 10H137.5Q139.5 10 139.5 12V15.5Q139.5 17.5 137.5 17.5H129 M147 0V20 M156 0V20 M147 10H156"/><path d="M5.2 11H10.4L14.6 20H9.4Z M31.6 0H36.8L45.6 20H40.4Z" fill="#4a0012" stroke="none"/>
+      </g>
+      <path d="M2.5 0V20 M2.5 2.5H9.5Q11.5 2.5 11.5 4.5V9Q11.5 11 9.5 11H2.5 M19.6 0V20 M19.6 2.5H29.1 M19.6 10H27.6 M19.6 17.5H29.1 M34.1 0V20 M43.1 0V20 M50.6 0V20 M50.6 2.5H55.6Q59.6 2.5 59.6 6.5V13.5Q59.6 17.5 55.6 17.5H50.6 M69.1 2.5H74.1Q76.1 2.5 76.1 4.5V15.5Q76.1 17.5 74.1 17.5H69.1Q67.1 17.5 67.1 15.5V4.5Q67.1 2.5 69.1 2.5Z" stroke="url(#silver)"/><path d="M5.2 11H10.4L14.6 20H9.4Z M31.6 0H36.8L45.6 20H40.4Z" fill="url(#silver)" stroke="none"/>
+      <path transform="translate(5.1 0)" d="M93.5 2.5H85Q83 2.5 83 4.5V15.5Q83 17.5 85 17.5H93.5 M98.5 20V2.5H105.5Q107.5 2.5 107.5 4.5V9Q107.5 11 105.5 11H98.5 M103 11L107.5 15.5V20 M115 20V6Q115 2.5 118.5 2.5H120.5Q124 2.5 124 6V20 M115 12H124 M142 2.5H133.5Q131.5 2.5 131.5 4.5V8Q131.5 10 133.5 10H137.5Q139.5 10 139.5 12V15.5Q139.5 17.5 137.5 17.5H129 M147 0V20 M156 0V20 M147 10H156" stroke="url(#red)" filter="url(#textGlow)"/>
+    </g>
+  </g>
+
+  <!-- red frame, inside the circular crop -->
+  <circle cx="540" cy="540" r="490" fill="none" stroke="url(#ring)" stroke-width="16"/>
+  <circle cx="540" cy="540" r="464" fill="none" stroke="#ff1744" stroke-opacity=".3" stroke-width="3"/>
+</svg>

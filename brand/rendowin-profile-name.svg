@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" width="1080" height="1080">
+  <!-- RendoWin profile picture with name. Platforms crop avatars to a circle, so everything
+       sits inside the gold ring. Export to PNG at 1080 x 1080. -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="47%" r="68%">
+      <stop offset="0" stop-color="#3d2900"/>
+      <stop offset=".45" stop-color="#161008"/>
+      <stop offset="1" stop-color="#070708"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ffcc00" stop-opacity=".42"/>
+      <stop offset="1" stop-color="#ffcc00" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe55c"/><stop offset=".5" stop-color="#ffcc00"/><stop offset="1" stop-color="#ff9500"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff2a8"/><stop offset=".35" stop-color="#ffcc00"/>
+      <stop offset=".7" stop-color="#ff9500"/><stop offset="1" stop-color="#ffd84d"/>
+    </linearGradient>
+    <linearGradient id="silver" x1="0" y1="0" x2="0" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c3c8d3"/>
+    </linearGradient>
+    <linearGradient id="goldText" x1="0" y1="0" x2="0" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffe866"/><stop offset=".55" stop-color="#ffcc00"/><stop offset="1" stop-color="#ff9a00"/>
+    </linearGradient>
+    <filter id="lift" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3.4" flood-color="#000" flood-opacity=".65"/>
+    </filter>
+    <filter id="textGlow" x="-20%" y="-40%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="0" stdDeviation="1.2" flood-color="#ffb300" flood-opacity=".6"/>
+    </filter>
+    <clipPath id="disc"><circle cx="540" cy="540" r="488"/></clipPath>
+  </defs>
+
+  <rect width="1080" height="1080" fill="url(#bg)"/>
+  <g clip-path="url(#disc)">
+    <path transform="translate(540 452)" d="M0 0L0.0 -820.0L107.0 -813.0ZM0 0L212.2 -792.1L313.8 -757.6ZM0 0L410.0 -710.1L499.2 -650.5ZM0 0L579.8 -579.8L650.5 -499.2ZM0 0L710.1 -410.0L757.6 -313.8ZM0 0L792.1 -212.2L813.0 -107.0ZM0 0L820.0 0.0L813.0 107.0ZM0 0L792.1 212.2L757.6 313.8ZM0 0L710.1 410.0L650.5 499.2ZM0 0L579.8 579.8L499.2 650.5ZM0 0L410.0 710.1L313.8 757.6ZM0 0L212.2 792.1L107.0 813.0ZM0 0L0.0 820.0L-107.0 813.0ZM0 0L-212.2 792.1L-313.8 757.6ZM0 0L-410.0 710.1L-499.2 650.5ZM0 0L-579.8 579.8L-650.5 499.2ZM0 0L-710.1 410.0L-757.6 313.8ZM0 0L-792.1 212.2L-813.0 107.0ZM0 0L-820.0 0.0L-813.0 -107.0ZM0 0L-792.1 -212.2L-757.6 -313.8ZM0 0L-710.1 -410.0L-650.5 -499.2ZM0 0L-579.8 -579.8L-499.2 -650.5ZM0 0L-410.0 -710.1L-313.8 -757.6ZM0 0L-212.2 -792.1L-107.0 -813.0Z" fill="#ffcc00" opacity=".075"/>
+  </g>
+  <circle cx="540" cy="442" r="360" fill="url(#halo)"/>
+
+  <!-- gold frame, inside the circular crop -->
+  <circle cx="540" cy="540" r="490" fill="none" stroke="url(#ring)" stroke-width="16"/>
+  <circle cx="540" cy="540" r="464" fill="none" stroke="#ffcc00" stroke-opacity=".32" stroke-width="3"/>
+
+  <!-- the R emblem with a thick 3D edge -->
+  <g transform="translate(540 452) scale(6.2) translate(-32 -33)" filter="url(#lift)">
+    <rect x="2" y="5.5" width="60" height="60" rx="14" fill="#9c5200"/>
+    <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#gold)" stroke="#d98300" stroke-width=".8"/>
+    <path d="M6 9Q32 3 58 9V22Q32 15 6 22Z" fill="#fff" opacity=".14"/>
+    <g transform="translate(32 32) skewX(-12) translate(-32 -32)" fill="#151515">
+      <path d="M21.5 13V51 M21.5 17.2H35Q42 17.2 42 24.2V26.3Q42 33.3 35 33.3H21.5" fill="none" stroke="#151515"
+            stroke-width="8.4" stroke-linejoin="miter" stroke-miterlimit="2"/>
+      <path d="M26.4 33.3H35.2L45.5 51H36.7Z"/>
+    </g>
+  </g>
+
+  <!-- the name, from the site wordmark -->
+  <g transform="translate(246.5 742) scale(4.35)">
+    <g transform="translate(5 2) skewX(-12)" stroke-width="5" stroke-linejoin="miter" stroke-miterlimit="2" fill="none">
+      <g transform="translate(1.1 1.4)">
+        <path d="M2.5 0V20 M2.5 2.5H9.5Q11.5 2.5 11.5 4.5V9Q11.5 11 9.5 11H2.5 M19.6 0V20 M19.6 2.5H29.1 M19.6 10H27.6 M19.6 17.5H29.1 M34.1 0V20 M43.1 0V20 M50.6 0V20 M50.6 2.5H55.6Q59.6 2.5 59.6 6.5V13.5Q59.6 17.5 55.6 17.5H50.6 M69.1 2.5H74.1Q76.1 2.5 76.1 4.5V15.5Q76.1 17.5 74.1 17.5H69.1Q67.1 17.5 67.1 15.5V4.5Q67.1 2.5 69.1 2.5Z" stroke="#2b2e36"/><path d="M5.2 11H10.4L14.6 20H9.4Z M31.6 0H36.8L45.6 20H40.4Z" fill="#2b2e36" stroke="none"/>
+        <path d="M108.5 0V20 M116 0V20 M125 0V20" stroke="#5c3a00"/><path d="M81.1 0H86.1L88.1 11L90.1 0H95.1L90.5 20H85.7Z M89.5 0H94.5L96.5 11L98.5 0H103.5L98.9 20H94.1Z M113.5 0H118.7L127.5 20H122.3Z" fill="#5c3a00" stroke="none"/>
+      </g>
+      <path d="M2.5 0V20 M2.5 2.5H9.5Q11.5 2.5 11.5 4.5V9Q11.5 11 9.5 11H2.5 M19.6 0V20 M19.6 2.5H29.1 M19.6 10H27.6 M19.6 17.5H29.1 M34.1 0V20 M43.1 0V20 M50.6 0V20 M50.6 2.5H55.6Q59.6 2.5 59.6 6.5V13.5Q59.6 17.5 55.6 17.5H50.6 M69.1 2.5H74.1Q76.1 2.5 76.1 4.5V15.5Q76.1 17.5 74.1 17.5H69.1Q67.1 17.5 67.1 15.5V4.5Q67.1 2.5 69.1 2.5Z" stroke="url(#silver)"/><path d="M5.2 11H10.4L14.6 20H9.4Z M31.6 0H36.8L45.6 20H40.4Z" fill="url(#silver)" stroke="none"/>
+      <g filter="url(#textGlow)">
+        <path d="M108.5 0V20 M116 0V20 M125 0V20" stroke="url(#goldText)"/><path d="M81.1 0H86.1L88.1 11L90.1 0H95.1L90.5 20H85.7Z M89.5 0H94.5L96.5 11L98.5 0H103.5L98.9 20H94.1Z M113.5 0H118.7L127.5 20H122.3Z" fill="url(#goldText)" stroke="none"/>
+      </g>
+    </g>
+  </g>
+  <path d="M250 240Q250 270 280 270Q250 270 250 300Q250 270 220 270Q250 270 250 240Z" fill="#fff3b0" opacity="0.9"/><path d="M836 268Q836 290 858 290Q836 290 836 312Q836 290 814 290Q836 290 836 268Z" fill="#ffd84d" opacity="0.85"/><path d="M846 560Q846 590 876 590Q846 590 846 620Q846 590 816 590Q846 590 846 560Z" fill="#fff3b0" opacity="0.85"/><path d="M222 582Q222 600 240 600Q222 600 222 618Q222 600 204 600Q222 600 222 582Z" fill="#ffd84d" opacity="0.8"/>
+</svg>

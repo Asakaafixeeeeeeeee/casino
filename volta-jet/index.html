@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050d1c">
+  <title>Jet · RendoWin</title>
+  <meta name="description" content="Jet: a crash game with free credits or real money. Cash out before the jet flies away.">
+  <link rel="icon" href="jet.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=25">
+</head>
+<body>
+  <header class="top">
+    <a class="back" id="back" href="../games.html" hidden aria-label="Back to the lobby">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+    </a>
+    <div class="brand">
+      <img class="brand-icon" src="jet.svg" alt="" aria-hidden="true">
+      <span class="brand-mark">Rendo</span><span class="brand-jet">Jet</span>
+    </div>
+    <span class="play-tag" id="playTag">Free credits</span>
+    <div class="balance" aria-live="polite">
+      <span class="balance-label">Balance</span>
+      <span class="balance-val"><span id="balance">3000.00</span> <span class="cur">GHS</span></span>
+    </div>
+    <button class="icon-btn" id="sound" type="button" aria-pressed="true" aria-label="Sound on">
+      <svg class="ic-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" /><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" /></svg>
+      <svg class="ic-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" /><path d="M17 9.5l5 5M22 9.5l-5 5" /></svg>
+    </button>
+  </header>
+
+  <div class="layout">
+    <div class="play">
+      <div class="history-wrap">
+        <div class="history" id="history" aria-label="Last crash points">
+          <span class="history-empty" id="historyEmpty">Crash points will show here</span>
+        </div>
+      </div>
+
+      <main class="stage" id="stage">
+        <canvas id="sky" aria-hidden="true"></canvas>
+        <div class="readout" id="readout" role="status" aria-live="polite">
+          <div class="mult" id="mult">1.00x</div>
+        </div>
+        <div class="waiting" id="waiting">
+          <div class="last" id="last"></div>
+          <img class="parked" src="jet.svg" alt="" aria-hidden="true">
+          <div class="wait-text">Place your bet</div>
+          <div class="bar"><span id="bar"></span></div>
+        </div>
+        <div class="toast" id="toast" role="alert"></div>
+      </main>
+
+      <div class="panels">
+        <section class="panel" aria-label="Bet 1">
+          <div class="stake-box">
+            <div class="stake-row">
+              <button class="step minus" id="minus" type="button" aria-label="Lower stake 1">−</button>
+              <label class="stake">
+                <span class="sr-only">Stake 1 in cedis</span>
+                <input class="stake-input" id="stake" type="number" inputmode="decimal" min="0.01" step="0.01" value="10.00" autocomplete="off">
+              </label>
+              <button class="step plus" id="plus" type="button" aria-label="Raise stake 1">+</button>
+            </div>
+            <div class="chips" id="chips">
+              <button type="button" data-v="1">1</button>
+              <button type="button" data-v="2">2</button>
+              <button type="button" data-v="5">5</button>
+              <button type="button" data-v="10">10</button>
+              <button type="button" data-v="50">50</button>
+              <button type="button" data-v="100">100</button>
+            </div>
+          </div>
+          <button class="main-btn bet" id="action" type="button">
+            <span class="btn-title" id="actionTitle">Bet</span>
+            <span class="btn-sub" id="actionSub">10.00 GHS</span>
+          </button>
+        </section>
+        <section class="panel" aria-label="Bet 2">
+          <div class="stake-box">
+            <div class="stake-row">
+              <button class="step minus" id="minus2" type="button" aria-label="Lower stake 2">−</button>
+              <label class="stake">
+                <span class="sr-only">Stake 2 in cedis</span>
+                <input class="stake-input" id="stake2" type="number" inputmode="decimal" min="0.01" step="0.01" value="5.00" autocomplete="off">
+              </label>
+              <button class="step plus" id="plus2" type="button" aria-label="Raise stake 2">+</button>
+            </div>
+            <div class="chips" id="chips2">
+              <button type="button" data-v="1">1</button>
+              <button type="button" data-v="2">2</button>
+              <button type="button" data-v="5">5</button>
+              <button type="button" data-v="10">10</button>
+              <button type="button" data-v="50">50</button>
+              <button type="button" data-v="100">100</button>
+            </div>
+          </div>
+          <button class="main-btn bet" id="action2" type="button">
+            <span class="btn-title" id="actionTitle2">Bet</span>
+            <span class="btn-sub" id="actionSub2">5.00 GHS</span>
+          </button>
+        </section>
+      </div>
+    </div>
+
+    <aside class="side">
+      <section class="card mybets" aria-labelledby="myBetsTitle">
+        <div class="card-head">
+          <h2 id="myBetsTitle">My bets</h2>
+          <span class="card-note" id="myBetsNote">This session</span>
+        </div>
+        <div class="bets-head" aria-hidden="true"><span>Stake</span><span>Cash out</span><span>Win</span></div>
+        <ol class="bets" id="bets">
+          <li class="bets-empty" id="betsEmpty">No bets yet. Place one while the game says <b>Place your bet</b>.</li>
+        </ol>
+      </section>
+
+      <details class="card rules">
+        <summary>How to play &amp; the odds</summary>
+        <p>Place a stake while the game says <b>Place your bet</b> (8 seconds between rounds). When the jet takes off the
+          multiplier climbs from 1.00x by 0.001 every 1/60 of a second (0.06x a second). Press <b>Cash Out</b> before it
+          flies away to win stake × the multiplier at that moment. If it flies away first, the stake is lost.</p>
+        <p><b>Odds.</b> The crash point is set before each round and isn't shown until the jet flies away. The chance the
+          jet gets past x is 98% ÷ x, so about 3 rounds in 100 end at take-off and every way of cashing out returns at
+          most 98% of stakes on average. The jet never goes past <b>10.70x</b>: a bet still flying when it gets there is
+          paid 10.70x.</p>
+        <p>With <b>free credits</b> (GHS 3,000 each session) your browser draws each round. With <b>real money</b> (sign
+          in and open Jet from the lobby) our server draws it with the same odds, takes your bets from your wallet and
+          judges each cash-out the moment it arrives.</p>
+      </details>
+    </aside>
+  </div>
+
+  <script src="script.js?v=27"></script>
+</body>
+</html>

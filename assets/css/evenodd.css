@@ -1,0 +1,140 @@
+/* Even-Odd — a deep-blue table: three ivory dice (CSS 3D cubes with recessed pips) on blue baize, the PAYS 2X line,
+   the kit's bet controls and result card, and green EVEN / orange ODD buttons (then yellow Rebet / green New Round).
+   Also sets the shared mini-game colours (minigame.css). */
+.evenodd-page {
+  --mg-accent: #ef4444;   /* the slider fill and its red thumb */
+  --mg-line: rgba(147, 197, 253, .18);
+  --mg-line-strong: rgba(147, 197, 253, .4);
+  --mg-bar: rgba(6, 18, 56, .95);
+  --mg-raised: #0f2470;
+  --mg-hover: #1a3490;
+  --mg-panel: rgba(6, 16, 52, .7);
+  --mg-well: #050d2e;
+  --mg-cover: rgba(6, 16, 52, .94);
+  --mg-dock: linear-gradient(to top, rgba(4, 12, 40, .98), rgba(4, 12, 40, .86));
+  --mg-note: rgba(191, 219, 254, .55);
+  background: radial-gradient(110% 70% at 50% 20%, #1d4ed8, #0a1f5c 55%, #050f33);
+  background-color: #0a1f5c;
+}
+
+/* header: back, wallet pill, title, chat, menu */
+.eo-wallet {
+  position: relative; display: grid; justify-items: start; line-height: 1.1; padding: 4px 12px; border-radius: 999px;
+  background: rgba(0, 0, 0, .35); border: 1px solid rgba(147, 197, 253, .3);
+}
+.eo-wallet .mg-balance { font-size: .7rem; white-space: nowrap; }
+.eo-wallet .mg-balance b { font-size: .95rem; }
+.eo-wallet .mg-bal-label { font-size: .5rem; }
+.eo-title { text-align: center; }
+.eo-net {
+  position: absolute; left: 50%; top: calc(100% + 4px); padding: 2px 10px; border-radius: 999px; pointer-events: none;
+  font: 900 .85rem var(--ff); white-space: nowrap; background: rgba(0, 0, 0, .8); opacity: 0; transform: translateX(-50%);
+}
+.eo-net.up { color: #4ade80; border: 1px solid rgba(74, 222, 128, .5); }
+.eo-net.down { color: #fca5a5; border: 1px solid rgba(252, 165, 165, .4); }
+.eo-net.show { animation: eo-net 2s ease-out both; }
+@keyframes eo-net { 0% { opacity: 0; transform: translate(-50%, 8px); } 15% { opacity: 1; transform: translate(-50%, 0); } 75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -8px); } }
+@media (max-width: 370px) { .eo-wallet .mg-bal-label { display: none; } }
+
+/* ---------- the dice tray ---------- */
+.eo-stage {
+  position: relative; display: grid; justify-items: center; gap: 10px; padding: 22px 12px 18px; border-radius: 22px; overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 35%, rgba(96, 165, 250, .35), transparent 65%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, .025) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #123a9c, #0a2366);
+  border: 2px solid #061644;
+  box-shadow: inset 0 8px 24px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(147, 197, 253, .15), 0 14px 30px rgba(0, 0, 0, .45);
+}
+.eo-dice { display: flex; justify-content: center; gap: clamp(18px, 7vw, 34px); padding: 18px 0 8px; perspective: 700px; }
+.eo-die-wrap { --s: clamp(62px, 19vw, 84px); position: relative; width: var(--s); height: var(--s); }
+.eo-die { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; will-change: transform; }
+.eo-shadow {
+  position: absolute; left: 6%; right: 6%; bottom: -22%; height: 24%; border-radius: 50%; z-index: -1;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, .55), transparent 70%);
+}
+
+/* each face: ivory, softly shaded toward its edges, with a polished bevel */
+.eo-face {
+  position: absolute; inset: 0; display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 14%;
+  border-radius: 16%; backface-visibility: hidden;
+  background: radial-gradient(circle at 35% 30%, #ffffff, #f4f1ea 55%, #ddd7cb);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .7), inset 0 -3px 6px rgba(120, 110, 90, .25), inset 0 2px 3px rgba(255, 255, 255, .9);
+}
+.eo-face i { place-self: center; width: 70%; height: 70%; border-radius: 50%; }
+/* a pip is drilled and painted: dark in the middle, lit on the lower lip */
+.eo-face i.on {
+  background: radial-gradient(circle at 45% 40%, #2a2a2a, #050505 70%);
+  box-shadow: inset 0 2px 2px rgba(0, 0, 0, .8), 0 1px 0 rgba(255, 255, 255, .8);
+}
+.eo-f1 i.on { width: 88%; height: 88%; background: radial-gradient(circle at 45% 40%, #e5323b, #8e0c14 70%); }
+.eo-f1 { transform: translateZ(calc(var(--s) / 2)); }
+.eo-f6 { transform: rotateY(180deg) translateZ(calc(var(--s) / 2)); }
+.eo-f3 { transform: rotateY(90deg) translateZ(calc(var(--s) / 2)); }
+.eo-f4 { transform: rotateY(-90deg) translateZ(calc(var(--s) / 2)); }
+.eo-f2 { transform: rotateX(90deg) translateZ(calc(var(--s) / 2)); }
+.eo-f5 { transform: rotateX(-90deg) translateZ(calc(var(--s) / 2)); }
+/* inner planes so the rounded corners don't show through */
+.eo-core { position: absolute; inset: 2%; background: #e6e0d4; border-radius: 6%; }
+.eo-cx { transform: rotateX(90deg); }
+.eo-cy { transform: rotateY(90deg); }
+.eo-cz { transform: none; }
+/* idle: the house mark on the front face */
+.eo-mark { display: none; }
+.eo-die.is-idle .eo-f1 i { visibility: hidden; }
+.eo-die.is-idle .eo-mark {
+  position: absolute; inset: 0; display: grid; place-items: center; font: 900 calc(var(--s) * .52)/1 Georgia, serif;
+  background: linear-gradient(180deg, #1d4ed8, #0b2a8a); -webkit-background-clip: text; background-clip: text; color: transparent;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .6);
+}
+.eo-die-wrap.is-triple .eo-face { box-shadow: inset 0 0 0 3px #ef4444, inset 0 -3px 6px rgba(120, 110, 90, .25); }
+
+.eo-total {
+  padding: 5px 16px; border-radius: 999px; font: 900 .95rem var(--ff); color: #fff; letter-spacing: .04em;
+  background: rgba(0, 0, 0, .45); border: 1px solid rgba(255, 255, 255, .35); animation: mg-pop .3s ease;
+}
+.eo-total.is-triple { background: rgba(185, 28, 28, .8); border-color: #fca5a5; }
+.eo-pays { display: grid; justify-items: center; line-height: 1.2; }
+.eo-pays b { font-size: 1.35rem; font-weight: 900; color: #fff; letter-spacing: .06em; text-shadow: 0 2px 10px rgba(0, 0, 0, .4); }
+.eo-pays span { font-size: .72rem; font-weight: 700; letter-spacing: .08em; color: rgba(191, 219, 254, .7); }
+
+/* the red slider thumb */
+.evenodd-page .mg-slider::-webkit-slider-thumb { background: #ef4444; border-color: #fff; }
+.evenodd-page .mg-slider::-moz-range-thumb { background: #ef4444; border-color: #fff; }
+
+/* result card */
+.eo-result.is-win { background: linear-gradient(180deg, rgba(21, 128, 61, .96), rgba(6, 78, 59, .96)); }
+.eo-b-even { background: linear-gradient(180deg, #22c55e, #15803d); color: #fff; }
+.eo-b-odd { background: linear-gradient(180deg, #fb923c, #ea580c); color: #fff; }
+.eo-b-triple { background: linear-gradient(180deg, #ef4444, #991b1b); color: #fff; }
+
+/* ---------- layout: one column that fills the screen — the tray takes the spare height, the EVEN / ODD buttons sit
+   right under the bet controls instead of floating at the bottom ---------- */
+body.evenodd-page { padding-bottom: calc(12px + var(--safe-bottom)); }
+.eo-main {
+  display: flex; flex-direction: column; gap: 12px;
+  min-height: calc(100vh - 66px - var(--safe-bottom)); min-height: calc(100dvh - 66px - var(--safe-bottom));
+}
+.eo-stage { flex: 1 1 auto; align-content: center; min-height: 250px; }
+.eo-actions {
+  position: static; transform: none; width: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  padding: 0; background: none; border: 0; border-radius: 0;
+}
+.eo-actions .mg-act { min-height: 72px; border-radius: 18px; }
+.eo-actions .mg-act b { font-size: 1.45rem; letter-spacing: .08em; }
+/* a die-face hint on each call: even pips / odd pips */
+.eo-even b::before, .eo-odd b::before {
+  content: ""; display: inline-block; width: 18px; height: 18px; margin-right: 8px; vertical-align: -2px; border-radius: 4px;
+  background-color: rgba(255, 255, 255, .92);
+  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, .2);
+}
+.eo-even b::before { background-image: radial-gradient(circle, #14532d 2.4px, transparent 2.8px), radial-gradient(circle, #14532d 2.4px, transparent 2.8px); background-size: 100% 100%; background-position: -4px -4px, 4px 4px; background-repeat: no-repeat; }
+.eo-odd b::before { background-image: radial-gradient(circle, #7c2d12 2.4px, transparent 2.8px), radial-gradient(circle, #7c2d12 2.4px, transparent 2.8px), radial-gradient(circle, #7c2d12 2.4px, transparent 2.8px); background-size: 100% 100%; background-position: -4px -4px, 0 0, 4px 4px; background-repeat: no-repeat; }
+.eo-actions .mg-note { grid-column: 1 / -1; }
+@media (min-width: 560px) { .eo-actions { left: auto; width: auto; transform: none; border: 0; border-radius: 0; } }
+
+/* buttons */
+.eo-even { background: linear-gradient(180deg, #22c55e, #15803d); }
+.eo-odd { background: linear-gradient(180deg, #fb923c, #ea580c); }
+.eo-rebet { background: linear-gradient(180deg, #facc15, #ca8a04); color: #3a2a00; }
+.eo-new { background: linear-gradient(180deg, #22c55e, #15803d); }

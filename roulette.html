@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#2b1b4d">
+<title>Roulette — RendoWin</title>
+<meta name="description" content="Mini roulette with 13 pockets (0–12): place chips on the felt, spin the wooden wheel, and win on numbers, columns, colours and more. Play with real credits.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/minigame.css">
+<link rel="stylesheet" href="assets/css/roulette.css">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+<script src="assets/js/data.js?v=50"></script>
+<!-- the splash screen: the game's picture and a loading bar, shown before the page draws -->
+<script src="assets/js/splash.js?v=33"></script>
+</head>
+<body class="game-page mg-page roulette-page" data-shell="game">
+
+<header class="mg-header rl-header">
+  <a class="mg-icon-btn rl-close" href="games.html?category=Instant%20Win" aria-label="Close and go back to the lobby">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+  </a>
+  <div class="rl-wallet" title="Balance">
+    <span class="rl-wallet-ic" aria-hidden="true">₵</span>
+    <span class="mg-balance">GHS <b id="rlBalance">0.00</b></span>
+    <span class="mg-bal-label" id="rlBalLabel">Credits</span>
+    <span class="mg-delta" id="rlDelta" aria-hidden="true"></span>
+  </div>
+  <h1 class="mg-title rl-title">Roulette</h1>
+  <button class="mg-icon-btn" type="button" id="rlChat" aria-label="Live chat"><i data-icon="chat"></i></button>
+  <button class="mg-icon-btn" type="button" id="rlMenuBtn" aria-label="Game menu" aria-expanded="false" aria-controls="rlMenu"><i data-icon="menu"></i></button>
+  <nav class="mg-menu" id="rlMenu" aria-label="Game menu" hidden>
+    <div class="mg-menu-label">Play with</div>
+    <div class="mg-modes">
+      <button type="button" data-mode="fun" aria-pressed="true">Credits</button>
+      <button type="button" data-mode="real" aria-pressed="false">Wallet</button>
+    </div>
+    <button type="button" id="rlTopUp"><i data-icon="plus"></i>Top up credits</button>
+    <button type="button" id="rlSound" aria-pressed="true"><i data-icon="sound"></i><span>Sound: on</span></button>
+    <button type="button" id="rlRulesBtn"><i data-icon="info"></i>How to play</button>
+    <a href="wallet.html"><i data-icon="wallet"></i>Deposit</a>
+  </nav>
+</header>
+
+<main class="rl-main" id="rlMain">
+  <section class="rl-records" aria-label="Current records">
+    <div class="rl-records-head">
+      <h2>Current Records</h2>
+      <button type="button" class="rl-history-btn" id="rlHistoryBtn">History <span aria-hidden="true">›</span></button>
+    </div>
+    <ol class="rl-badges" id="rlBadges" aria-label="Last results, newest first"></ol>
+  </section>
+
+  <div class="rl-rail">
+  <section class="rl-felt" aria-label="Betting table">
+    <div class="rl-board" id="rlBoard">
+      <!-- 0 spans the three rows on the left; numbers run in 4 columns × 3 rows; C1–C3 pay the rows on the right -->
+      <button type="button" class="rl-spot rl-zero" data-spot="n0" style="grid-row:1/4;grid-column:1"><b>0</b><small>11:1</small></button>
+    </div>
+    <div class="rl-outside" id="rlOutside">
+      <button type="button" class="rl-spot" data-spot="low"><b>1-6</b><small>1:1</small></button>
+      <button type="button" class="rl-spot" data-spot="even"><b>EVEN</b><small>1:1</small></button>
+      <button type="button" class="rl-spot rl-red" data-spot="red"><b>RED</b><small>1:1</small></button>
+      <button type="button" class="rl-spot rl-black" data-spot="black"><b>BLACK</b><small>1:1</small></button>
+      <button type="button" class="rl-spot" data-spot="odd"><b>ODD</b><small>1:1</small></button>
+      <button type="button" class="rl-spot" data-spot="high"><b>7-12</b><small>1:1</small></button>
+    </div>
+  </section>
+  </div>
+  <button type="button" class="rl-clear" id="rlClear">Clear</button>
+
+  <div class="rl-stake">Total Stake: <b id="rlStake">GHS 0.00</b></div>
+
+  <div class="rl-chips" id="rlChipRow" role="radiogroup" aria-label="Chip value"></div>
+
+  <div class="rl-bar">
+    <button type="button" class="rl-reset" id="rlReset" title="Take back the last chip">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.4-5.5"/><path d="M4.5 4.5v4.8h4.8"/></svg>
+      RESET
+    </button>
+    <button type="button" class="rl-spin" id="rlSpin">SPIN</button>
+    <button type="button" class="rl-auto" id="rlAuto" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="M19.5 4.5v4.8h-4.8"/></svg>
+      <span id="rlAutoLabel">AUTO PLAY</span>
+    </button>
+  </div>
+  <p class="mg-note">Live play · RTP 92.3%</p>
+</main>
+
+<!-- the wheel slides in over the dimmed table -->
+<div class="rl-wheel-ov" id="rlWheelOv" hidden>
+  <div class="rl-wheel-box">
+    <canvas class="rl-wheel" id="rlWheel" aria-hidden="true"></canvas>
+    <div class="rl-result" id="rlResult" hidden></div>
+  </div>
+</div>
+
+<!-- the win: two gold cups among floating lights -->
+<div class="rl-win" id="rlWin" hidden>
+  <div class="rl-win-card">
+    <div class="rl-lights" aria-hidden="true"></div>
+    <canvas class="rl-cups" id="rlCups" aria-hidden="true"></canvas>
+    <h2 class="rl-win-title">Congratulations! You Won!</h2>
+    <div class="rl-win-amt" id="rlWinAmt">GHS 0.00</div>
+    <div class="rl-win-sub" id="rlWinSub"></div>
+    <button type="button" class="rl-win-ok" id="rlWinOk">Continue</button>
+  </div>
+</div>
+
+<canvas class="mg-confetti" id="rlConfetti" aria-hidden="true"></canvas>
+<div class="sr-only" id="rlLive" aria-live="polite"></div>
+
+<dialog class="mg-dialog rl-history" id="rlHistory" aria-labelledby="rlHistoryTitle">
+  <h2 id="rlHistoryTitle">History</h2>
+  <p class="rl-hist-stats" id="rlHistStats"></p>
+  <ol class="rl-badges rl-badges-all" id="rlHistAll"></ol>
+  <form method="dialog"><button class="btn btn-primary btn-block">Close</button></form>
+</dialog>
+
+<dialog class="mg-dialog" id="rlRules" aria-labelledby="rlRulesTitle">
+  <h2 id="rlRulesTitle">How to play</h2>
+  <ol>
+    <li>Pick a chip (0.1, 1, 10, 20 or 100) and tap the felt to place it. Tap again to add more. <b>Clear</b> takes all chips off; <b>RESET</b> takes back the last one.</li>
+    <li>Press <b>SPIN</b>. The ball lands in one of 13 pockets, 0 to 12.</li>
+    <li>Pays: a single number (including 0) <b>11:1</b> · a row C1/C2/C3 (4 numbers) <b>2:1</b> · RED, BLACK, ODD, EVEN, 1-6, 7-12 (6 numbers each) <b>1:1</b>. 0 is neither red nor black, odd nor even.</li>
+    <li><b>AUTO PLAY</b> repeats your last bet every round until you tap it again (at most 50 rounds).</li>
+  </ol>
+  <p><b>Fairness:</b> the pocket is drawn at random from the 13, each equally likely, the moment you press SPIN; the wheel then plays out a spin that ends there. Every bet returns 12/13 of what's staked on average — <b>92.3%</b>, the usual return of 13-pocket mini roulette.</p>
+  <form method="dialog"><button class="btn btn-primary btn-block">Got it</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/minigame.js?v=34"></script>
+<script src="assets/js/roulette-wheel.js?v=33"></script>
+<script src="assets/js/roulette-art.js?v=33"></script>
+<script src="assets/js/roulette.js?v=33"></script>
+</body>
+</html>

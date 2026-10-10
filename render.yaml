@@ -1,0 +1,111 @@
+# render.yaml - Deploy to Render.com (Blueprint)
+# Render dashboard -> New -> Blueprint -> pick the GitHub repo
+#
+# Creates:
+#   1. asakaa-db          PostgreSQL database (free tier), shared by the two APIs
+#   2. asakaa-balance     balance / wallet / games API (backend/)
+#   3. asakaa-accounts    register / log-in API (accounts-api/)
+#   4. asakaa-mines-live  shared-board Mines + Magic Ball Live (mines-live/)
+#   5. asakaa-casino      the website (static HTML/CSS/JS)
+#
+# The frontend has these .onrender.com addresses hardcoded. If Render gives a
+# service a different address (name already taken), update the HTML/JS to match.
+
+databases:
+  - name: asakaa-db
+    plan: free
+    databaseName: asakaa
+    user: asakaa
+
+services:
+  - type: web
+    name: asakaa-balance
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci --include=dev && npm run build
+    # free plan has no pre-deploy step, so migrations run on start (they skip already-applied files)
+    startCommand: npm run migrate:prod && npm start
+    healthCheckPath: /_health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: asakaa-db
+          property: connectionString
+      - key: NODE_ENV
+        value: production
+      - key: ACCOUNTS_API_URL
+        value: https://asakaa-accounts.onrender.com
+      - key: SITE_URL
+        value: https://asakaa-casino.onrender.com
+      - key: ADMIN_PHONES
+        sync: false
+      - key: TELLER_MERCHANT_ID
+        sync: false
+      - key: TELLER_API_USERNAME
+        sync: false
+      - key: TELLER_API_KEY
+        sync: false
+      - key: TELLER_PASSCODE
+        sync: false
+
+  - type: web
+    name: asakaa-accounts
+    runtime: node
+    plan: free
+    rootDir: accounts-api
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: asakaa-db
+          property: connectionString
+      - key: NODE_ENV
+        value: production
+
+  - type: web
+    name: asakaa-mines-live
+    runtime: node
+    plan: free
+    rootDir: mines-live
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: BALANCE_API_URL
+        value: https://asakaa-balance.onrender.com
+      - key: NODE_ENV
+        value: production
+
+  - type: web
+    name: asakaa-casino
+    runtime: static
+    buildCommand: echo "no build step - vanilla HTML/CSS/JS"
+    staticPublishPath: .
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://asakaa-balance.onrender.com/api/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /*.html
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate

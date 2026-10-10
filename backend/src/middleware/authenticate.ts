@@ -1,0 +1,121 @@
+// src/middleware/authenticate.ts
+//
+// The accounts service owns bearer-token issuance. This middleware validates a
+// token through a private server-to-server endpoint and only forwards the
+// user record required by the balance and payment services.
+
+import type { NextFunction, Request, Response } from "express";
+import { db } from "../db.js";
+import { ensureWalletAccount } from "../services/accountLink.js";
+
+export interface SessionUser {
+  id: string;
+  accountId: string;
+  /** The registered mobile number, 0XXXXXXXXX — withdrawals are only ever paid here. */
+  phone: string;
+  /** ACTIVE, or SUSPENDED / CLOSED by an admin (set by authenticate). */
+  status?: string;
+}
+
+/* what a suspended player may still do: finish a round already in play, look after themselves, and write to support */
+const STILL_ALLOWED = /\/(cashout|step|cancel|feedback|limits|self-exclusion)$|^\/api\/support\/messages$/;
+
+/** Whether a suspended (or closed) account may make this request: reading anything, finishing a round already in
+ *  play (cash out, step, cancel), feedback, setting limits or taking a break, and messaging support (to appeal).
+ *  Never a new bet, deposit or withdrawal. */
+export function suspendedMayDo(method: string, url: string): boolean {
+  return method === "GET" || STILL_ALLOWED.test(url.split("?")[0]!);
+}
+
+/** Keeps the player's number, full name and "last seen" current for the admin pages (at most every 5 minutes, or
+ *  as soon as the number or name changes), and returns the account's status. */
+async function touchUser(userId: string, phone: string, fullName: string): Promise<string> {
+  await db.query(
+    `UPDATE users SET phone = COALESCE(NULLIF($2, ''), phone), full_name = COALESCE(NULLIF($3, ''), full_name), last_login_at = now()
+      WHERE id = $1 AND (last_login_at IS NULL OR last_login_at < now() - interval '5 minutes'
+                         OR ($2 <> '' AND phone IS DISTINCT FROM $2)
+                         OR ($3 <> '' AND full_name IS DISTINCT FROM $3))`,
+    [userId, phone, fullName]);
+  const { rows } = await db.query<{ status: string }>(`SELECT status::text AS status FROM users WHERE id = $1`, [userId]);
+  return rows[0]?.status ?? "ACTIVE";
+}
+
+interface SessionVerifyResponse {
+  user?: { id: string | number; username?: string; phone?: string; country?: string; full_name?: string | null };
+}
+
+export async function authenticate(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): Promise<void> {
+  const authorization = req.headers.authorization;
+  const match = /^Bearer\s+([A-Za-z0-9_-]+)$/.exec(authorization ?? "");
+  if (!match) {
+    next(Object.assign(new Error("Unauthenticated"), { status: 401 }));
+    return;
+  }
+
+  const accountsUrl = process.env.ACCOUNTS_API_URL;
+  if (!accountsUrl) {
+    next(Object.assign(new Error("Account verification is not configured"), { status: 503 }));
+    return;
+  }
+
+  try {
+    const response = await fetch(`${accountsUrl.replace(/\/$/, "")}/api/session/verify`, {
+      headers: { Authorization: `Bearer ${match[1]}` },
+    });
+    if (!response.ok) {
+      next(Object.assign(new Error("Invalid or expired session"), { status: 401 }));
+      return;
+    }
+    const body = await response.json() as SessionVerifyResponse;
+    const user = body.user;
+    const accountId = user?.id;
+    if (accountId === undefined || accountId === null || accountId === "") {
+      next(Object.assign(new Error("Invalid account session"), { status: 401 }));
+      return;
+    }
+    const phone = String(user?.phone ?? "");
+    const fullName = String(user?.full_name ?? "").slice(0, 120);
+    const balanceUserId = await ensureWalletAccount(db, String(accountId), user?.username, phone, user?.country);
+    const status = await touchUser(balanceUserId, phone, fullName);
+    (req as Request & { user: SessionUser }).user = { id: balanceUserId, accountId: String(accountId), phone, status };
+    /* a suspended account can look, and finish what it started, but not bet, deposit or withdraw. The path tested is
+       the one Express routed (mount + route path, no query or #fragment): testing originalUrl let a raw client send
+       POST /api/user/withdraw#/cashout, which routes to /withdraw but looked like a cash-out to the gate. */
+    if (status !== "ACTIVE" && !suspendedMayDo(req.method, (req.baseUrl || "") + (req.path || ""))) {
+      next(Object.assign(new Error("Your account is suspended. Contact support if you think this is a mistake."),
+        { status: 403, name: "account_suspended" }));
+      return;
+    }
+    next();
+  } catch {
+    next(Object.assign(new Error("Account service unavailable"), { status: 503 }));
+  }
+}
+
+/** Admins are the accounts whose registered numbers are listed in ADMIN_PHONES (comma-separated). */
+export function isAdmin(user: SessionUser, env: NodeJS.ProcessEnv = process.env): boolean {
+  const local = (p: string) => p.replace(/[\s-]/g, "").replace(/^(?:\+|00)?233/, "0");
+  const admins = (env.ADMIN_PHONES ?? "").split(",").map((p) => local(p.trim())).filter((p) => /^0\d{9}$/.test(p));
+  return !!user.phone && admins.includes(local(user.phone));
+}
+
+export function requireAdmin(req: Request, _res: Response, next: NextFunction): void {
+  const user = (req as Request & { user?: SessionUser }).user;
+  if (!user || !isAdmin(user)) {
+    next(Object.assign(new Error("Admins only"), { status: 403 }));
+    return;
+  }
+  next();
+}
+
+export function requireUser(req: Request): SessionUser {
+  const user = (req as Request & { user?: SessionUser }).user;
+  if (!user) {
+    throw Object.assign(new Error("Unauthenticated"), { status: 401 });
+  }
+  return user;
+}

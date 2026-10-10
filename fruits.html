@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#2a0509">
+<title>Blaze Fruits — RendoWin</title>
+<meta name="description" content="Blaze Fruits: a classic 5×3 fruit slot with 20 lines, a wild Seven and a Star scatter. Play with credits or real money.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/minigame.css">
+<link rel="stylesheet" href="assets/css/fruits.css?v=2">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+<script src="assets/js/data.js?v=50"></script>
+<!-- the splash screen: the game's picture and a loading bar, shown before the page draws -->
+<script src="assets/js/splash.js?v=33"></script>
+</head>
+<body class="game-page mg-page fruits-page" data-shell="game">
+
+<canvas class="fr-embers" id="frEmbers" aria-hidden="true"></canvas>
+
+<header class="mg-header">
+  <a class="mg-icon-btn" href="games.html?category=Slots" aria-label="Back to the lobby"><i data-icon="arrowLeft"></i></a>
+  <h1 class="mg-title">Blaze Fruits</h1>
+  <button class="mg-icon-btn" type="button" id="frChat" aria-label="Live chat"><i data-icon="chat"></i></button>
+  <button class="mg-icon-btn" type="button" id="frMenuBtn" aria-label="Game menu" aria-expanded="false" aria-controls="frMenu"><i data-icon="menu"></i></button>
+  <nav class="mg-menu" id="frMenu" aria-label="Game menu" hidden>
+    <div class="mg-menu-label">Play with</div>
+    <div class="mg-modes">
+      <button type="button" data-mode="fun" aria-pressed="true">Credits</button>
+      <button type="button" data-mode="real" aria-pressed="false">Wallet</button>
+    </div>
+    <button type="button" id="frTopUp"><i data-icon="plus"></i>Top up credits</button>
+    <button type="button" id="frSound" aria-pressed="true"><i data-icon="sound"></i><span>Sound: on</span></button>
+    <button type="button" id="frTurbo" aria-pressed="false"><i data-icon="bolt"></i><span>Quick spin: off</span></button>
+    <button type="button" id="frRulesBtn"><i data-icon="info"></i>Paytable &amp; rules</button>
+    <a href="wallet.html"><i data-icon="wallet"></i>Deposit</a>
+    <a href="games.html?category=Slots"><i data-icon="arrowLeft"></i>Back to the lobby</a>
+  </nav>
+</header>
+
+<main class="fr-main">
+  <!-- the top strip: balance, win, bet — and the 20 LINES badge -->
+  <div class="fr-hud">
+    <div class="fr-hud-item"><span>Balance</span><b><span id="frBalance">0.00</span></b><small class="mg-bal-label" id="frBalLabel">Credits</small></div>
+    <div class="fr-hud-item fr-hud-win"><span>Win</span><b id="frWin">₵0.00</b></div>
+    <div class="fr-hud-item"><span>Total bet</span><b id="frBet">₵0.20</b></div>
+    <div class="fr-lines" aria-label="20 paylines"><b>20</b><span>LINES</span></div>
+  </div>
+
+  <div class="fr-logo" aria-hidden="true"><span>Blaze</span><b>FRUITS</b></div>
+
+  <!-- the reels inside the gold frame; the payline overlay sits on top -->
+  <div class="fr-frame" id="frFrame">
+    <div class="fr-reels" id="frReels" role="img" aria-label="The reels"></div>
+    <svg class="fr-lines-svg" id="frLinesSvg" aria-hidden="true"></svg>
+    <div class="fr-linewin" id="frLineWin" hidden></div>
+  </div>
+
+  <p class="fr-prompt" id="frPrompt">PLACE YOUR BET</p>
+
+  <!-- the controls: bet stepper and quick bets, auto-spin, the spin button, max bet -->
+  <div class="fr-controls">
+    <div class="fr-betrow">
+      <button class="fr-step" type="button" id="frMinus" aria-label="Lower the bet">−</button>
+      <div class="fr-quick" id="frQuick"></div>
+      <button class="fr-step" type="button" id="frPlus" aria-label="Raise the bet">+</button>
+    </div>
+    <div class="fr-spinrow">
+      <button class="fr-side" type="button" id="frAuto" aria-pressed="false"><i data-icon="refresh"></i><span>Auto</span><small id="frAutoLeft" hidden></small></button>
+      <button class="fr-spin" type="button" id="frSpin" aria-label="Spin">
+        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M50 30a18 18 0 0 0-31.6-11.2"/><path d="M14 34a18 18 0 0 0 31.6 11.2"/><path d="M17 10.5v9h9"/><path d="M47 53.5v-9h-9"/></svg>
+      </button>
+      <button class="fr-side" type="button" id="frMax"><i data-icon="bolt"></i><span>Max bet</span></button>
+    </div>
+    <p class="mg-note">Live play · RTP <span id="frRtp">96.05%</span> · 20 fixed lines</p>
+  </div>
+</main>
+
+<!-- auto-spin count -->
+<div class="fr-autos" id="frAutos" hidden>
+  <button type="button" data-auto="10">10</button><button type="button" data-auto="25">25</button><button type="button" data-auto="50">50</button><button type="button" data-auto="100">100</button><button type="button" data-auto="-1">∞</button>
+</div>
+
+<!-- a big win: the overlay with the amount counting up -->
+<div class="fr-bigwin" id="frBigWin" hidden>
+  <div class="fr-bigwin-inner">
+    <div class="fr-bigwin-word" id="frBigWord">BIG WIN</div>
+    <div class="fr-bigwin-amt" id="frBigAmt">₵0.00</div>
+    <div class="fr-bigwin-hint">Tap to continue</div>
+  </div>
+</div>
+
+<canvas class="mg-confetti" id="frConfetti" aria-hidden="true"></canvas>
+<div class="sr-only" id="frLive" aria-live="polite"></div>
+
+<dialog class="mg-dialog fr-rules" id="frRules" aria-labelledby="frRulesTitle">
+  <h2 id="frRulesTitle">Paytable &amp; rules</h2>
+  <p><b>20 fixed lines.</b> Matching symbols pay from the leftmost reel along a payline, 3, 4 or 5 in a row. Pays are × the line bet (the total bet ÷ 20):</p>
+  <table class="fr-pays" id="frPays"></table>
+  <p><b>Seven</b> is wild: it stands in for every symbol except the Star, and five Sevens on a line is the top win. A line pays its best reading only.</p>
+  <p><b>Star</b> is the scatter: 3, 4 or 5 anywhere on the reels pay <span id="frScat"></span> × your total bet, added to the line wins.</p>
+  <p><b>Fairness:</b> every symbol is drawn at random; the whole spin is decided the moment you press Spin, and the reels just play it out. For real money our server spins and pays the round, and the page replays that same spin. The return to player is exact — every payline outcome is counted, nothing is estimated: <span id="frRtpExact"></span> (lines <span id="frRtpLines"></span>, scatters <span id="frRtpScat"></span>). One spin pays at most 2,500 × the total bet.</p>
+  <form method="dialog"><button class="btn btn-primary btn-block">Got it</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/minigame.js?v=34"></script>
+<script src="assets/js/fruits-math.js?v=1"></script>
+<script src="assets/js/fruits-art.js?v=1"></script>
+<script src="assets/js/fruits.js?v=1"></script>
+</body>
+</html>

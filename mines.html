@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#023868">
+<title>Mines — RendoWin</title>
+<meta name="description" content="Mines: open tiles on a 5×5 board, avoid the mines and cash out before you hit one. Play with real credits.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/minigame.css">
+<link rel="stylesheet" href="assets/css/mines.css">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+<script src="assets/js/data.js?v=50"></script>
+<!-- the splash screen: the game's picture and a loading bar, shown before the page draws -->
+<script src="assets/js/splash.js?v=33"></script>
+</head>
+<body class="game-page mg-page mines-page" data-shell="game">
+
+<!-- the star, the bomb, the blast and the title icon, drawn once and reused by the tiles -->
+<svg class="mn-sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  <defs>
+    <!-- the bomb: a cast-iron ball lit from the top left, a cool rim light from below, a steel collar -->
+    <radialGradient id="mnBombBody" cx="34%" cy="28%" r="80%">
+      <stop offset="0" stop-color="#8a95a8"/><stop offset=".22" stop-color="#3d4452"/><stop offset=".58" stop-color="#15181f"/><stop offset="1" stop-color="#030405"/>
+    </radialGradient>
+    <radialGradient id="mnBombGloss" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mnBombRim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset=".45" stop-color="#7fa2ff" stop-opacity="0"/><stop offset="1" stop-color="#8fb0ff" stop-opacity=".5"/>
+    </linearGradient>
+    <linearGradient id="mnSteel" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2b313b"/><stop offset=".3" stop-color="#d3dbe6"/><stop offset=".55" stop-color="#6c7582"/><stop offset="1" stop-color="#1c2027"/>
+    </linearGradient>
+    <radialGradient id="mnSpark" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff"/><stop offset=".35" stop-color="#ffe066"/><stop offset="1" stop-color="#ff8a00" stop-opacity="0"/>
+    </radialGradient>
+    <!-- the burst left on the tile that was hit -->
+    <radialGradient id="mnBlastGlow" cx="50%" cy="50%" r="50%">
+      <stop offset=".25" stop-color="#ffd27a" stop-opacity=".85"/><stop offset="1" stop-color="#ff4d00" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="mnBlastOuter" cx="50%" cy="50%" r="50%">
+      <stop offset=".2" stop-color="#ff9a00"/><stop offset=".75" stop-color="#ff4d00"/><stop offset="1" stop-color="#c4001a"/>
+    </radialGradient>
+    <radialGradient id="mnBlastMid" cx="50%" cy="50%" r="50%">
+      <stop offset=".1" stop-color="#fff3b0"/><stop offset=".8" stop-color="#ffc400"/><stop offset="1" stop-color="#ff8f00"/>
+    </radialGradient>
+    <linearGradient id="mnLogoFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c08cff"/><stop offset=".55" stop-color="#7b3fe4"/><stop offset="1" stop-color="#4c1d95"/>
+    </linearGradient>
+  </defs>
+  <!-- a flat star (badge, logo) that takes the surrounding colour -->
+  <symbol id="mnStar" viewBox="0 0 64 64">
+    <path d="M32 8.5L38.8 25.2L56.7 26.5L42.9 38.1L47.3 55.5L32 46L16.7 55.5L21.1 38.1L7.3 26.5L25.2 25.2Z"
+          fill="currentColor" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
+  </symbol>
+  <!-- the star on an opened tile: ten facets lit from the top left, shadows warmed by the orange tile -->
+  <symbol id="mnStar3d" viewBox="0 0 64 64">
+    <path d="M32.0 5.0L39.4 23.3L59.1 24.7L44.0 37.4L48.8 56.6L32.0 46.1L15.2 56.6L20.0 37.4L4.9 24.7L24.6 23.3Z" fill="#c95f00" opacity=".45" transform="translate(0 2.2)"/>
+    <path d="M32.0 33.5 L24.6 23.3 L32.0 5.0Z" fill="#fefdfb"/>
+    <path d="M32.0 33.5 L32.0 5.0 L39.4 23.3Z" fill="#fcf7f2"/>
+    <path d="M32.0 33.5 L39.4 23.3 L59.1 24.7Z" fill="#f6e2cc"/>
+    <path d="M32.0 33.5 L59.1 24.7 L44.0 37.4Z" fill="#f3d7b9"/>
+    <path d="M32.0 33.5 L44.0 37.4 L48.8 56.6Z" fill="#eec598"/>
+    <path d="M32.0 33.5 L48.8 56.6 L32.0 46.1Z" fill="#eec497"/>
+    <path d="M32.0 33.5 L32.0 46.1 L15.2 56.6Z" fill="#f3d5b5"/>
+    <path d="M32.0 33.5 L15.2 56.6 L20.0 37.4Z" fill="#f6e0c7"/>
+    <path d="M32.0 33.5 L20.0 37.4 L4.9 24.7Z" fill="#fcf6ef"/>
+    <path d="M32.0 33.5 L4.9 24.7 L24.6 23.3Z" fill="#fefcf9"/>
+    <path d="M32.0 33.5L32.0 5.0M32.0 33.5L59.1 24.7M32.0 33.5L48.8 56.6M32.0 33.5L15.2 56.6M32.0 33.5L4.9 24.7" fill="none" stroke="#fff" stroke-width="1" stroke-opacity=".75"/>
+    <path d="M32.0 5.0L39.4 23.3L59.1 24.7L44.0 37.4L48.8 56.6L32.0 46.1L15.2 56.6L20.0 37.4L4.9 24.7L24.6 23.3Z" fill="none" stroke="#fff6e6" stroke-width="1.4" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="mnBomb" viewBox="0 0 64 64">
+    <ellipse cx="30.5" cy="58.6" rx="15" ry="2.6" fill="#000" opacity=".4"/>
+    <circle cx="30" cy="37" r="20.5" fill="url(#mnBombBody)"/>
+    <circle cx="30" cy="37" r="20.5" fill="url(#mnBombRim)"/>
+    <circle cx="30" cy="37" r="20" fill="none" stroke="#000" stroke-opacity=".5"/>
+    <ellipse cx="22.5" cy="27.5" rx="9.5" ry="6.5" transform="rotate(-38 22.5 27.5)" fill="url(#mnBombGloss)"/>
+    <ellipse cx="20.6" cy="25.4" rx="3.4" ry="2" transform="rotate(-38 20.6 25.4)" fill="#fff" opacity=".9"/>
+    <g transform="rotate(45 46 20)">
+      <rect x="40" y="15.5" width="12" height="9.5" rx="1.6" fill="url(#mnSteel)" stroke="#11141a" stroke-width=".9"/>
+      <path d="M40.5 19.6H51.5" stroke="#0f1217" stroke-opacity=".55" stroke-width=".8"/>
+      <ellipse cx="46" cy="15.5" rx="6" ry="1.9" fill="#1a1e25" stroke="#8a93a0" stroke-width=".8"/>
+    </g>
+    <path d="M49.3 16.8C52.6 12.6 50.6 9.6 55.2 6.6" fill="none" stroke="#d9b075" stroke-width="3" stroke-linecap="round"/>
+    <path d="M49.3 16.8C52.6 12.6 50.6 9.6 55.2 6.6" fill="none" stroke="#6b4a20" stroke-width="3" stroke-linecap="round" stroke-dasharray="1.1 1.9"/>
+    <path d="M49.9 15.9C52.7 12.3 51 9.7 54.6 7.1" fill="none" stroke="#fff3d6" stroke-width=".7" stroke-opacity=".6" stroke-linecap="round"/>
+    <circle cx="56" cy="6" r="6" fill="url(#mnSpark)"/>
+    <path d="M56 .6v10.8M50.6 6h10.8M52.2 2.2l7.6 7.6M59.8 2.2l-7.6 7.6" stroke="#fff6c8" stroke-width="1" stroke-linecap="round"/>
+    <circle cx="59.6" cy="2.4" r=".9" fill="#ffd54f"/><circle cx="52" cy="3" r=".7" fill="#ffe082"/><circle cx="60.4" cy="9.4" r=".6" fill="#ffca28"/>
+  </symbol>
+  <symbol id="mnBlast" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="49" fill="url(#mnBlastGlow)"/>
+    <path d="M50.0 9.2L56.6 23.3L70.7 10.6L70.2 27.3L79.1 29.9L74.4 40.7L85.3 45.7L82.2 53.9L92.7 66.2L72.9 65.8L79.4 83.2L64.4 77.4L58.8 85.5L50.0 81.1L38.3 97.3L38.2 72.5L21.4 82.2L24.8 67.4L11.7 64.5L23.2 53.3L1.5 44.1L22.5 39.6L11.4 23.4L28.8 26.1L30.7 13.3L43.2 22.2Z" fill="url(#mnBlastOuter)" stroke="#7a0010" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M55.3 19.9L60.1 31.1L74.4 26.5L69.9 40.3L80.5 45.7L69.5 53.4L75.8 63.7L65.3 65.9L62.7 76.0L52.9 70.7L44.0 84.2L39.7 69.3L25.5 73.6L29.8 59.8L19.7 54.3L29.6 46.4L19.7 33.9L35.2 34.7L36.7 22.8L47.0 28.7Z" fill="url(#mnBlastMid)"/>
+    <path d="M56.9 31.1L58.3 41.0L69.0 41.2L64.5 49.4L69.7 57.2L60.3 59.4L58.5 68.3L50.6 63.7L43.6 67.6L41.0 59.8L32.8 58.0L36.5 50.6L31.5 43.3L40.1 40.9L41.2 31.1L49.4 37.0Z" fill="#fffbe6"/>
+  </symbol>
+  <symbol id="mnLogo" viewBox="0 0 32 32">
+    <rect width="32" height="32" rx="8" fill="url(#mnLogoFill)"/>
+    <rect x=".5" y=".5" width="31" height="31" rx="7.5" fill="none" stroke="#fff" stroke-opacity=".28"/>
+    <path d="M4 3h24a5 5 0 0 1 4 4v5c-8-3-20-3-28 0V7a5 5 0 0 1 0-4z" fill="#fff" opacity=".18"/>
+    <use href="#mnStar" x="6" y="6.5" width="20" height="20" color="#fff"/>
+  </symbol>
+</svg>
+
+<header class="mg-header">
+  <a class="mg-icon-btn" href="games.html?category=Instant%20Win" aria-label="Back to the lobby"><i data-icon="arrowLeft"></i></a>
+  <h1 class="mg-title mn-title"><svg class="mn-logo" viewBox="0 0 32 32" aria-hidden="true"><use href="#mnLogo"/></svg><span><span class="mn-brandword">Rendo </span>Mines</span></h1>
+  <div class="mn-bal">
+    <span class="mg-bal-label" id="mnBalLabel">Credits</span>
+    <span class="mg-balance"><b id="mnBalance">0.00</b> GHS</span>
+  </div>
+  <button class="mg-icon-btn" type="button" id="mnChat" aria-label="Live chat"><i data-icon="chat"></i></button>
+  <button class="mg-icon-btn" type="button" id="mnMenuBtn" aria-label="Game menu" aria-expanded="false" aria-controls="mnMenu"><i data-icon="menu"></i></button>
+  <nav class="mg-menu" id="mnMenu" aria-label="Game menu" hidden>
+    <div class="mg-menu-label">Play with</div>
+    <div class="mg-modes">
+      <button type="button" data-mode="fun" aria-pressed="true">Credits</button>
+      <button type="button" data-mode="real" aria-pressed="false">Wallet</button>
+    </div>
+    <button type="button" id="mnTopUp"><i data-icon="plus"></i>Top up credits</button>
+    <button type="button" id="mnSound" aria-pressed="true"><i data-icon="sound"></i><span>Sound: on</span></button>
+    <button type="button" id="mnRulesBtn"><i data-icon="info"></i>How to play</button>
+    <a href="wallet.html"><i data-icon="wallet"></i>Deposit</a>
+    <a href="games.html?category=Instant%20Win"><i data-icon="arrowLeft"></i>Back to the lobby</a>
+  </nav>
+</header>
+
+<main class="mn-main">
+  <div class="mn-info">
+    <select class="mn-select" id="mnMines" aria-label="Number of mines"></select>
+    <span class="mn-next" id="mnNext"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#mnStar"/></svg> <span id="mnNextLabel">Next:</span> <b id="mnNextVal">1.10x</b></span>
+  </div>
+
+  <section class="mn-board" id="mnBoard" aria-label="Mines board">
+    <div class="mn-grid" id="mnGrid" role="group" aria-label="Board of 25 tiles"></div>
+  </section>
+
+  <div class="mn-controls">
+    <div class="mn-tools">
+      <button class="mn-random" type="button" id="mnRandom">RANDOM</button>
+      <button class="mn-round" type="button" id="mnRefresh" aria-label="Reset the board"><i data-icon="refresh"></i></button>
+      <button class="mn-switch" type="button" role="switch" aria-checked="false" id="mnAuto">
+        <span>Auto Game</span><span class="mn-track" aria-hidden="true"><span class="mn-thumb"></span></span>
+      </button>
+    </div>
+
+    <button class="mn-go" type="button" id="mnGo" data-state="bet"></button>
+
+    <div class="mn-betbox">
+      <div class="mn-bet-label"><span>Bet</span> <span class="mn-cur">GHS</span> <b id="mnAmount">0.10</b></div>
+      <div class="mn-bet-ctl">
+        <button type="button" id="mnMinus" aria-label="Lower the bet"><i data-icon="minus"></i></button>
+        <button type="button" id="mnPlus" aria-label="Raise the bet"><i data-icon="plus"></i></button>
+        <button type="button" id="mnStack" aria-label="Choose a bet amount" aria-haspopup="dialog"><i data-icon="stack"></i></button>
+      </div>
+    </div>
+    <p class="mg-note">Live play · RTP <span id="mnRtp">96.5%</span></p>
+  </div>
+</main>
+
+<canvas class="mg-confetti" id="mnConfetti" aria-hidden="true"></canvas>
+<div class="sr-only" id="mnLive" aria-live="polite"></div>
+
+<dialog class="mg-sheet mn-sheet" id="mnBetSheet" aria-labelledby="mnBetSheetTitle">
+  <h2 id="mnBetSheetTitle">Bet amount</h2>
+  <div class="mg-chips" id="mnChips"></div>
+  <div class="mn-quick">
+    <button type="button" id="mnHalf" aria-label="Halve the bet">½</button>
+    <button type="button" id="mnDouble" aria-label="Double the bet">2×</button>
+    <button type="button" id="mnMax" aria-label="Bet the maximum">Max</button>
+  </div>
+  <div class="mg-limits"><span>Min: 0.10</span> <span>Max: 10K</span></div>
+  <button class="btn btn-primary btn-block" type="button" id="mnSheetDone">Done</button>
+</dialog>
+
+<dialog class="mg-dialog" id="mnRules" aria-labelledby="mnRulesTitle">
+  <h2 id="mnRulesTitle">How to play</h2>
+  <ol>
+    <li>Choose how many mines (1–24) are hidden on the 5×5 board, and your bet.</li>
+    <li>Press <b>BET</b>. Tap a tile: a <b>star</b> keeps you in the round, a <b>mine</b> ends it and the bet is lost.</li>
+    <li>Every star raises your payout. <b>Next</b> shows the multiplier you'd reach with one more star — press <b>CASH OUT</b> any time to take it.</li>
+    <li><b>RANDOM</b> opens a random tile. With <b>Auto Game</b> on, tap the tiles you want, press BET, and they open one by one — cashing out once they're all safe.</li>
+  </ol>
+  <p><b>Fairness:</b> the mines are placed at random when you press BET, and a tile only shows what's already under it. Each multiplier is <span id="mnRulesRtp">96.5%</span> divided by the chance of finding that many stars in a row (rounded to 0.01), so the game returns about <span id="mnRulesRtp2">96.5%</span> on average whatever you do. The most one round can pay is GHS 100,000, so on very high-risk, high-stake bets the cap lowers the average return.</p>
+  <form method="dialog"><button class="btn btn-primary btn-block">Got it</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/minigame.js?v=34"></script>
+<script src="assets/js/mines.js?v=34"></script>
+</body>
+</html>

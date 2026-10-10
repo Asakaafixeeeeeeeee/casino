@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#121212">
+<title>Casino Lobby — RendoWin</title>
+<meta name="description" content="Browse hot games, slots, live dealer tables, jackpots, crash games and table games at RendoWin.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+</head>
+<body>
+
+<header class="site-header" data-shell="header"></header>
+
+<main>
+  <nav class="cat-bar" data-shell="categories" aria-label="Game categories"></nav>
+
+  <div class="container page">
+    <div class="page-head">
+      <h1 class="section-title" id="lobbyTitle">All games</h1>
+      <span class="result-count" id="count" aria-live="polite"></span>
+    </div>
+
+    <div class="lobby-tools">
+      <div class="searchbar">
+        <i data-icon="search"></i>
+        <input type="search" id="search" placeholder="Search games…" aria-label="Search games">
+      </div>
+      <button class="btn btn-ghost" type="button" id="filtersBtn" aria-expanded="false" aria-controls="filters">
+        <i data-icon="filters"></i>Filters <span class="badge" id="filterCount" hidden></span>
+      </button>
+      <select class="select" id="sort" aria-label="Sort games">
+        <option value="popular">Most popular</option>
+        <option value="players">Most played now</option>
+        <option value="az">Name (A–Z)</option>
+        <option value="za">Name (Z–A)</option>
+        <option value="rtp-desc">Highest RTP</option>
+        <option value="rtp-asc">Lowest RTP</option>
+      </select>
+    </div>
+
+    <div class="filter-panel" id="filters" hidden>
+      <div class="filter-group">
+        <h4>Volatility</h4>
+        <div class="chip-list" id="fVolatility"></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" type="button" id="reset">Reset filters</button>
+    </div>
+
+    <div class="game-grid" id="results"></div>
+  </div>
+</main>
+
+<footer class="site-footer" data-shell="footer"></footer>
+
+<script src="assets/js/data.js?v=50"></script>
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/lobby.js?v=34"></script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 100" width="520" height="200">
+  <!-- Rendo Jet: a twin-tail fighter-style jet, side view, nose to the right.
+       Exhaust nozzle centre ≈ (12, 57): the flight curve meets the jet there and the afterburner is drawn live from it. -->
+  <defs>
+    <linearGradient id="skin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".18" stop-color="#f1f4f7"/>
+      <stop offset=".45" stop-color="#c9d0d8"/>
+      <stop offset=".7" stop-color="#8a929c"/>
+      <stop offset=".86" stop-color="#a9b3be"/>
+      <stop offset="1" stop-color="#57606b"/>
+    </linearGradient>
+    <linearGradient id="wing" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d9dee4"/>
+      <stop offset=".5" stop-color="#9aa3ad"/>
+      <stop offset="1" stop-color="#5a626c"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".35" stop-color="#fff" stop-opacity=".9"/>
+      <stop offset=".7" stop-color="#fff" stop-opacity=".6"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="ao" cx=".5" cy="0" r=".8">
+      <stop offset="0" stop-color="#1b2027" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#1b2027" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-10%" y="-50%" width="120%" height="200%"><feGaussianBlur stdDeviation=".9"/></filter>
+    <filter id="softer" x="-10%" y="-80%" width="120%" height="260%"><feGaussianBlur stdDeviation="1.6"/></filter>
+    <linearGradient id="skinDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9aa3ae"/>
+      <stop offset="1" stop-color="#3c434c"/>
+    </linearGradient>
+    <linearGradient id="fin" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4f6f9"/>
+      <stop offset=".7" stop-color="#c3c9d1"/>
+      <stop offset="1" stop-color="#8d95a0"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7cc4ff"/>
+      <stop offset=".5" stop-color="#1f7ae0"/>
+      <stop offset="1" stop-color="#0b3a85"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f1d79a"/>
+      <stop offset=".35" stop-color="#c89a3c"/>
+      <stop offset=".75" stop-color="#5a3d12"/>
+      <stop offset="1" stop-color="#22170a"/>
+    </linearGradient>
+    <linearGradient id="nozzle" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8a8f96"/>
+      <stop offset=".35" stop-color="#4a4e55"/>
+      <stop offset=".7" stop-color="#25282d"/>
+      <stop offset="1" stop-color="#121417"/>
+    </linearGradient>
+    <linearGradient id="radome" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6b727c"/>
+      <stop offset=".5" stop-color="#3a3f46"/>
+      <stop offset="1" stop-color="#1c1f23"/>
+    </linearGradient>
+    <linearGradient id="belly" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".35"/>
+    </linearGradient>
+  </defs>
+
+  <!-- far-side tail fin, slightly darker and offset -->
+  <path d="M52 47 L36 10 L47 9 L92 45 Z" fill="url(#skinDark)" opacity=".85"/>
+
+  <!-- far-side horizontal stabiliser -->
+  <path d="M22 60 L60 58 L66 62 L26 66 Z" fill="#59616b"/>
+
+  <!-- far wing tip, just visible below the body -->
+  <path d="M96 66 L146 63 L132 74 L108 74.5 Z" fill="#4b525b"/>
+
+  <!-- engine nozzle -->
+  <path d="M8 49 L30 47 L30 67 L8 65 Q5 57 8 49 Z" fill="url(#nozzle)"/>
+  <path d="M10 50.5 L13 50.3 L13 63.7 L10 63.5 Z" fill="#0b0c0e" opacity=".7"/>
+  <g stroke="#1a1c20" stroke-width=".6" opacity=".7">
+    <line x1="16" y1="48.6" x2="16" y2="65.4"/>
+    <line x1="21" y1="48.2" x2="21" y2="65.8"/>
+    <line x1="26" y1="47.6" x2="26" y2="66.4"/>
+  </g>
+
+  <!-- fuselage -->
+  <path d="M28 46 C 60 43, 100 40, 140 40 C 170 40, 196 44, 220 50 C 236 54, 248 56, 257 57.5
+           C 248 59.5, 234 62, 214 64.5 C 186 68, 150 70, 112 70 C 80 70, 52 69, 28 68 Z" fill="url(#skin)"/>
+  <!-- shading along the belly -->
+  <path d="M28 60 C 70 62, 150 63, 230 61 C 220 64, 186 68, 150 70 C 112 70.6, 70 70, 28 68 Z" fill="url(#belly)"/>
+
+  <!-- dark radome (nose cone) -->
+  <path d="M226 51.2 C 238 54, 249 56, 257 57.5 C 249 59.3, 238 61.2, 226 63 C 229 59, 229 55, 226 51.2 Z" fill="url(#radome)"/>
+
+  <!-- air intake under the cockpit -->
+  <path d="M128 58 L160 56.5 L163 66.5 L131 68.5 Z" fill="#2c3036"/>
+  <path d="M129 59 L159 57.6 L160.5 60 L130 61.5 Z" fill="#0d0e10"/>
+  <path d="M160 56.5 L163 66.5" stroke="#d6dbe1" stroke-width="1"/>
+
+  <!-- red speed stripe -->
+  <path d="M40 52 C 90 50, 150 49, 214 52.5 L 216 55.5 C 150 53, 90 54.5, 40 56.5 Z" fill="url(#red)"/>
+
+  <!-- near wing, swept, seen from slightly below -->
+  <path d="M70 63 L156 60 L124 80 L86 80.5 Z" fill="url(#wing)"/>
+  <path d="M70 63 L156 60" stroke="#ffffff" stroke-width="1" opacity=".85"/>
+  <path d="M86 80.5 L124 80" stroke="#1f7ae0" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M96 64 L92 80" stroke="#5f6772" stroke-width=".5" opacity=".6"/>
+  <!-- soft shadow where the wing meets the body -->
+  <path d="M72 63.5 L154 60.6 L150 63 L76 66 Z" fill="#20252c" opacity=".35" filter="url(#soft)"/>
+
+  <!-- near-side horizontal stabiliser -->
+  <path d="M18 62 L58 60 L66 64.5 L22 69 Z" fill="url(#fin)"/>
+  <path d="M18 62 L58 60" stroke="#ffffff" stroke-width=".8" opacity=".9"/>
+
+  <!-- near-side tail fin with red tip -->
+  <path d="M44 46 L26 6 L40 5 L86 44 Z" fill="url(#fin)"/>
+  <path d="M26 6 L40 5 L44.6 9.2 L28.4 11.4 Z" fill="url(#red)"/>
+  <path d="M44 46 L26 6" stroke="#ffffff" stroke-width=".9" opacity=".9"/>
+  <path d="M34 28 L58 26" stroke="#7d8590" stroke-width=".5" opacity=".7"/>
+  <!-- tail number -->
+  <text x="47" y="34" font-family="Arial, Helvetica, sans-serif" font-size="8" font-weight="700" fill="#1f7ae0"
+        transform="rotate(-6 47 34)">VJ</text>
+
+  <!-- canopy -->
+  <path d="M168 44 C 176 33, 196 31, 212 41 C 214 44, 214 46.5, 212 48 C 198 46, 182 45.5, 168 46 Z" fill="url(#glass)"/>
+  <path d="M174 41.5 C 182 35, 194 34, 204 37.5 C 194 37, 184 38.5, 176 42.5 Z" fill="#fff" opacity=".75"/>
+  <path d="M191 33.4 L190 45.8" stroke="#2b2f35" stroke-width="1.1"/>
+  <!-- shadow under the canopy rim -->
+  <path d="M166 46.4 C 182 46, 198 46.6, 213 48.6 L 212 52 C 196 50, 182 49.4, 166 50 Z" fill="url(#ao)"/>
+  <path d="M168 46 C 182 45.5, 198 46, 212 48" stroke="#2b2f35" stroke-width="1.2" fill="none"/>
+
+  <!-- panel lines and details -->
+  <g stroke="#59616b" stroke-width=".45" fill="none" opacity=".4">
+    <path d="M60 44.2 L60 68.6"/>
+    <path d="M100 41 L100 69.8"/>
+    <path d="M124 40.2 L124 70"/>
+    <path d="M200 46 L202 66"/>
+    <path d="M220 50 L222 64.5"/>
+    <path d="M110 46 L118 46 L118 50 L110 50 Z"/>
+  </g>
+  <circle cx="138" cy="46" r="1" fill="#6d7580"/>
+  <circle cx="142" cy="46" r="1" fill="#6d7580"/>
+  <!-- roundel -->
+  <circle cx="84" cy="59" r="4" fill="#fff" stroke="#1f7ae0" stroke-width="1.6"/>
+  <circle cx="84" cy="59" r="1.5" fill="#1f7ae0"/>
+
+  <!-- specular streak along the spine -->
+  <path d="M40 46.4 C 80 43.4, 120 41.6, 160 42.2 L 160 44.2 C 120 43.8, 80 45.2, 40 48.2 Z" fill="url(#shine)" filter="url(#soft)" opacity=".9"/>
+  <!-- reflected light under the stripe -->
+  <path d="M46 60.5 C 100 60, 160 59.6, 214 58.6" stroke="#e8eef5" stroke-width="1.6" fill="none" opacity=".35" filter="url(#softer)"/>
+  <!-- top-edge highlight -->
+  <path d="M30 46.6 C 60 43.8, 100 41, 140 41 C 160 41, 172 42, 182 43" stroke="#fff" stroke-width="1" fill="none" opacity=".8"/>
+  <!-- pitot tube -->
+  <path d="M256 57.5 L260 57.5" stroke="#9aa1aa" stroke-width=".9"/>
+</svg>

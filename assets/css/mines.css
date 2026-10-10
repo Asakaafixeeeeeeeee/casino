@@ -1,0 +1,475 @@
+/* Rendo Mines — a 5×5 board of glossy tiles on royal blue, built to look like a physical game: a chrome-rimmed board
+   with a socket under every tile, keycap tiles with real thickness and grain, a faceted star, a cast-iron bomb, and a
+   fireball drawn from a pre-rendered sprite sheet (mines-blast.webp). The header, menu, balance, chips, sheets and
+   dialogs come from minigame.css; this file sets their colours. */
+.mines-page {
+  --mn-gold: linear-gradient(180deg, #fff6c4 0%, #ffd84a 30%, #f2a900 56%, #ffd23c 82%, #ffe98a 100%);
+  --mn-grain: url("../img/mines-grain.png");
+  --mg-accent: #ffb300;
+  --mg-line: rgba(140, 190, 255, .17);
+  --mg-line-strong: rgba(165, 210, 255, .42);
+  --mg-bar: rgba(2, 20, 48, .9);
+  --mg-raised: #082b57;
+  --mg-hover: #0f4180;
+  --mg-panel: rgba(0, 18, 46, .55);
+  --mg-well: #021a3a;
+  --mg-cover: rgba(2, 20, 48, .92);
+  --mg-dock: linear-gradient(to top, rgba(1, 16, 40, .97), rgba(1, 16, 40, .86));
+  --mg-note: rgba(205, 225, 255, .58);
+  /* royal blue under a stage light, a faint diamond lattice like a casino carpet, darker towards the edges */
+  background:
+    radial-gradient(75% 40% at 50% -8%, rgba(130, 200, 255, .38), transparent 72%),
+    radial-gradient(130% 75% at 50% 42%, transparent 52%, rgba(0, 6, 22, .58) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44'%3E%3Cpath d='M22 1L43 22L22 43L1 22Z' fill='none' stroke='%23ffffff' stroke-opacity='.045'/%3E%3Ccircle cx='22' cy='22' r='1.2' fill='%23ffffff' fill-opacity='.05'/%3E%3C/svg%3E") center top / 44px 44px,
+    linear-gradient(180deg, #034383 0%, #001c3d 100%);
+  background-color: #001c3d;
+}
+/* soft rays of light fanning down from above the board */
+.mines-page::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: repeating-conic-gradient(from 160deg at 50% -12%, rgba(170, 215, 255, .05) 0deg 3deg, transparent 3deg 11deg);
+  -webkit-mask-image: radial-gradient(90% 70% at 50% 0%, #000 0%, transparent 75%);
+  mask-image: radial-gradient(90% 70% at 50% 0%, #000 0%, transparent 75%);
+}
+body.mines-page { padding-bottom: calc(14px + var(--safe-bottom)); }
+.mn-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* the cash-out banner: a lit green plate with a gold edge */
+.mines-page .toast-host { top: 62px; }
+.mines-page .toast.ok {
+  border: 1px solid rgba(255, 228, 150, .75); text-align: center; color: #fff; font-size: .88rem; font-weight: 900; text-wrap: balance;
+  background: linear-gradient(180deg, #2bd168 0%, #14a347 55%, #0e8a3b 100%);
+  text-shadow: 0 1px 0 rgba(0, 60, 20, .55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 0 0 1px rgba(0, 0, 0, .35), 0 10px 26px rgba(0, 0, 0, .45), 0 0 26px rgba(40, 220, 110, .45);
+}
+.mines-page .toast.err { text-align: center; font-weight: 800; }
+
+/* ---------- header: title with its purple icon, balance on the right ---------- */
+.mines-page .mg-header { box-shadow: 0 1px 0 rgba(140, 195, 255, .14), 0 8px 24px rgba(0, 0, 0, .35); }
+.mn-title { display: flex; align-items: center; justify-content: flex-start; gap: 8px; text-align: left; font-size: 1rem; letter-spacing: .01em; }
+.mn-title span { overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 6px rgba(0, 0, 0, .45); }
+.mn-logo { flex: none; width: 26px; height: 26px; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .5)) drop-shadow(0 0 8px rgba(160, 100, 255, .45)); }
+.mn-bal {
+  position: relative; flex: none; display: grid; justify-items: end; line-height: 1.15; text-align: right;
+  padding: 3px 10px; border-radius: 10px; background: rgba(0, 8, 24, .5);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, .6), 0 1px 0 rgba(255, 255, 255, .07);
+}
+.mn-bal .mg-bal-label { font-size: .54rem; }
+.mn-bal .mg-balance { font-size: .64rem; white-space: nowrap; }
+.mn-bal .mg-balance b { font-size: .96rem; }
+/* below ~420px there is no room for "Rendo ": the title reads "Mines", as in the layout spec */
+@media (max-width: 419px) { .mn-brandword { display: none; } }
+@media (max-width: 359px) {
+  .mg-header { gap: 5px; padding: 0 8px; }
+  .mg-header .mg-icon-btn { width: 32px; height: 32px; }
+  .mn-logo { width: 22px; height: 22px; }
+  .mn-title { font-size: .95rem; gap: 6px; }
+  .mn-bal { padding: 3px 7px; }
+  .mn-bal .mg-balance b { font-size: .9rem; }
+}
+
+/* ---------- page column ---------- */
+.mn-main {
+  max-width: 480px; margin: 0 auto; padding: 12px 14px 0; display: flex; flex-direction: column; gap: 12px;
+  min-height: calc(100vh - 66px - var(--safe-bottom));
+  min-height: calc(100dvh - 66px - var(--safe-bottom));
+}
+.mn-info { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mn-select {
+  -webkit-appearance: none; appearance: none; height: 40px; padding: 0 36px 0 14px; cursor: pointer;
+  border: 1px solid rgba(140, 195, 255, .35); border-radius: 12px; color: #fff; font: 800 .92rem var(--ff);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23d6e8ff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>") right 12px center / 12px no-repeat,
+    linear-gradient(180deg, #164b8f 0%, #0b2f62 52%, #072550 100%);
+  box-shadow: inset 0 1px 0 rgba(200, 228, 255, .35), inset 0 -2px 0 rgba(0, 0, 0, .3), 0 3px 0 #041633, 0 6px 12px rgba(0, 0, 0, .35);
+}
+.mn-select option { background: #082b57; color: #fff; }
+.mn-select:disabled { opacity: .55; cursor: not-allowed; }
+/* the gold "Next" plate, lettering pressed into the metal */
+.mn-next {
+  display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px 0 12px; border-radius: 999px;
+  background: var(--mn-gold); color: #3d2600; font-size: .92rem; font-weight: 800; white-space: nowrap;
+  text-shadow: 0 1px 0 rgba(255, 245, 200, .7);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .95), inset 0 -2px 0 rgba(150, 90, 0, .4), 0 0 0 1px rgba(120, 70, 0, .55),
+    0 3px 0 #9a6400, 0 7px 14px rgba(0, 0, 0, .38), 0 0 18px rgba(255, 196, 0, .25);
+}
+.mn-next svg { width: 17px; height: 17px; color: #8a5200; filter: drop-shadow(0 1px 0 rgba(255, 240, 190, .8)); }
+.mn-next b { font-weight: 900; font-variant-numeric: tabular-nums; }
+
+/* ---------- the board: a chrome rim with a gold trim line, a dark well, a socket under every tile ---------- */
+.mn-board {
+  position: relative; padding: 11px; border-radius: 26px; border: 3px solid transparent;
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(90, 160, 255, .16), transparent 62%) padding-box,
+    linear-gradient(180deg, #0b2752, #061733 60%, #04112a) padding-box,
+    linear-gradient(155deg, #e2f0ff 0%, #6fa3e6 16%, #1d4f95 42%, #0b2b5a 66%, #7cb0f0 100%) border-box;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .7), 0 22px 42px rgba(0, 0, 0, .55), 0 0 70px rgba(40, 120, 255, .22),
+    inset 0 5px 16px rgba(0, 0, 0, .7), inset 0 0 0 1px rgba(255, 255, 255, .04);
+}
+.mn-board::before {
+  content: ""; position: absolute; inset: 4px; border-radius: 19px; pointer-events: none;
+  border: 1px solid rgba(255, 214, 130, .22); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35);
+}
+/* the blast lights up the board around it */
+.mn-board::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at var(--hx, 50%) var(--hy, 50%), rgba(255, 140, 40, .55), rgba(255, 60, 20, .18) 30%, transparent 62%);
+}
+.mn-board.is-hit::after { animation: mn-glare 1s ease-out .26s both; }
+@keyframes mn-glare { 0% { opacity: 0; } 18% { opacity: 1; } 100% { opacity: 0; } }
+.mn-grid { position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; }
+.mn-grid.no-anim .mn-flip { transition: none !important; }
+.mn-board.is-shaking { animation: mn-shake .5s .26s; }
+@keyframes mn-shake {
+  12% { transform: translate(-5px, 2px) rotate(-.4deg); } 26% { transform: translate(5px, -3px) rotate(.4deg); }
+  42% { transform: translate(-3px, -2px); } 58% { transform: translate(3px, 3px); } 78% { transform: translate(-1px, 1px); }
+}
+
+.mn-tile {
+  position: relative; aspect-ratio: 1; padding: 0; border: 0; background: none; cursor: pointer; perspective: 540px;
+  border-radius: 14px; -webkit-tap-highlight-color: transparent;
+}
+/* the socket the tile sits in */
+.mn-tile::before {
+  content: ""; position: absolute; inset: -2px -2px 0; z-index: -1; border-radius: 15px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, .55), rgba(0, 0, 0, .3));
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, .7), 0 1px 0 rgba(255, 255, 255, .07);
+}
+.mn-tile:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; z-index: 6; }
+.mn-tile.is-boom { z-index: 5; }
+/* the face sits 5px up: the tile's thickness shows underneath */
+.mn-flip {
+  position: absolute; inset: 0 0 5px; transform-style: preserve-3d;
+  transition: transform .52s cubic-bezier(.35, .1, .25, 1); transition-delay: var(--d, 0ms);
+}
+.mn-tile.is-open .mn-flip { transform: rotateY(180deg); }
+.mn-face {
+  position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; border-radius: 13px;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+}
+
+/* covered: a glossy navy keycap with grain, a curved sheen across the top, and a small lit gem in a ring */
+.mn-up {
+  background:
+    radial-gradient(150% 85% at 50% -24%, rgba(255, 255, 255, .27) 0 47%, rgba(255, 255, 255, 0) 60%),
+    var(--mn-grain) 0 0 / 96px 96px,
+    linear-gradient(160deg, #3080d8 0%, #1b58a8 40%, #103f80 74%, #0b3067 100%);
+  background-blend-mode: normal, soft-light, normal;
+  box-shadow: inset 0 2px 0 rgba(200, 230, 255, .6), inset 0 -2px 0 rgba(0, 18, 50, .55), inset 2px 0 0 rgba(160, 210, 255, .14),
+    inset -2px 0 0 rgba(0, 20, 60, .3), 0 4px 0 #0b2856, 0 5px 0 #061936, 0 9px 12px rgba(0, 0, 0, .5);
+  transition: filter .15s ease, translate .1s ease, box-shadow .1s ease;
+}
+.mn-up::after {
+  content: ""; width: 14%; aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f2f9ff 0 12%, #93c6ff 34%, #3479d9 64%, #143f80 100%);
+  box-shadow: 0 0 0 3px rgba(0, 24, 66, .38), 0 0 0 4px rgba(170, 215, 255, .14), 0 0 10px 2px rgba(120, 185, 255, .5);
+}
+/* now and then a light sweeps across the covered tiles, corner to corner */
+.mn-up::before {
+  content: ""; position: absolute; inset: -30%; pointer-events: none;
+  background: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, .26) 50%, transparent 58%);
+  transform: translateX(-120%); animation: mn-sweep 7s ease-in-out infinite; animation-delay: calc(1.2s + var(--i, 0) * 90ms);
+}
+@keyframes mn-sweep { 0%, 74% { transform: translateX(-120%); } 90%, 100% { transform: translateX(120%); } }
+.mn-board[data-live="true"] .mn-tile:not(.is-open):active .mn-up {
+  translate: 0 3px; box-shadow: inset 0 2px 0 rgba(200, 230, 255, .5), inset 0 -2px 0 rgba(0, 18, 50, .55), 0 1px 0 #0b2856, 0 2px 0 #061936, 0 4px 6px rgba(0, 0, 0, .45);
+}
+@media (hover: hover) {
+  .mn-board[data-live="true"] .mn-tile:not(.is-open):hover .mn-up { filter: brightness(1.18) saturate(1.1); translate: 0 -1px; }
+}
+.mn-board:not([data-live="true"]) .mn-tile { cursor: default; }
+
+/* Auto Game: the tiles you've lined up get a glowing gold ring and a numbered gold coin */
+.mn-tile.is-pick .mn-up {
+  box-shadow: inset 0 0 0 2px #ffd54a, inset 0 2px 0 rgba(255, 245, 200, .7), 0 0 0 1px #8a5c00, 0 0 16px 2px rgba(255, 200, 40, .6),
+    0 4px 0 #0b2856, 0 5px 0 #061936, 0 9px 12px rgba(0, 0, 0, .5);
+}
+.mn-order {
+  position: absolute; top: -6px; left: -6px; z-index: 4; min-width: 21px; height: 21px; padding: 0 5px; display: grid; place-items: center;
+  border-radius: 999px; background: var(--mn-gold); color: #3d2600; font-size: .72rem; font-weight: 900;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 0 0 1px #8a5c00, 0 2px 5px rgba(0, 0, 0, .55);
+}
+.mn-order:empty, .mn-tile.is-open .mn-order { display: none; }
+
+/* ---------- opened tiles ---------- */
+.mn-down { transform: rotateY(180deg); }
+.mn-down svg { position: relative; display: block; width: 70%; height: 70%; }
+/* a star: glossy amber, glowing, with slow rays behind the star */
+.mn-tile.is-star .mn-down {
+  background:
+    radial-gradient(150% 85% at 50% -24%, rgba(255, 255, 255, .42) 0 46%, rgba(255, 255, 255, 0) 60%),
+    var(--mn-grain) 0 0 / 96px 96px,
+    radial-gradient(circle at 50% 58%, #ffd57e 0%, #ffa526 38%, #f47a00 70%, #d65a00 100%);
+  background-blend-mode: normal, soft-light, normal;
+  box-shadow: inset 0 2px 0 rgba(255, 245, 210, .85), inset 0 -2px 0 rgba(150, 50, 0, .55), 0 4px 0 #a54300, 0 5px 0 #7a3000,
+    0 0 0 2px rgba(255, 214, 140, .7), 0 0 24px 3px rgba(255, 140, 0, .7), 0 10px 14px rgba(0, 0, 0, .4);
+}
+.mn-tile.is-star .mn-down svg { filter: drop-shadow(0 0 5px rgba(255, 255, 255, .85)) drop-shadow(0 2px 2px rgba(140, 50, 0, .5)); }
+.mn-tile.is-star:not(.is-ghost) .mn-down::before {
+  content: ""; position: absolute; inset: -40%; pointer-events: none;
+  background: repeating-conic-gradient(rgba(255, 250, 220, .3) 0deg 7deg, transparent 7deg 22deg);
+  -webkit-mask-image: radial-gradient(circle, #000 18%, transparent 58%);
+  mask-image: radial-gradient(circle, #000 18%, transparent 58%);
+  animation: mn-spin 14s linear infinite;
+}
+@keyframes mn-spin { to { transform: rotate(360deg); } }
+/* a mine shown at the end of the round: a gunmetal tile, a faint red glow under the bomb */
+.mn-tile.is-mine .mn-down {
+  background:
+    radial-gradient(150% 85% at 50% -24%, rgba(255, 255, 255, .13) 0 46%, rgba(255, 255, 255, 0) 60%),
+    radial-gradient(circle at 50% 66%, rgba(255, 70, 40, .26), transparent 55%),
+    var(--mn-grain) 0 0 / 96px 96px,
+    linear-gradient(160deg, #343c4f 0%, #1c2231 52%, #0d1019 100%);
+  background-blend-mode: normal, normal, soft-light, normal;
+  box-shadow: inset 0 2px 0 rgba(220, 230, 255, .2), inset 0 -2px 0 rgba(0, 0, 0, .55), 0 4px 0 #0a0d14, 0 5px 0 #040509, 0 9px 12px rgba(0, 0, 0, .5);
+}
+.mn-tile.is-mine .mn-down svg { filter: drop-shadow(0 3px 3px rgba(0, 0, 0, .6)); }
+/* the fuse still burns: a spark flickers on its tip */
+.mn-fuse {
+  position: absolute; left: 75.5%; top: 21%; width: 13%; aspect-ratio: 1; margin: -6.5% 0 0 -6.5%; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, #fff 0 18%, #ffe066 34%, rgba(255, 140, 0, .55) 56%, transparent 72%);
+  animation: mn-flicker .32s steps(2) infinite alternate;
+}
+@keyframes mn-flicker { from { transform: scale(.75); opacity: .75; } to { transform: scale(1.15); opacity: 1; } }
+/* the mine that was hit: a hot red tile with the burst left on it */
+.mn-tile.is-boom .mn-down {
+  background:
+    radial-gradient(150% 85% at 50% -24%, rgba(255, 255, 255, .32) 0 46%, rgba(255, 255, 255, 0) 60%),
+    var(--mn-grain) 0 0 / 96px 96px,
+    radial-gradient(circle at 50% 50%, #ff8a66 0%, #ff3b2e 30%, #d01626 62%, #7d000e 100%);
+  background-blend-mode: normal, soft-light, normal;
+  box-shadow: inset 0 2px 0 rgba(255, 220, 210, .65), inset 0 -2px 0 rgba(70, 0, 8, .55), 0 4px 0 #7a000e, 0 5px 0 #4d0008,
+    0 0 26px 4px rgba(255, 60, 30, .8), 0 9px 12px rgba(0, 0, 0, .45);
+}
+.mn-tile.is-boom .mn-down svg { display: none; }
+/* the tiles you didn't open, shown at the end: they stay navy and matt, with the star or bomb faded into them,
+   so the stars you found and the mine you hit stand out */
+.mn-tile.is-ghost .mn-down {
+  background:
+    radial-gradient(150% 85% at 50% -24%, rgba(255, 255, 255, .1) 0 46%, rgba(255, 255, 255, 0) 60%),
+    var(--mn-grain) 0 0 / 96px 96px,
+    linear-gradient(160deg, #1b4b8c 0%, #113769 55%, #0b2852 100%);
+  background-blend-mode: normal, soft-light, normal;
+  box-shadow: inset 0 2px 0 rgba(170, 210, 255, .3), inset 0 -2px 0 rgba(0, 14, 40, .5), 0 4px 0 #0a2147, 0 5px 0 #06152f, 0 8px 10px rgba(0, 0, 0, .45);
+}
+.mn-tile.is-ghost.is-star .mn-down svg { opacity: .5; filter: sepia(.3) saturate(1.6) hue-rotate(-12deg); }
+.mn-tile.is-ghost.is-mine .mn-down { background-color: #0d1a33; }
+.mn-tile.is-ghost.is-mine .mn-down svg { opacity: .85; }
+.mn-tile.is-fresh .mn-down { animation: mn-pop .5s .3s both; }
+@keyframes mn-pop {
+  0%, 100% { transform: rotateY(180deg) scale(1); }
+  45% { transform: rotateY(180deg) scale(1.14); }
+}
+
+/* a new star: glints flash around it and the multiplier floats up */
+.mn-glint {
+  position: absolute; z-index: 4; width: 34%; aspect-ratio: 1; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle, #fff 0 8%, rgba(255, 245, 210, .9) 14%, transparent 42%);
+  clip-path: polygon(50% 0, 58% 42%, 100% 50%, 58% 58%, 50% 100%, 42% 58%, 0 50%, 42% 42%);
+  animation: mn-glint .75s ease-out both;
+}
+@keyframes mn-glint {
+  0% { opacity: 0; transform: scale(.2) rotate(0); }
+  35% { opacity: 1; transform: scale(1) rotate(45deg); }
+  100% { opacity: 0; transform: scale(.4) rotate(90deg); }
+}
+.mn-float {
+  position: absolute; left: 50%; top: 2%; z-index: 7; pointer-events: none; white-space: nowrap;
+  font-size: .86rem; font-weight: 900; color: #ffe27a; letter-spacing: .02em;
+  text-shadow: 0 1px 0 #7a4a00, 0 0 8px rgba(255, 190, 40, .9), 0 2px 4px rgba(0, 0, 0, .8);
+  animation: mn-float 1s ease-out .3s both;
+}
+@keyframes mn-float {
+  0% { opacity: 0; transform: translate(-50%, 6px) scale(.8); }
+  20% { opacity: 1; transform: translate(-50%, -6px) scale(1.08); }
+  100% { opacity: 0; transform: translate(-50%, -30px) scale(1); }
+}
+
+/* ---------- the explosion: a white flash, the fireball (10 frames), a shockwave, sparks, smoke, and the burst left behind ---------- */
+.mn-flash, .mn-fire, .mn-shock, .mn-smoke, .mn-blast {
+  position: absolute; left: 50%; top: 50%; pointer-events: none; transform: translate(-50%, -50%);
+}
+.mn-flash {
+  z-index: 4; width: 260%; aspect-ratio: 1; border-radius: 50%; opacity: 0;
+  background: radial-gradient(circle, #fff 0 14%, rgba(255, 244, 200, .92) 24%, rgba(255, 170, 60, .35) 44%, transparent 64%);
+  animation: mn-flash .5s ease-out .26s both;
+}
+@keyframes mn-flash { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.25); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.25); } }
+.mn-fire {
+  z-index: 5; width: 300%; aspect-ratio: 1; margin-top: -12%; opacity: 0;
+  background: url("../img/mines-blast.webp") 0 0 / 1000% 100% no-repeat;
+  animation: mn-fire .8s steps(9) .28s both, mn-fire-show .8s linear .28s both;
+}
+@keyframes mn-fire { from { background-position: 0 0; } to { background-position: 100% 0; } }
+@keyframes mn-fire-show { 0%, 96% { opacity: 1; } 100% { opacity: 0; } }
+.mn-shock {
+  z-index: 3; width: 100%; aspect-ratio: 1; border-radius: 50%; opacity: 0;
+  border: 3px solid rgba(255, 228, 170, .9); box-shadow: 0 0 14px rgba(255, 170, 60, .8), inset 0 0 10px rgba(255, 170, 60, .6);
+  animation: mn-shock .6s ease-out .3s both;
+}
+@keyframes mn-shock { 0% { opacity: 1; transform: translate(-50%, -50%) scale(.3); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(3.4); border-width: 1px; } }
+.mn-smoke {
+  z-index: 4; width: 150%; aspect-ratio: 1; opacity: 0;
+  background: url("../img/mines-smoke.webp") center / contain no-repeat;
+  animation: mn-smoke 2s ease-out both; animation-delay: var(--sd, .75s);
+}
+@keyframes mn-smoke {
+  0% { opacity: 0; transform: translate(calc(-50% + var(--sx, 0px)), -50%) scale(.6) rotate(0); }
+  25% { opacity: .7; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--sx, 0px)), -170%) scale(1.6) rotate(var(--sr, 40deg)); }
+}
+.mn-spark {
+  position: absolute; left: 50%; top: 50%; z-index: 6; width: var(--s, 5px); height: var(--s, 5px); margin: calc(var(--s, 5px) / -2) 0 0 calc(var(--s, 5px) / -2);
+  border-radius: 50%; pointer-events: none; opacity: 0;
+  background: #fff1b8; box-shadow: 0 0 6px 1px #ff9800, 0 0 2px #fff;
+  animation: mn-spark var(--t, .8s) cubic-bezier(.15, .7, .35, 1) .3s both;
+}
+@keyframes mn-spark {
+  0% { opacity: 1; transform: rotate(var(--a)) translateY(0) scale(1); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--a)) translateY(calc(var(--r, 60px) * -1)) scale(.25); }
+}
+.mn-blast { z-index: 3; width: 100%; aspect-ratio: 1; opacity: 0; transform: translate(-50%, -50%) scale(.3); }
+.mn-blast svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 8px rgba(255, 150, 30, .9)); }
+.mn-tile.is-boom .mn-blast { animation: mn-settle .45s ease-out .82s both, mn-embers 1.2s ease-in-out 1.3s 4 alternate; }
+@keyframes mn-settle { from { opacity: 0; transform: translate(-50%, -50%) scale(.3) rotate(-10deg); } to { opacity: 1; transform: translate(-50%, -50%) scale(.95) rotate(0); } }
+@keyframes mn-embers { from { filter: brightness(1); } to { filter: brightness(1.25) saturate(1.2); } }
+
+/* ---------- controls ---------- */
+.mn-controls { margin-top: auto; display: grid; gap: 12px; }
+.mn-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* glossy, raised buttons that press down */
+.mn-random, .mn-go { position: relative; overflow: hidden; isolation: isolate; }
+.mn-random::before, .mn-go::before {
+  content: ""; position: absolute; left: 4%; right: 4%; top: 3px; height: 44%; z-index: -1; pointer-events: none;
+  border-radius: 999px 999px 40% 40% / 999px 999px 14px 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .5), rgba(255, 255, 255, .06));
+}
+.mn-random {
+  min-width: 108px; height: 44px; padding: 0 20px; border: 0; border-radius: 999px; cursor: pointer; color: #fff;
+  font-size: .9rem; font-weight: 900; letter-spacing: .07em; text-shadow: 0 1px 0 rgba(0, 30, 90, .6);
+  background: linear-gradient(180deg, #5cb4ff 0%, #2a8aec 46%, #1868cc 54%, #1257b0 100%);
+  box-shadow: inset 0 1px 0 rgba(220, 240, 255, .8), inset 0 -2px 0 rgba(0, 30, 90, .4), 0 4px 0 #0b3d80, 0 5px 0 #072a5a, 0 9px 14px rgba(0, 0, 0, .4);
+  transition: transform .08s ease, box-shadow .08s ease, filter .15s ease;
+}
+.mn-round {
+  flex: none; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; cursor: pointer; color: #e8f2ff;
+  border: 0; border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #7aa6e0 0%, #3a68ad 42%, #1c3f78 78%, #12305f 100%);
+  box-shadow: inset 0 1px 0 rgba(220, 238, 255, .7), inset 0 -2px 0 rgba(0, 10, 40, .45), 0 0 0 1px rgba(0, 0, 0, .45),
+    0 4px 0 #0a2550, 0 5px 0 #061936, 0 9px 14px rgba(0, 0, 0, .4);
+  transition: transform .08s ease, box-shadow .08s ease;
+}
+.mn-round .ic { width: 22px; height: 22px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .5)); }
+.mn-random:active:not([aria-disabled="true"]), .mn-round:active:not([aria-disabled="true"]) {
+  transform: translateY(4px); box-shadow: inset 0 1px 0 rgba(220, 240, 255, .6), inset 0 -2px 0 rgba(0, 30, 90, .4), 0 1px 0 #0b3d80, 0 3px 6px rgba(0, 0, 0, .4);
+}
+.mn-random[aria-disabled="true"], .mn-round[aria-disabled="true"], .mn-switch[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.mn-switch {
+  display: inline-flex; align-items: center; gap: 10px; padding: 6px 0; border: 0; background: none; cursor: pointer;
+  color: #fff; font: 800 .86rem var(--ff); text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+}
+.mn-track {
+  position: relative; flex: none; width: 50px; height: 28px; border-radius: 999px;
+  background: linear-gradient(180deg, #021230, #0a2a56); border: 1px solid rgba(140, 195, 255, .3);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, .7), 0 1px 0 rgba(255, 255, 255, .08); transition: background .2s ease, box-shadow .2s ease;
+}
+.mn-thumb {
+  position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffffff, #d6e2f2 60%, #a9bbd4);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .55), inset 0 -1px 1px rgba(0, 0, 0, .2); transition: transform .2s ease;
+}
+.mn-switch[aria-checked="true"] .mn-track {
+  background: linear-gradient(180deg, #1f7be0, #3d9bff); border-color: #8cc6ff;
+  box-shadow: inset 0 2px 4px rgba(0, 30, 90, .5), 0 0 12px rgba(60, 160, 255, .55);
+}
+.mn-switch[aria-checked="true"] .mn-thumb { transform: translateX(22px); }
+
+/* BET (green) turns into CASH OUT (orange) during a round */
+.mn-go {
+  display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 64px; padding: 0 16px;
+  border: 0; border-radius: 18px; cursor: pointer; color: #fff; font: 900 1.5rem var(--ff); letter-spacing: .08em;
+  text-shadow: 0 2px 0 rgba(0, 80, 25, .55);
+  background: linear-gradient(180deg, #6cf392 0%, #34d25e 44%, #1bb246 54%, #12963a 100%);
+  box-shadow: inset 0 2px 0 rgba(225, 255, 230, .8), inset 0 -3px 0 rgba(0, 70, 25, .45), 0 6px 0 #0c6d2a, 0 7px 0 #08531f, 0 14px 22px rgba(0, 0, 0, .45);
+  transition: transform .08s ease, box-shadow .08s ease, filter .15s ease, opacity .2s ease;
+}
+.mn-go::before { border-radius: 14px 14px 50% 50% / 14px 14px 18px 18px; }
+.mn-go .ic { width: 26px; height: 26px; filter: drop-shadow(0 2px 0 rgba(0, 80, 25, .55)); }
+.mn-go .ic .f { fill: #fff; }
+.mn-go b { font-weight: 900; }
+.mn-go:hover { filter: brightness(1.06); }
+.mn-go:active:not([aria-disabled="true"]) {
+  transform: translateY(5px); box-shadow: inset 0 2px 0 rgba(225, 255, 230, .7), inset 0 -3px 0 rgba(0, 70, 25, .45), 0 1px 0 #0c6d2a, 0 2px 0 #08531f, 0 5px 10px rgba(0, 0, 0, .4);
+}
+.mn-go[data-state="cash"] {
+  flex-direction: column; gap: 0; color: #3a1600; letter-spacing: .06em; text-shadow: 0 1px 0 rgba(255, 230, 180, .55);
+  background: linear-gradient(180deg, #ffd27a 0%, #ffa526 44%, #ff8a00 54%, #e87300 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 245, 215, .85), inset 0 -3px 0 rgba(140, 60, 0, .45), 0 6px 0 #a34a00, 0 7px 0 #7a3600, 0 14px 22px rgba(0, 0, 0, .45);
+}
+.mn-go[data-state="cash"]:active:not([aria-disabled="true"]) {
+  box-shadow: inset 0 2px 0 rgba(255, 245, 215, .75), inset 0 -3px 0 rgba(140, 60, 0, .45), 0 1px 0 #a34a00, 0 2px 0 #7a3600, 0 5px 10px rgba(0, 0, 0, .4);
+}
+/* once there is something to take, the button glows to draw the eye */
+.mn-go.is-ready { animation: mn-ready 1.5s ease-in-out infinite; }
+@keyframes mn-ready { 50% { filter: brightness(1.08); box-shadow: inset 0 2px 0 rgba(255, 245, 215, .85), inset 0 -3px 0 rgba(140, 60, 0, .45), 0 6px 0 #a34a00, 0 7px 0 #7a3600, 0 14px 22px rgba(0, 0, 0, .45), 0 0 26px 4px rgba(255, 170, 40, .55); } }
+.mn-go[data-state="cash"] b { font-size: 1.3rem; line-height: 1.1; }
+.mn-go[data-state="cash"] span { font-size: .95rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mn-go[aria-disabled="true"] { opacity: .55; cursor: not-allowed; filter: none; }
+
+/* the bet: a recessed panel, "Bet GHS 0.10" with − + and the chip stack as small raised keys */
+.mn-betbox {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 8px 8px 12px; border-radius: 16px;
+  background: linear-gradient(180deg, #011230, #03214b); border: 1px solid rgba(140, 195, 255, .16);
+  box-shadow: inset 0 2px 7px rgba(0, 0, 0, .65), 0 1px 0 rgba(255, 255, 255, .08);
+}
+.mn-bet-label { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-weight: 800; white-space: nowrap; }
+.mn-bet-label span { font-size: .85rem; color: var(--muted); }
+/* the amount shrinks a little on narrow phones, so even a 10,000.00 bet fits beside the keys */
+.mn-bet-label b { font-size: clamp(1rem, 4.6vw, 1.35rem); font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+.mn-bet-ctl { display: flex; gap: 8px; }
+.mn-bet-ctl button {
+  width: 42px; height: 40px; display: grid; place-items: center; padding: 0; cursor: pointer; color: #fff; border: 0; border-radius: 11px;
+  background: linear-gradient(180deg, #2c5e9e 0%, #1a467f 55%, #133a6c 100%);
+  box-shadow: inset 0 1px 0 rgba(200, 228, 255, .45), inset 0 -2px 0 rgba(0, 10, 40, .35), 0 0 0 1px rgba(0, 0, 0, .4), 0 3px 0 #0a2550, 0 6px 10px rgba(0, 0, 0, .35);
+  transition: transform .08s ease, box-shadow .08s ease;
+}
+.mn-bet-ctl button:hover:not(:disabled) { filter: brightness(1.12); }
+.mn-bet-ctl button:active:not(:disabled) { transform: translateY(3px); box-shadow: inset 0 1px 0 rgba(200, 228, 255, .35), 0 0 0 1px rgba(0, 0, 0, .4), 0 0 0 #0a2550, 0 2px 4px rgba(0, 0, 0, .35); }
+.mn-bet-ctl button:disabled { opacity: .4; cursor: not-allowed; }
+.mn-bet-ctl .ic { width: 20px; height: 20px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .5)); }
+.mines-page .mg-note { padding-bottom: 0; }
+
+/* the bet sheet: chips and quick buttons */
+.mn-sheet .mg-chips { flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 14px; }
+.mn-sheet .mg-chip { width: 52px; font-size: .78rem; }
+.mn-quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+.mn-quick button {
+  min-height: 46px; border: 0; border-radius: 12px; color: #fff; font: 900 1rem var(--ff); cursor: pointer;
+  background: linear-gradient(180deg, #2c5e9e 0%, #1a467f 55%, #133a6c 100%);
+  box-shadow: inset 0 1px 0 rgba(200, 228, 255, .45), 0 0 0 1px rgba(0, 0, 0, .4), 0 3px 0 #0a2550, 0 6px 10px rgba(0, 0, 0, .35);
+}
+.mn-quick button:disabled { opacity: .4; cursor: not-allowed; }
+.mn-sheet .mg-limits { margin-bottom: 14px; }
+
+@media (max-width: 359px) {
+  .mn-bet-ctl { gap: 6px; }
+  .mn-bet-ctl button { width: 36px; }
+  .mn-bet-label span { font-size: .75rem; }
+  .mn-grid { gap: 7px; }
+  .mn-board { padding: 9px; border-radius: 22px; }
+  .mn-select, .mn-next { font-size: .84rem; }
+  .mn-random { min-width: 92px; padding: 0 14px; }
+  .mn-switch { gap: 7px; font-size: .78rem; }
+  .mn-go { min-height: 58px; }
+}
+@media (max-height: 700px) { .mn-main { gap: 9px; } .mn-controls { gap: 9px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-board.is-shaking, .mn-board.is-hit::after, .mn-tile.is-fresh .mn-down, .mn-up::before, .mn-go.is-ready, .mn-fuse,
+  .mn-tile.is-star:not(.is-ghost) .mn-down::before { animation: none; }
+  .mn-up::before { display: none; }
+  .mn-spark, .mn-flash, .mn-fire, .mn-shock, .mn-smoke, .mn-glint, .mn-float { display: none; }
+  .mn-tile.is-boom .mn-blast { animation: none; opacity: 1; transform: translate(-50%, -50%) scale(.95); }
+}

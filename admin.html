@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#0d0e10">
+<meta name="robots" content="noindex">
+<title>Admin | RendoWin</title>
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/admin.css?v=1">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+</head>
+<body class="adm-body">
+
+<header class="adm-top">
+  <button class="adm-icon-btn adm-menu-btn" type="button" id="admMenuBtn" aria-controls="admTabs" aria-expanded="false" aria-label="Sections menu" hidden><i data-icon="menu"></i><span class="adm-menu-dot" id="admMenuDot" hidden></span></button>
+  <a class="adm-brand" href="index.html"><img src="assets/img/rendowin-mark.svg" alt="" width="26" height="26"><span>RendoWin</span><b>Admin</b></a>
+  <span class="adm-top-who" id="admWho"></span>
+  <a class="adm-top-link" href="me.html"><i data-icon="chevronLeft"></i>My account</a>
+  <button class="adm-icon-btn" type="button" id="admReload" aria-label="Refresh"><i data-icon="refresh"></i></button>
+</header>
+
+<div class="adm-shell">
+  <!-- the sections, grouped: a sidebar on a computer, a menu that slides in on a phone -->
+  <nav class="adm-nav" id="admTabs" aria-label="Admin sections" hidden>
+    <div class="adm-nav-top"><span>Sections</span><button class="adm-icon-btn" type="button" data-nav-close aria-label="Close the menu"><i data-icon="close"></i></button></div>
+    <button type="button" data-tab="overview" aria-current="page"><i data-icon="grid"></i><span>Overview</span></button>
+    <p class="adm-nav-group">Players &amp; money</p>
+    <button type="button" data-tab="players"><i data-icon="user"></i><span>Players</span></button>
+    <button type="button" data-tab="money"><i data-icon="receipt"></i><span>Money</span></button>
+    <button type="button" data-tab="withdrawals"><i data-icon="withdraw"></i><span>Withdrawals</span><span class="badge" data-badge="withdrawals" hidden></span></button>
+    <p class="adm-nav-group">Games</p>
+    <button type="button" data-tab="games"><i data-icon="slots"></i><span>Games</span></button>
+    <button type="button" data-tab="mines"><i data-icon="live"></i><span>Mines Signal</span></button>
+    <p class="adm-nav-group">Business</p>
+    <button type="button" data-tab="partners"><i data-icon="star"></i><span>Partners</span><span class="badge" data-badge="partners" hidden></span></button>
+    <button type="button" data-tab="regional"><i data-icon="shield"></i><span>Ghana admins</span></button>
+    <p class="adm-nav-group">Help</p>
+    <button type="button" data-tab="support"><i data-icon="chat"></i><span>Support</span><span class="badge" data-badge="support" hidden></span></button>
+    <span class="adm-nav-space"></span>
+    <div class="adm-nav-foot">
+      <span class="adm-nav-who" id="admNavWho"></span>
+      <a class="adm-nav-exit" href="me.html"><i data-icon="chevronLeft"></i><span>Back to my account</span></a>
+    </div>
+  </nav>
+  <div class="adm-scrim" data-nav-close></div>
+
+  <main class="adm-wrap">
+    <div id="admGate"></div>
+    <header class="adm-head" id="admHead" hidden>
+      <h1 id="admTitle">Overview</h1>
+      <div class="adm-head-actions" id="admActions"></div>
+      <p id="admLead"></p>
+    </header>
+    <div id="msg" aria-live="polite"></div>
+    <section class="adm-panel" data-panel="overview" aria-labelledby="admTitle" hidden></section>
+    <section class="adm-panel" data-panel="players" aria-labelledby="admTitle" hidden></section>
+    <section class="adm-panel" data-panel="money" aria-labelledby="admTitle" hidden></section>
+    <section class="adm-panel" data-panel="withdrawals" aria-labelledby="admTitle" hidden></section>
+    <section class="adm-panel" data-panel="games" aria-labelledby="admTitle" hidden></section>
+    <section class="adm-panel" data-panel="mines" aria-labelledby="admTitle" hidden></section>
+    <section class="adm-panel" data-panel="partners" aria-labelledby="admTitle" hidden></section>
+    <section class="adm-panel" data-panel="regional" aria-labelledby="admTitle" hidden></section>
+    <section class="adm-panel" data-panel="support" aria-labelledby="admTitle" hidden></section>
+  </main>
+</div>
+
+<script src="assets/js/data.js?v=50"></script>
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/admin.js?v=43"></script>
+</body>
+</html>

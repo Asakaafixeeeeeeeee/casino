@@ -1,0 +1,253 @@
+/* Rendo Olympus — sunset sky (canvas), gold logo and status banner, Zeus above the reels, the 6×5 grid in an
+   ornate gold frame with rubies between two gold pillars, the Buy / Ante feature boxes, the round spin button with
+   − and +, the credit/bet line, and the winged win badge. Also sets the shared mini-game colours (minigame.css). */
+.olympus-page {
+  --ol-gold: linear-gradient(180deg, #fff6c9 0%, #f7cf55 22%, #a86f12 48%, #ffe28a 62%, #c88d1c 80%, #6e4306 100%);
+  --ol-gold-h: linear-gradient(90deg, #6e4306, #f7cf55 20%, #fff6c9 35%, #c88d1c 55%, #ffe28a 75%, #6e4306);
+  --ol-ink: #ffe9a8;
+  --mg-accent: #f7cf55;
+  --mg-line: rgba(255, 215, 120, .2);
+  --mg-line-strong: rgba(255, 215, 120, .45);
+  --mg-bar: rgba(22, 10, 40, .82);
+  --mg-raised: #26143e;
+  --mg-hover: #3a2160;
+  --mg-cover: rgba(22, 10, 40, .92);
+  --mg-note: rgba(255, 235, 200, .6);
+  background: #1b0f3a;
+  background-color: #1b0f3a;
+}
+body.olympus-page { padding-bottom: calc(14px + var(--safe-bottom)); overflow-x: hidden; }
+.ol-sky { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; }
+.olympus-page .mg-title { font-family: Georgia, "Times New Roman", serif; letter-spacing: .04em; }
+
+.ol-main { max-width: 560px; margin: 0 auto; padding: 4px 10px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+
+/* ---------- logo, banner, Zeus ---------- */
+.ol-top { position: relative; display: grid; justify-items: center; gap: 4px; padding: 6px 0 2px; min-height: 96px; }
+.ol-logo {
+  display: grid; justify-items: center; line-height: .9; font-family: Georgia, "Times New Roman", serif; font-weight: 900;
+  filter: drop-shadow(0 3px 0 #4a2a00) drop-shadow(0 6px 14px rgba(0, 0, 0, .6));
+  margin-right: 70px;
+}
+.ol-logo span, .ol-logo b {
+  background: var(--ol-gold); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.ol-logo span { font-size: .9rem; letter-spacing: .5em; padding-left: .5em; text-transform: uppercase; }
+.ol-logo b { font-size: clamp(1.9rem, 9vw, 2.6rem); letter-spacing: .06em; }
+.ol-banner {
+  margin-right: 70px; padding: 5px 18px; border-radius: 999px; white-space: nowrap; max-width: calc(100% - 80px); overflow: hidden; text-overflow: ellipsis;
+  font: 900 clamp(.72rem, 3.4vw, .9rem)/1.2 var(--ff); letter-spacing: .06em; color: #fff;
+  background: linear-gradient(180deg, rgba(60, 20, 90, .85), rgba(25, 8, 45, .9));
+  border: 1px solid rgba(255, 215, 120, .55); box-shadow: 0 0 18px rgba(255, 190, 80, .25), inset 0 1px 0 rgba(255, 255, 255, .15);
+  text-shadow: 0 0 10px rgba(255, 210, 120, .6);
+}
+.ol-banner.flip { animation: ol-flip .45s ease both; }
+@keyframes ol-flip { from { opacity: 0; transform: translateY(6px) scale(.96); } to { opacity: 1; transform: none; } }
+.ol-zeus {
+  position: absolute; right: -6px; top: -6px; width: 118px; height: 132px; pointer-events: none;
+  -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 62%, transparent 100%); mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 62%, transparent 100%);
+}
+
+/* ---------- the stage ---------- */
+.ol-stage { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ol-frame { grid-column: 1 / -1; grid-row: 1; }
+
+.ol-frame {
+  position: relative; padding: 10px; margin: 0 16px; border-radius: 14px;
+  background: var(--ol-gold-h);
+  box-shadow: 0 0 0 2px #4a2a00, 0 0 0 4px rgba(255, 220, 140, .4), 0 18px 40px rgba(0, 0, 0, .6), 0 0 40px rgba(255, 170, 60, .25);
+}
+.ol-frame::before {   /* the bevel inside the gold */
+  content: ""; position: absolute; inset: 5px; border-radius: 10px; pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(90, 50, 0, .8), inset 0 2px 0 rgba(255, 255, 255, .5);
+}
+.ol-pillar {
+  position: absolute; top: -18px; bottom: -10px; width: 30px; z-index: 2; pointer-events: none;
+  background-size: 100% 100%; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .55));
+}
+.ol-pillar-l { left: -30px; }
+.ol-pillar-r { right: -30px; }
+.ol-ruby {
+  position: absolute; left: var(--x); top: var(--y); z-index: 3; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, #ffd0d6 0 8%, #ff3b55 22%, #b00a22 58%, #4a0010 100%);
+  box-shadow: 0 0 0 3px #c88d1c, 0 0 0 4px #4a2a00, 0 0 12px rgba(255, 40, 70, .7);
+}
+.ol-ruby-sm { width: 14px; height: 14px; margin: -7px 0 0 -7px; }
+
+.ol-grid {
+  position: relative; aspect-ratio: 6 / 5; overflow: hidden; border-radius: 6px;
+  background:
+    linear-gradient(90deg, rgba(255, 220, 140, .08) 1px, transparent 1px) 0 0 / calc(100% / 6) 100%,
+    radial-gradient(ellipse at 50% 30%, rgba(120, 90, 200, .55), transparent 70%),
+    linear-gradient(180deg, #2a1650, #120826);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .6), inset 0 0 30px rgba(0, 0, 0, .6);
+}
+.ol-grid.is-flash::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle, rgba(200, 225, 255, .75), rgba(120, 170, 255, 0) 70%);
+  animation: ol-flash .7s ease-out both;
+}
+@keyframes ol-flash { from { opacity: 1; } to { opacity: 0; } }
+.ol-cell { position: absolute; width: calc(100% / 6); height: 20%; display: grid; place-items: center; will-change: transform; }
+.ol-cell img { width: 92%; height: 92%; object-fit: contain; pointer-events: none; user-select: none; }
+.ol-cell.is-win img { animation: ol-glow .5s ease-in-out infinite alternate; }
+.ol-cell.is-win::before {
+  content: ""; position: absolute; inset: 6%; border-radius: 14px; pointer-events: none;
+  background: radial-gradient(circle, rgba(255, 230, 140, .55), rgba(255, 200, 80, 0) 70%);
+  box-shadow: 0 0 0 2px rgba(255, 220, 120, .8), 0 0 16px rgba(255, 200, 80, .8);
+}
+@keyframes ol-glow { from { transform: scale(1); filter: brightness(1); } to { transform: scale(1.1); filter: brightness(1.35) drop-shadow(0 0 8px #ffd76a); } }
+.ol-cell.is-pop img { animation: ol-pop .33s ease-in forwards; }
+@keyframes ol-pop { to { transform: scale(1.6); opacity: 0; filter: brightness(3) blur(2px); } }
+.ol-cell.is-orb img { animation: ol-float 2.4s ease-in-out infinite; }
+.ol-cell.is-charged img { animation: ol-charge .35s ease-in-out infinite alternate; }
+@keyframes ol-float { 50% { transform: translateY(-4%) scale(1.03); } }
+@keyframes ol-charge { from { transform: scale(1.05); filter: brightness(1.2) drop-shadow(0 0 6px #9cc8ff); } to { transform: scale(1.22); filter: brightness(1.7) drop-shadow(0 0 16px #cfe4ff); } }
+.ol-spark {
+  position: absolute; width: calc(100% / 6); height: 20%; pointer-events: none; z-index: 3;
+}
+.ol-spark::before {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; margin: -3.5px; border-radius: 50%;
+  background: radial-gradient(circle, #fff, #ffd76a 45%, rgba(255, 160, 40, 0) 70%);
+  animation: ol-spark .65s ease-out forwards;
+}
+@keyframes ol-spark { to { transform: translate(var(--dx), var(--dy)) scale(.3); opacity: 0; } }
+
+.ol-tumble {
+  position: absolute; left: 50%; top: -14px; z-index: 4; transform: translateX(-50%); white-space: nowrap;
+  padding: 4px 14px; border-radius: 999px; font: 900 .78rem/1.2 var(--ff); letter-spacing: .06em; color: #fff;
+  background: linear-gradient(180deg, #5a1d8a, #2a0b4a); border: 1px solid rgba(255, 215, 120, .7);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .5);
+}
+.ol-tumble b { color: #ffd76a; font-size: .95rem; font-variant-numeric: tabular-nums; }
+.ol-tumble em { font-style: normal; color: #9cd0ff; }
+.ol-tumble.bump { animation: ol-bump .35s ease; }
+@keyframes ol-bump { 40% { transform: translateX(-50%) scale(1.12); } }
+.ol-fshud {
+  position: absolute; left: 10px; right: 10px; bottom: -16px; z-index: 4; display: flex; justify-content: space-between; gap: 8px;
+  font: 900 .72rem/1.2 var(--ff); letter-spacing: .05em; color: #fff;
+}
+.ol-fshud span { padding: 4px 10px; border-radius: 999px; background: rgba(20, 8, 40, .92); border: 1px solid rgba(255, 215, 120, .6); }
+.ol-fshud b { color: #ffd76a; font-size: .9rem; }
+body.in-free .ol-grid { background:
+    linear-gradient(90deg, rgba(255, 220, 140, .08) 1px, transparent 1px) 0 0 / calc(100% / 6) 100%,
+    radial-gradient(ellipse at 50% 30%, rgba(230, 70, 110, .55), transparent 70%),
+    linear-gradient(180deg, #4a1238, #1a0616); }
+
+/* the spinning reels: a column of symbols streaming down, blurred with speed */
+/* (no CSS blur: it stalls phones; the speed reads from vertically stretched, half-transparent symbols and a shaded column) */
+.ol-strip { position: absolute; top: 0; width: calc(100% / 6); height: 100%; overflow: hidden; }
+.ol-strip::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(10, 4, 24, .75), transparent 22%, transparent 78%, rgba(10, 4, 24, .75));
+}
+.ol-strip-run { display: flex; flex-direction: column; height: 400%; will-change: transform; animation: ol-reel .32s linear infinite; }
+.ol-strip-run img { flex: none; width: 92%; height: 5%; margin: 0 auto; object-fit: contain; opacity: .8; transform: scaleY(1.3); }
+@keyframes ol-reel { from { transform: translateY(-50%); } to { transform: none; } }
+
+/* ---------- Buy / Ante ---------- */
+.ol-feature {
+  position: relative; width: 100%; height: 100%; min-height: 64px; display: grid; justify-items: center; align-content: center; gap: 3px;
+  padding: 8px 6px; border-radius: 12px; cursor: pointer; text-align: center; color: #fff; font-family: var(--ff);
+  background: linear-gradient(180deg, rgba(70, 25, 110, .92), rgba(30, 10, 55, .95));
+  border: 2px solid transparent; background-clip: padding-box;
+  box-shadow: 0 0 0 2px #c88d1c, 0 0 0 3px #4a2a00, 0 10px 22px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .15);
+}
+.ol-feature:hover:not(:disabled) { filter: brightness(1.12); }
+.ol-feature:disabled { cursor: default; filter: grayscale(.7) brightness(.7); }
+.ol-feature-k { font: 900 .78rem/1.1 var(--ff); letter-spacing: .08em; text-transform: uppercase; color: var(--ol-ink); }
+.ol-feature b { font: 900 1.02rem/1 var(--ff); color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(255, 210, 120, .5); }
+.ol-ante { grid-template-columns: 1fr auto; text-align: left; justify-items: start; column-gap: 8px; padding: 8px 10px; }
+.ol-ante .ol-feature-k, .ol-ante .ol-ante-note, .ol-ante b { grid-column: 1; }
+.ol-ante-note { font-size: .64rem; font-weight: 700; color: rgba(255, 235, 200, .75); line-height: 1.15; }
+.ol-toggle { grid-column: 2; grid-row: 1 / span 3; align-self: center; width: 40px; height: 22px; border-radius: 999px; background: #1a0b2e; border: 1px solid rgba(255, 215, 120, .5); position: relative; }
+.ol-toggle span { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #8c7aa8; transition: transform .2s, background .2s; }
+.ol-ante[aria-checked="true"] .ol-toggle { background: #3a7d1e; }
+.ol-ante[aria-checked="true"] .ol-toggle span { transform: translateX(18px); background: #f7cf55; box-shadow: 0 0 8px #f7cf55; }
+
+/* ---------- footer ---------- */
+.ol-foot { display: grid; justify-items: center; gap: 6px; padding-top: 4px; }
+.ol-prompt {
+  margin: 0; font: 900 .95rem/1.2 var(--ff); letter-spacing: .1em; color: #fff;
+  text-shadow: 0 0 12px rgba(255, 200, 100, .8), 0 2px 0 rgba(0, 0, 0, .5);
+}
+.ol-spinrow { display: flex; align-items: center; gap: 18px; }
+.ol-step {
+  width: 44px; height: 44px; border-radius: 50%; cursor: pointer; font: 900 1.5rem/1 var(--ff); color: #fff;
+  background: radial-gradient(circle at 40% 30%, #6a3aa0, #2a0f4a); border: 2px solid #c88d1c; box-shadow: 0 4px 12px rgba(0, 0, 0, .5);
+}
+.ol-step:disabled { opacity: .45; cursor: default; }
+.ol-spin {
+  position: relative; width: 84px; height: 84px; border-radius: 50%; cursor: pointer; display: grid; place-items: center;
+  background: radial-gradient(circle at 38% 30%, #fff6c9, #f7cf55 30%, #b47812 70%, #5a3605);
+  border: 0; box-shadow: 0 0 0 4px #4a2a00, 0 0 0 6px rgba(255, 220, 140, .5), 0 10px 26px rgba(0, 0, 0, .55), 0 0 26px rgba(255, 190, 80, .45);
+  transition: transform .1s;
+}
+.ol-spin:active { transform: scale(.95); }
+.ol-spin svg { width: 46px; height: 46px; fill: none; stroke: #3a2000; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 0 rgba(255, 255, 255, .6)); }
+.ol-spin.is-busy svg { animation: ol-turn .9s linear infinite; }
+@keyframes ol-turn { to { transform: rotate(360deg); } }
+.ol-status {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; font: 800 .8rem/1.3 var(--ff); letter-spacing: .06em; color: #ffd76a;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, .7);
+}
+.ol-status b { color: #fff; font-variant-numeric: tabular-nums; }
+.ol-status .mg-bal-label { font-size: .58rem; }
+.ol-foot .mg-note { margin: 0; color: rgba(255, 235, 200, .7); text-shadow: 0 1px 0 rgba(0, 0, 0, .6); }
+
+/* ---------- win pop-up ---------- */
+.ol-win {
+  position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; cursor: pointer;
+  background: radial-gradient(circle, rgba(40, 10, 60, .55), rgba(10, 4, 20, .85));
+  animation: ol-fade .3s ease both;
+}
+.ol-win[hidden] { display: none; }
+@keyframes ol-fade { from { opacity: 0; } }
+.ol-win-inner { display: grid; justify-items: center; gap: 4px; padding: 20px; text-align: center; animation: ol-zoom .55s cubic-bezier(.2, 1.5, .4, 1) both; }
+@keyframes ol-zoom { from { transform: scale(.4); opacity: 0; } }
+.ol-trophy { width: min(260px, 70vw); filter: drop-shadow(0 0 24px rgba(255, 190, 80, .7)); animation: ol-wing 1.6s ease-in-out infinite; }
+@keyframes ol-wing { 50% { transform: translateY(-6px) scale(1.03); } }
+.ol-win-word {
+  font: 900 clamp(2.4rem, 13vw, 3.6rem)/1 Georgia, "Times New Roman", serif; letter-spacing: .04em;
+  background: var(--ol-gold); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 3px 0 #4a2a00) drop-shadow(0 0 18px rgba(255, 190, 80, .6));
+  animation: ol-pulse 1s ease-in-out infinite alternate;
+}
+.ol-fs-big { font-size: clamp(2rem, 10vw, 3rem); }
+@keyframes ol-pulse { to { transform: scale(1.06); } }
+.ol-win-amt { font: 900 clamp(1.6rem, 8vw, 2.4rem)/1.1 var(--ff); color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 16px rgba(255, 210, 120, .8), 0 2px 0 rgba(0, 0, 0, .6); }
+.ol-fsintro .ol-win-amt { font-size: 1.05rem; font-weight: 800; max-width: 300px; }
+.ol-win-hint { margin-top: 10px; font-size: .75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: rgba(255, 235, 200, .6); }
+
+/* ---------- dialogs ---------- */
+.ol-dlg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.ol-rules { max-height: 86vh; overflow: auto; }
+.ol-pays { width: 100%; border-collapse: collapse; font-size: .84rem; font-variant-numeric: tabular-nums; margin-bottom: 10px; }
+.ol-pays th, .ol-pays td { padding: 4px 6px; border-bottom: 1px solid var(--mg-line); text-align: right; }
+.ol-pays th:first-child { text-align: left; white-space: nowrap; }
+.ol-pays img { width: 26px; height: 26px; vertical-align: middle; }
+
+/* ---------- wide screens: Buy left of the reels, Ante right ---------- */
+@media (min-width: 900px) {
+  .ol-main { max-width: 1080px; }
+  .ol-top { min-height: 120px; }
+  .ol-logo, .ol-banner { margin-right: 0; }
+  .ol-zeus { right: 6%; top: -4px; width: 170px; height: 190px; }
+  .ol-stage { grid-template-columns: 170px minmax(0, 640px) 170px; justify-content: center; gap: 46px; align-items: center; }
+  .ol-frame { grid-column: 2; margin: 0; }
+  .ol-side-buy { grid-column: 1; grid-row: 1; }
+  .ol-side-ante { grid-column: 3; grid-row: 1; }
+  .ol-feature { min-height: 120px; }
+  .ol-pillar { width: 40px; }
+  .ol-pillar-l { left: -42px; }
+  .ol-pillar-r { right: -42px; }
+}
+@media (min-width: 900px) and (max-height: 820px) {
+  .ol-stage { grid-template-columns: 160px minmax(0, 520px) 160px; }
+}
+
+/* narrow phones: slimmer pillars so they stay inside the screen (the frame sits 26px from the edge there) */
+@media (max-width: 400px) {
+  .ol-pillar { width: 24px; }
+  .ol-pillar-l { left: -24px; }
+  .ol-pillar-r { right: -24px; }
+}

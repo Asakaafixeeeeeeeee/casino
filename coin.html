@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#2a160b">
+<title>Flip Da' Coin — RendoWin</title>
+<meta name="description" content="Flip Da' Coin: call HEADS or TAILS before the gold coin is flipped. Pays 2x — if it lands on its edge, every bet loses. Play with real credits.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/minigame.css">
+<link rel="stylesheet" href="assets/css/coin.css">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+<script src="assets/js/data.js?v=50"></script>
+<!-- the splash screen: the game's picture and a loading bar, shown before the page draws -->
+<script src="assets/js/splash.js?v=33"></script>
+</head>
+<body class="game-page mg-page coin-page" data-shell="game">
+
+<header class="mg-header fc-header">
+  <a class="mg-icon-btn" href="games.html?category=Instant%20Win" aria-label="Back to the lobby"><i data-icon="arrowLeft"></i></a>
+  <div class="fc-wallet">
+    <span class="mg-balance">GHS <b id="fcBalance">0.00</b></span>
+    <span class="mg-bal-label" id="fcBalLabel">Credits</span>
+    <span class="mg-delta" id="fcDelta" aria-hidden="true"></span>
+  </div>
+  <h1 class="mg-title fc-title">Flip Da' Coin</h1>
+  <button class="mg-icon-btn" type="button" id="fcChat" aria-label="Live chat"><i data-icon="chat"></i></button>
+  <button class="mg-icon-btn" type="button" id="fcMenuBtn" aria-label="Game menu" aria-expanded="false" aria-controls="fcMenu"><i data-icon="menu"></i></button>
+  <nav class="mg-menu" id="fcMenu" aria-label="Game menu" hidden>
+    <div class="mg-menu-label">Play with</div>
+    <div class="mg-modes">
+      <button type="button" data-mode="fun" aria-pressed="true">Credits</button>
+      <button type="button" data-mode="real" aria-pressed="false">Wallet</button>
+    </div>
+    <button type="button" id="fcTopUp"><i data-icon="plus"></i>Top up credits</button>
+    <button type="button" id="fcSound" aria-pressed="true"><i data-icon="sound"></i><span>Sound: on</span></button>
+    <button type="button" id="fcRulesBtn"><i data-icon="info"></i>How to play</button>
+    <a href="wallet.html"><i data-icon="wallet"></i>Deposit</a>
+    <a href="games.html?category=Instant%20Win"><i data-icon="arrowLeft"></i>Back to the lobby</a>
+  </nav>
+</header>
+
+<button class="fc-howto" type="button" id="fcHowTo">How To Play</button>
+
+<main class="fc-main">
+  <section class="fc-stage" aria-label="The coin">
+    <ol class="fc-history" id="fcHistory" aria-label="Recent results, newest first"></ol>
+
+    <div class="fc-arena" id="fcArena">
+      <div class="fc-shadow" id="fcShadow"></div>
+      <div class="fc-toss" id="fcToss">
+        <div class="fc-coin" id="fcCoin">
+          <img class="fc-face fc-front" id="fcFront" alt="">
+          <img class="fc-face fc-back" id="fcBack" alt="">
+        </div>
+      </div>
+      <div class="fc-result" id="fcResult" hidden>
+        <span class="fc-result-side" id="fcResultSide">HEADS</span>
+        <span class="fc-result-msg" id="fcResultMsg"></span>
+      </div>
+    </div>
+
+    <div class="fc-status">
+      <span id="fcStatus">Waiting for Next Round...</span>
+      <div class="fc-timer"><i id="fcTimer"></i></div>
+    </div>
+  </section>
+
+  <section class="fc-bet" aria-label="Your bet">
+    <div class="fc-stepper">
+      <span class="fc-limit"><b>0.2</b> Min</span>
+      <button type="button" id="fcMinus" aria-label="Lower the bet">−</button>
+      <div class="fc-amount"><span>Bet</span> <span class="mg-coin" aria-hidden="true"></span> <b id="fcAmount">0.20</b></div>
+      <button type="button" id="fcPlus" aria-label="Raise the bet">+</button>
+      <span class="fc-limit"><b>50K</b> Max</span>
+    </div>
+    <div class="fc-presets" id="fcPresets">
+      <button type="button" data-v="1">1</button><button type="button" data-v="10">10</button><button type="button" data-v="100">100</button><button type="button" data-v="500">500</button>
+    </div>
+    <div class="fc-picks">
+      <button type="button" class="fc-pick" data-pick="HEADS"><span class="fc-pick-ic" aria-hidden="true">♛</span><b>HEADS</b><span>Pays 2x</span></button>
+      <button type="button" class="fc-pick" data-pick="TAILS"><span class="fc-pick-ic" aria-hidden="true">♠♥</span><b>TAILS</b><span>Pays 2x</span></button>
+    </div>
+  </section>
+
+  <section class="fc-table" aria-label="Live bets">
+    <div class="fc-tabs" role="tablist">
+      <button type="button" role="tab" aria-selected="true" data-tab="all">All Bets</button>
+      <button type="button" role="tab" aria-selected="false" data-tab="my">My Bets</button>
+      <button type="button" role="tab" aria-selected="false" data-tab="top">Top Wins</button>
+    </div>
+    <div class="fc-cols"><span>Name</span><span>Bet/Win</span><span>Pick</span></div>
+    <div class="fc-rows" id="fcRows"></div>
+  </section>
+  <p class="mg-note">Live play · RTP 97%</p>
+</main>
+
+<canvas class="mg-confetti" id="fcConfetti" aria-hidden="true"></canvas>
+<div class="sr-only" id="fcLive" aria-live="polite"></div>
+
+<dialog class="mg-dialog" id="fcRules" aria-labelledby="fcRulesTitle">
+  <h2 id="fcRulesTitle">How to play</h2>
+  <ol>
+    <li>While the bar runs down ("Waiting for Next Round"), set your bet and tap <b>HEADS</b> (the crown) or <b>TAILS</b> (the four suits). Tap your pick again to take the bet back before the flip.</li>
+    <li>When the bar empties, bets lock and the coin is flipped.</li>
+    <li>If it lands on your side you win <b>2×</b> your bet.</li>
+    <li>Now and then the coin lands <b>standing on its edge</b> — then every bet loses.</li>
+  </ol>
+  <p><b>Fairness:</b> each flip is drawn at random when the bets lock: heads 48.5%, tails 48.5%, edge 3%. A call wins 48.5% of the time at 2×, so the game returns <b>97%</b> on average. Each flip is independent — the history doesn't change the next one.</p>
+  <form method="dialog"><button class="btn btn-primary btn-block">Got it</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/minigame.js?v=34"></script>
+<script src="assets/js/coin.js?v=33"></script>
+</body>
+</html>

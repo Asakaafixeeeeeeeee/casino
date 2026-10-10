@@ -1,0 +1,32 @@
+{
+  "name": "voltabet-balance-service",
+  "version": "1.0.0",
+  "description": "Multi-currency wallet, ledger and auth backend for RendoWin",
+  "type": "module",
+  "private": true,
+  "main": "dist/src/server.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/server.js",
+    "migrate:prod": "node migrate-production.mjs",
+    "dev": "node --import tsx dist/server.ts 2>/dev/null; node --import tsx server.ts",
+    "migrate": "node dist/test/migrate.mjs",
+    "test": "node --import tsx --test 'test/**/*.test.ts'",
+    "test:pg": "node test/migrate.mjs"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "pg": "^8.12.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.7.0",
+    "@types/pg": "^8.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

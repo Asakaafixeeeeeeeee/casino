@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 48" role="img" aria-labelledby="title desc">
+  <title id="title">Aviator</title>
+  <desc id="desc">Red italic Aviator wordmark</desc>
+  <g fill="none" fill-rule="evenodd">
+    <text x="120" y="35" fill="#e60020" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="34" font-style="italic" font-weight="900" text-anchor="middle" letter-spacing="-2">AVIATOR</text>
+  </g>
+</svg>

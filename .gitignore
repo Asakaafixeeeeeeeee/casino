@@ -1,0 +1,9 @@
+# macOS Finder metadata
+.DS_Store
+node_modules/
+cloner/
+.data/
+backend/dist/
+.env
+test-results/
+playwright-report/

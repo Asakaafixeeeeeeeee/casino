@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" width="1080" height="1080">
+  <!-- RendoWin profile picture. Platforms crop avatars to a circle, so everything
+       sits inside the gold ring. Export to PNG at 1080 x 1080. -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="47%" r="68%">
+      <stop offset="0" stop-color="#3d2900"/>
+      <stop offset=".45" stop-color="#161008"/>
+      <stop offset="1" stop-color="#070708"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ffcc00" stop-opacity=".42"/>
+      <stop offset="1" stop-color="#ffcc00" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe55c"/><stop offset=".5" stop-color="#ffcc00"/><stop offset="1" stop-color="#ff9500"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff2a8"/><stop offset=".35" stop-color="#ffcc00"/>
+      <stop offset=".7" stop-color="#ff9500"/><stop offset="1" stop-color="#ffd84d"/>
+    </linearGradient>
+    <linearGradient id="silver" x1="0" y1="0" x2="0" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c3c8d3"/>
+    </linearGradient>
+    <linearGradient id="goldText" x1="0" y1="0" x2="0" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffe866"/><stop offset=".55" stop-color="#ffcc00"/><stop offset="1" stop-color="#ff9a00"/>
+    </linearGradient>
+    <filter id="lift" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3.4" flood-color="#000" flood-opacity=".65"/>
+    </filter>
+    <filter id="textGlow" x="-20%" y="-40%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="0" stdDeviation="1.2" flood-color="#ffb300" flood-opacity=".6"/>
+    </filter>
+    <clipPath id="disc"><circle cx="540" cy="540" r="488"/></clipPath>
+  </defs>
+
+  <rect width="1080" height="1080" fill="url(#bg)"/>
+  <g clip-path="url(#disc)">
+    <path transform="translate(540 528)" d="M0 0L0.0 -820.0L107.0 -813.0ZM0 0L212.2 -792.1L313.8 -757.6ZM0 0L410.0 -710.1L499.2 -650.5ZM0 0L579.8 -579.8L650.5 -499.2ZM0 0L710.1 -410.0L757.6 -313.8ZM0 0L792.1 -212.2L813.0 -107.0ZM0 0L820.0 0.0L813.0 107.0ZM0 0L792.1 212.2L757.6 313.8ZM0 0L710.1 410.0L650.5 499.2ZM0 0L579.8 579.8L499.2 650.5ZM0 0L410.0 710.1L313.8 757.6ZM0 0L212.2 792.1L107.0 813.0ZM0 0L0.0 820.0L-107.0 813.0ZM0 0L-212.2 792.1L-313.8 757.6ZM0 0L-410.0 710.1L-499.2 650.5ZM0 0L-579.8 579.8L-650.5 499.2ZM0 0L-710.1 410.0L-757.6 313.8ZM0 0L-792.1 212.2L-813.0 107.0ZM0 0L-820.0 0.0L-813.0 -107.0ZM0 0L-792.1 -212.2L-757.6 -313.8ZM0 0L-710.1 -410.0L-650.5 -499.2ZM0 0L-579.8 -579.8L-499.2 -650.5ZM0 0L-410.0 -710.1L-313.8 -757.6ZM0 0L-212.2 -792.1L-107.0 -813.0Z" fill="#ffcc00" opacity=".075"/>
+  </g>
+  <circle cx="540" cy="518" r="430" fill="url(#halo)"/>
+
+  <!-- gold frame, inside the circular crop -->
+  <circle cx="540" cy="540" r="490" fill="none" stroke="url(#ring)" stroke-width="16"/>
+  <circle cx="540" cy="540" r="464" fill="none" stroke="#ffcc00" stroke-opacity=".32" stroke-width="3"/>
+
+  <!-- the R emblem with a thick 3D edge -->
+  <g transform="translate(540 528) scale(8.2) translate(-32 -33)" filter="url(#lift)">
+    <rect x="2" y="5.5" width="60" height="60" rx="14" fill="#9c5200"/>
+    <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#gold)" stroke="#d98300" stroke-width=".8"/>
+    <path d="M6 9Q32 3 58 9V22Q32 15 6 22Z" fill="#fff" opacity=".14"/>
+    <g transform="translate(32 32) skewX(-12) translate(-32 -32)" fill="#151515">
+      <path d="M21.5 13V51 M21.5 17.2H35Q42 17.2 42 24.2V26.3Q42 33.3 35 33.3H21.5" fill="none" stroke="#151515"
+            stroke-width="8.4" stroke-linejoin="miter" stroke-miterlimit="2"/>
+      <path d="M26.4 33.3H35.2L45.5 51H36.7Z"/>
+    </g>
+  </g>
+
+  <path d="M262 266Q262 300 296 300Q262 300 262 334Q262 300 228 300Q262 300 262 266Z" fill="#fff3b0" opacity="0.9"/><path d="M838 294Q838 318 862 318Q838 318 838 342Q838 318 814 318Q838 318 838 294Z" fill="#ffd84d" opacity="0.85"/><path d="M818 750Q818 790 858 790Q818 790 818 830Q818 790 778 790Q818 790 818 750Z" fill="#fff3b0" opacity="0.9"/><path d="M276 756Q276 776 296 776Q276 776 276 796Q276 776 256 776Q276 776 276 756Z" fill="#ffd84d" opacity="0.8"/><path d="M930 546Q930 560 944 560Q930 560 930 574Q930 560 916 560Q930 560 930 546Z" fill="#ffffff" opacity="0.7"/><path d="M160 508Q160 520 172 520Q160 520 160 532Q160 520 148 520Q160 520 160 508Z" fill="#ffffff" opacity="0.6"/>
+</svg>

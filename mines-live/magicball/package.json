@@ -1,0 +1,11 @@
+{
+  "name": "magicball-live",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Magic Ball Live: one shared table in server-run 3-minute rounds. Hosted by the Live Mines service at /magicball; runnable on its own with npm start.",
+  "main": "server/server.js",
+  "scripts": { "start": "node server/server.js", "dev": "DEV_INDICATOR=1 node server/server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "express": "^5.2.1", "socket.io": "^4.8.4" },
+  "optionalDependencies": { "pg": "^8.13.0" }
+}

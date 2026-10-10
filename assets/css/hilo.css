@@ -1,0 +1,130 @@
+/* Hi-Lo — a golden felt table inside a dark padded rail: the hands played down the left, the base card and the
+   face-down next card side by side with the odds above and below it, "ACES HIGH" beneath, and the LOWER / HIGHER
+   split bar at the bottom. The header, balance, bet controls and action bar come from minigame.css; this sets colours. */
+.hilo-page {
+  --hl-felt: #8a7b0c;
+  --hl-print: rgba(255, 245, 200, .7);
+  --mg-accent: #e53935;                     /* the slider's red thumb and fill */
+  --mg-line: rgba(255, 235, 170, .14);
+  --mg-line-strong: rgba(255, 235, 170, .34);
+  --mg-bar: rgba(22, 18, 4, .94);
+  --mg-raised: #2b2409;
+  --mg-hover: #433a12;
+  --mg-panel: rgba(18, 15, 3, .62);
+  --mg-well: #0f0d02;
+  --mg-cover: rgba(18, 15, 3, .92);
+  --mg-dock: linear-gradient(to top, rgba(14, 12, 2, .97), rgba(14, 12, 2, .86));
+  --mg-note: rgba(255, 240, 200, .55);
+  background:
+    radial-gradient(130% 70% at 50% 28%, rgba(255, 220, 90, .12), transparent 60%),
+    radial-gradient(150% 100% at 50% 40%, transparent 50%, rgba(0, 0, 0, .55)),
+    #1f1a06;
+}
+.hl-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* the wallet badge in the header */
+.hl-wallet { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; background: rgba(255, 255, 255, .07); border: 1px solid var(--mg-line); font-size: .78rem; font-weight: 800; color: #ffe9a8; white-space: nowrap; }
+.hl-wallet svg { width: 14px; height: 14px; color: var(--yellow); }
+.hl-wallet small { margin-left: 2px; }
+.mg-delta#hlDelta { position: fixed; top: 58px; left: 12px; z-index: 61; }
+.hilo-page .mg-main { padding-top: 12px; }
+
+/* ---------- the table ---------- */
+.hl-board {
+  --cw: clamp(96px, 27vw, 124px);
+  padding: 7px; border-radius: 26px;
+  background: linear-gradient(180deg, #2c2410, #150f05 55%, #0a0703);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 225, 150, .18), inset 0 -2px 0 rgba(0, 0, 0, .55);
+}
+.hl-felt {
+  position: relative; isolation: isolate;
+  display: grid; grid-template-columns: 54px 1fr; grid-template-areas: "hist cards" "status status";
+  gap: 10px 10px; padding: 14px 10px 10px; border-radius: 20px;
+  background:
+    radial-gradient(110% 80% at 50% 25%, rgba(255, 235, 140, .28), transparent 62%),
+    linear-gradient(180deg, #a8960f, var(--hl-felt) 55%, #5e5307);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .45), inset 0 7px 18px rgba(0, 0, 0, .45), inset 0 0 44px rgba(0, 0, 0, .3);
+}
+.hl-cap { margin: 0 0 6px; text-align: center; font-size: .52rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--hl-print); }
+
+/* the hands played: pairs of small cards, newest at the top */
+.hl-history { grid-area: hist; display: flex; flex-direction: column; min-height: 0; contain: size; }
+.hl-hist { flex: 1; min-height: 0; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; align-items: center; overflow: hidden; }
+.hl-hand { flex: none; display: flex; gap: 2px; }
+.hl-hand.is-new { animation: hl-hand-in .45s cubic-bezier(.2, .8, .3, 1) both; }
+@keyframes hl-hand-in { from { opacity: 0; transform: translateX(26px) scale(.8); } }
+.hl-mini { width: 24px; height: 34px; border-radius: 3px; background: linear-gradient(160deg, #fff, #f3efe5); box-shadow: 0 1px 3px rgba(0, 0, 0, .45); }
+.hl-mini svg { display: block; width: 100%; height: 100%; }
+.hl-hand.is-win .hl-mini:last-child { box-shadow: 0 0 0 1.5px var(--yellow), 0 1px 3px rgba(0, 0, 0, .45); }
+
+/* the two cards */
+.hl-cards { grid-area: cards; display: grid; justify-items: center; gap: 6px; padding-top: 22px; }
+.hl-pair { display: flex; gap: 14px; align-items: center; }
+.hl-slot { position: relative; width: var(--cw); aspect-ratio: 5 / 7; }
+.hl-pays {
+  position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+  background: rgba(0, 0, 0, .78); border: 1px solid rgba(255, 225, 120, .55); color: #ffe27a; font-size: .6rem; font-weight: 900; letter-spacing: .06em;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .5);
+}
+.hl-pays-top { top: -22px; }
+.hl-pays-bottom { bottom: -22px; }
+.hl-pays.off { opacity: .35; }
+.hl-card { position: relative; width: 100%; height: 100%; perspective: 900px; }
+.hl-card::before { content: ""; position: absolute; inset: 5% 4% -3%; z-index: -1; border-radius: 12px; background: rgba(0, 0, 0, .5); filter: blur(7px); }
+.hl-card-inner { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform .7s cubic-bezier(.45, .05, .25, 1); }
+.hl-card.is-up .hl-card-inner { transform: rotateY(180deg); }
+.hl-card.is-lifting { animation: hl-lift .7s ease-in-out; }
+@keyframes hl-lift { 50% { transform: translateY(-10px) scale(1.07); } }
+.hl-slot.is-dealt .hl-card { animation: hl-deal .42s cubic-bezier(.2, .7, .3, 1) both; }
+@keyframes hl-deal { from { transform: translate(-40px, -60px) rotate(-12deg) scale(.5); opacity: 0; } }
+.hl-face { position: absolute; inset: 0; overflow: hidden; border-radius: calc(var(--cw) * .07); backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+/* the red back: a deep red with a gold diamond lattice and the R mark */
+.hl-back {
+  transform: rotateY(0deg);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 220, 120, .25) 0, transparent 38%),
+    repeating-linear-gradient(45deg, rgba(255, 215, 120, .22) 0 2px, transparent 2px 11px),
+    repeating-linear-gradient(-45deg, rgba(255, 215, 120, .22) 0 2px, transparent 2px 11px),
+    linear-gradient(160deg, #c8102e, #7a0515);
+  box-shadow: inset 0 0 0 4px #f7e2a8, inset 0 0 0 6px #a3121f;
+}
+.hl-back::after { content: "R"; position: absolute; left: 50%; top: 50%; width: 38%; aspect-ratio: 1; transform: translate(-50%, -50%); display: grid; place-items: center; border-radius: 50%; background: #f7c948; color: #7a0515; font: 900 calc(var(--cw) * .26)/1 var(--ff); box-shadow: 0 0 0 3px #7a0515, 0 0 0 5px #f7e2a8; }
+.hl-front { transform: rotateY(180deg); background: linear-gradient(155deg, #fff, #f7f3ea 70%, #ece5d6); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .16); }
+.hl-front svg { display: block; width: 100%; height: 100%; }
+.hl-card.is-win .hl-front { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .16), 0 0 0 3px var(--yellow), 0 0 26px 6px rgba(255, 204, 0, .5); }
+.hl-aces { margin: 14px 0 0; font-size: .62rem; font-weight: 900; letter-spacing: .3em; padding-left: .3em; color: var(--hl-print); }
+
+/* the result */
+.hl-status { grid-area: status; display: grid; justify-items: center; gap: 6px; min-height: 56px; padding-top: 4px; }
+.hl-badge { padding: 5px 20px; border-radius: 999px; font-size: 1.05rem; font-weight: 900; letter-spacing: .1em; background: rgba(0, 0, 0, .35); color: rgba(255, 245, 210, .7); box-shadow: 0 4px 12px rgba(0, 0, 0, .35); }
+.hl-badge.is-win { background: linear-gradient(180deg, #ffe680, #f5b700); color: #4a1a00; box-shadow: 0 0 0 2px #fff3c4, 0 0 24px rgba(255, 204, 0, .7); animation: hl-badge .6s cubic-bezier(.2, 1.4, .4, 1); }
+@keyframes hl-badge { from { transform: scale(.5); opacity: 0; } }
+.hl-msg { margin: 0; text-align: center; font-size: .92rem; font-weight: 800; color: #fff7dc; }
+
+/* bet row */
+.hl-bet-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.hl-new { padding: 9px 16px; border-radius: 999px; border: 0; background: linear-gradient(180deg, #42a5f5, #1565c0); color: #fff; font: 800 .8rem/1 var(--ff); cursor: pointer; box-shadow: 0 4px 10px rgba(0, 0, 0, .4); }
+.hl-new:disabled { opacity: .45; cursor: default; }
+.hilo-page .mg-chip { color: #fff; }
+
+/* the calls */
+.hl-act-lower { background: linear-gradient(180deg, #8e1b1b, #5a0d0d); color: #fff; }
+.hl-act-higher { background: linear-gradient(180deg, #2e9e4a, #1b6b30); color: #fff; }
+.hl-act-next { background: linear-gradient(180deg, #2e9e4a, #1b6b30); color: #fff; grid-column: 1 / -1; }
+.hl-act-lower span, .hl-act-higher span { display: block; font-size: .7rem; font-weight: 700; opacity: .9; letter-spacing: .02em; }
+.mg-act:disabled { opacity: .4; filter: grayscale(.4); }
+
+/* the confirm sheet */
+.hl-confirm h2 { font-size: 1.05rem; }
+.hl-sheet-actions { grid-template-columns: 1fr 1fr; }
+.hl-sheet-cancel { padding: 14px; border-radius: 14px; border: 1px solid var(--mg-line-strong); background: rgba(255, 255, 255, .06); color: #fff; font: 800 .95rem/1 var(--ff); cursor: pointer; }
+.hl-sheet-ok { padding: 14px; border-radius: 14px; border: 0; background: linear-gradient(180deg, #2e9e4a, #1b6b30); color: #fff; font: 800 .95rem/1 var(--ff); cursor: pointer; }
+
+/* odds table in the rules */
+.hl-odds { width: 100%; border-collapse: collapse; margin: 10px 0 12px; font-size: .82rem; }
+.hl-odds th, .hl-odds td { padding: 5px 4px; text-align: right; border-bottom: 1px solid var(--mg-line); font-variant-numeric: tabular-nums; }
+.hl-odds th:first-child, .hl-odds td:first-child { text-align: left; font-weight: 800; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hl-card.is-lifting, .hl-slot.is-dealt .hl-card, .hl-hand.is-new, .hl-badge.is-win { animation: none; }
+}

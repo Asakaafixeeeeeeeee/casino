@@ -1,0 +1,66 @@
+/* Ghana admin (regional.html): the sign-in card and the dashboard, on top of styles.css's admin pieces */
+.rg-body { min-height: 100vh; min-height: 100dvh; }
+.rg-brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-style: italic; letter-spacing: .02em; }
+.rg-logout {
+  justify-self: end; padding: 6px 12px; border-radius: var(--r-full); border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--text); font: inherit; font-size: .85rem; font-weight: 700; cursor: pointer;
+}
+.rg-logout:hover { border-color: var(--yellow); color: var(--yellow); }
+.rg-wrap { max-width: 1240px; padding-bottom: 40px; }
+
+.rg-login {
+  max-width: 400px; margin: 40px auto 0; padding: 26px 22px; border-radius: var(--r-lg);
+  background: var(--surface); border: 1px solid var(--line-soft); box-shadow: var(--shadow);
+}
+.rg-login h1 { margin: 0 0 6px; font-size: 1.35rem; }
+.rg-lead { margin: 0 0 18px; color: var(--muted); font-size: .92rem; }
+.rg-pin { font-size: 1.4rem !important; letter-spacing: .5em; text-align: center; font-variant-numeric: tabular-nums; }
+#rgMsg:not(:empty) { margin-top: 14px; }
+
+.rg-who { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 2px 14px; color: var(--muted); font-size: .9rem; }
+.rg-who b { color: var(--text); }
+.rg-kpis .adm-kpi.share { border-color: rgba(255, 200, 61, .45); background: linear-gradient(180deg, rgba(255, 200, 61, .08), var(--surface)); }
+.rg-kpis .adm-kpi strong.neg { color: #ff8a82; }
+.rg-note { margin: 10px 2px 0; font-size: .8rem; color: var(--dim); }
+.rg-filters { display: grid; gap: 8px; margin-bottom: 12px; }
+.rg-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.rg-filter-label { min-width: 52px; font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.rg-filters .chip b { margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+.rg-table td { vertical-align: top; }
+.rg-table td small { display: block; margin-top: 2px; color: var(--dim); font-size: .74rem; }
+.rg-table .rg-name b { font-size: .92rem; }
+.rg-table .rg-uid { min-width: 150px; max-width: 170px; white-space: normal; overflow-wrap: anywhere; font-family: ui-monospace, Menlo, monospace; font-size: .74rem; color: var(--muted); }
+.rg-table .rg-amt { white-space: nowrap; font-weight: 700; }
+.rg-table .rg-amt.in { color: var(--green); }
+.rg-table .rg-ref { font-family: ui-monospace, Menlo, monospace; font-size: .8rem; white-space: nowrap; }
+.rg-table .rg-status { max-width: 220px; white-space: normal; overflow-wrap: anywhere; }
+.rg-empty { margin: 18px 4px; text-align: center; color: var(--dim); }
+.rg-more { margin-top: 12px; }
+
+/* phones: each payment is a card — who and the status first, then two values a line, each under its column's name */
+@media (max-width: 640px) {
+  .rg-table thead { display: none; }
+  .rg-table, .rg-table tbody { display: block; width: 100%; }
+  .rg-table tr {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 14px; padding: 14px; border-bottom: 1px solid var(--line-soft);
+    grid-template-areas: "name status" "amount method" "ref time" "uid uid";
+  }
+  .rg-table tr:last-child { border-bottom: 0; }
+  .rg-table td { display: block; padding: 0; border: 0; min-width: 0; }
+  .rg-table td::before {
+    content: attr(data-label); display: block; margin-bottom: 3px;
+    font-size: .64rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--dim);
+  }
+  .rg-table .rg-name { grid-area: name; }
+  .rg-table .rg-status { grid-area: status; max-width: none; }
+  .rg-table .rg-amount { grid-area: amount; }
+  .rg-table .rg-method { grid-area: method; }
+  .rg-table .rg-ref { grid-area: ref; white-space: normal; overflow-wrap: anywhere; }
+  .rg-table .rg-time { grid-area: time; }
+  .rg-table .rg-uid { grid-area: uid; min-width: 0; max-width: none; }
+}
+@media (max-width: 420px) {
+  .rg-brand { font-size: .9rem; }
+  .rg-login { margin-top: 20px; padding: 22px 16px; }
+}

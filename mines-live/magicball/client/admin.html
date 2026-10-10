@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magic Ball Live — admin</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .adm { max-width: 760px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+  .adm h1 { margin: 0; font-size: 1.2rem; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .card { padding: 12px; border-radius: 12px; background: #111; border: 1px solid rgba(255,255,255,.12); }
+  .card span { display: block; font-size: .64rem; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.5); }
+  .card b { font-size: 1.15rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+  th, td { padding: 7px 6px; text-align: left; border-bottom: 1px solid rgba(255,255,255,.1); }
+  th { color: rgba(255,255,255,.55); font-weight: 700; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; }
+  .err { color: #ff8a80; }
+  code { font-size: .74rem; color: rgba(255,255,255,.6); word-break: break-all; }
+</style>
+</head>
+<body>
+<main class="adm">
+  <h1>Magic Ball Live — admin</h1>
+  <p class="err" id="err" hidden></p>
+  <div class="cards">
+    <div class="card"><span>Round</span><b id="aRound">—</b></div>
+    <div class="card"><span>State</span><b id="aState">—</b></div>
+    <div class="card"><span>Countdown</span><b id="aCount">—</b></div>
+    <div class="card"><span>Players connected</span><b id="aPlayers">—</b></div>
+    <div class="card"><span>Bets this round</span><b id="aBets">—</b></div>
+    <div class="card"><span>Wagered (demo)</span><b id="aWagered">—</b></div>
+    <div class="card"><span>Hidden position</span><b id="aHidden">—</b></div>
+    <div class="card"><span>Storage</span><b id="aDb">—</b></div>
+  </div>
+  <p>The hidden position shows only once the round has revealed it. There is no control here that changes a result: the position is drawn from the round's seed when the round is created, and the seed's hash is published to players at the start.</p>
+  <h2>Previous rounds</h2>
+  <table><thead><tr><th>Round</th><th>Result</th><th>Bets</th><th>Wagered</th><th>Ended</th><th>Seed</th></tr></thead><tbody id="aHistory"></tbody></table>
+</main>
+<script>
+(function () {
+  const token = new URLSearchParams(location.search).get("token") || "";
+  const $ = (id) => document.getElementById(id);
+  const mmss = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
+  async function poll() {
+    try {
+      const r = await fetch("api/admin?token=" + encodeURIComponent(token));
+      if (!r.ok) throw new Error(r.status === 401 ? "Wrong or missing token: open admin.html?token=<ADMIN_TOKEN>" : r.status === 404 ? "The dashboard is off: set ADMIN_TOKEN on the server." : "Couldn't load.");
+      const d = await r.json();
+      $("err").hidden = true;
+      $("aRound").textContent = d.round ? d.round.roundId : "—";
+      $("aState").textContent = d.countdown.state;
+      $("aCount").textContent = mmss(d.countdown.remainingMs);
+      $("aPlayers").textContent = d.players;
+      $("aBets").textContent = d.stats.bets;
+      $("aWagered").textContent = Number(d.stats.wagered).toLocaleString("en-GH", { minimumFractionDigits: 2 });
+      $("aHidden").textContent = d.round && d.round.hiddenPosition ? "Spot " + d.round.hiddenPosition : "hidden until reveal";
+      $("aDb").textContent = d.db;
+      $("aHistory").innerHTML = d.history.map((h) => "<tr><td>" + h.roundId + "</td><td>Spot " + h.hiddenPosition + "</td><td>" + (h.bets ?? "—") + "</td><td>" + (h.wagered != null ? Number(h.wagered).toFixed(2) : "—") + "</td><td>" + new Date(h.endTime).toLocaleTimeString() + "</td><td><code>" + (h.seed || "").slice(0, 16) + "…</code></td></tr>").join("");
+    } catch (e) { $("err").hidden = false; $("err").textContent = e.message; }
+  }
+  poll();
+  setInterval(poll, 2000);
+})();
+</script>
+</body>
+</html>

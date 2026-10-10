@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#0d0e10">
+<title>Me | RendoWin</title>
+<meta name="description" content="Your RendoWin account: balance, deposits, withdrawals, transaction records and support.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+</head>
+<body>
+
+<header class="site-header" data-shell="header"></header>
+
+<main class="container me-page">
+  <!-- signed in: profile and balance -->
+  <section class="me-hero" id="meHero" hidden>
+    <div class="me-id">
+      <span class="me-avatar" id="meAvatar" aria-hidden="true">V</span>
+      <div class="me-who">
+        <strong id="meName">Player</strong>
+        <span class="me-acct">ID <b id="meAcct">—</b></span>
+      </div>
+      <span class="me-tier"><i data-icon="crown"></i>Loyalty Tier: <b id="meTier">1</b></span>
+    </div>
+    <div class="me-tier-next">Next update: <span id="meTierNext">—</span></div>
+
+    <div class="me-balance">
+      <span class="me-bal-label">Primary account · <span id="meCurrencyName">Ghanaian Cedi</span></span>
+      <div class="me-bal-amount"><small id="meCurrencyCode">GHS</small><span data-wallet-balance-num>0.00</span></div>
+    </div>
+    <div class="me-actions">
+      <a class="btn btn-primary btn-lg" href="wallet.html"><i data-icon="plus"></i>Deposit</a>
+      <a class="btn btn-ghost btn-lg" href="withdraw.html"><i data-icon="withdraw"></i>Withdraw</a>
+    </div>
+  </section>
+
+  <!-- signed out -->
+  <section class="me-hero me-guest" id="meGuest" hidden>
+    <span class="me-avatar" aria-hidden="true"><i data-icon="user"></i></span>
+    <h1>Welcome to RendoWin</h1>
+    <p>Log in to see your balance, deposit, withdraw and track your transactions.</p>
+    <div class="me-actions">
+      <a class="btn btn-primary btn-lg" href="register.html#login">Log in</a>
+      <a class="btn btn-ghost btn-lg" href="register.html">Register</a>
+    </div>
+  </section>
+
+  <a class="me-rewards" href="promotions.html" data-auth>
+    <span class="me-rw-ico"><i data-icon="gift"></i></span>
+    <span class="me-rw-copy"><strong>Rewards are coming</strong><span>Cashback, VIP perks and a welcome bonus — see what's planned</span></span>
+    <i data-icon="chevronRight" class="me-chev"></i>
+  </a>
+
+  <!-- the other accounts: the points balance and every crypto sub-balance (held at zero until crypto deposits open) -->
+  <section class="me-accounts" data-auth id="meAccounts" hidden>
+    <button class="me-accounts-head" type="button" id="meAccountsToggle" aria-expanded="false" aria-controls="meAccountsList">
+      <span>Other accounts</span><small id="meAccountsSummary">—</small><i data-icon="chevronDown"></i>
+    </button>
+    <div class="me-accounts-list" id="meAccountsList" hidden></div>
+    <div class="me-accounts-actions"><button class="btn btn-primary" type="button" data-open-convert>Convert</button></div>
+  </section>
+
+  <div class="me-quick" data-auth>
+    <button type="button" data-sheet="games">
+      <span class="me-q-ico"><i data-icon="history"></i></span>Game history<small id="qGames">—</small>
+    </button>
+    <a href="transactions.html">
+      <span class="me-q-ico"><i data-icon="receipt"></i></span>Transactions<small>Deposits &amp; withdrawals</small>
+    </a>
+    <a href="promotions.html">
+      <span class="me-q-ico"><i data-icon="gift"></i></span>Rewards<small>Coming soon</small>
+    </a>
+  </div>
+
+  <nav class="me-menu" aria-label="Account">
+    <button class="me-row" type="button" data-open-chat>
+      <i data-icon="chat"></i><span class="me-row-label">Customer service</span>
+      <span class="me-online">Online 24/7</span><i data-icon="chevronRight" class="me-chev"></i>
+    </button>
+    <button class="me-row" type="button" data-sheet="notifications" data-auth>
+      <i data-icon="bell"></i><span class="me-row-label">Notifications</span>
+      <span class="me-count" id="mNotif" hidden></span><i data-icon="chevronRight" class="me-chev"></i>
+    </button>
+    <button class="me-row" type="button" data-sheet="streak" data-auth>
+      <i data-icon="flame"></i><span class="me-row-label">Daily streak</span>
+      <span class="me-row-end" id="mStreak"></span><i data-icon="chevronRight" class="me-chev"></i>
+    </button>
+    <button class="me-row" type="button" data-sheet="limits" data-auth>
+      <i data-icon="shield"></i><span class="me-row-label">Responsible gaming</span>
+      <span class="me-row-end" id="mLimits"></span><i data-icon="chevronRight" class="me-chev"></i>
+    </button>
+    <button class="me-row" type="button" data-sheet="howto">
+      <i data-icon="help"></i><span class="me-row-label">How to play</span><i data-icon="chevronRight" class="me-chev"></i>
+    </button>
+    <button class="me-row" type="button" data-sheet="rate" data-auth>
+      <i data-icon="star"></i><span class="me-row-label">Rate RendoWin</span><i data-icon="chevronRight" class="me-chev"></i>
+    </button>
+    <button class="me-row" type="button" data-sheet="idea" data-auth>
+      <i data-icon="bulb"></i><span class="me-row-label">Share an idea</span><i data-icon="chevronRight" class="me-chev"></i>
+    </button>
+    <button class="me-row" type="button" data-sheet="update">
+      <i data-icon="refresh"></i><span class="me-row-label">Update app</span>
+      <span class="me-row-end">Up to date</span><i data-icon="chevronRight" class="me-chev"></i>
+    </button>
+    <a class="me-row" href="partners.html">
+      <i data-icon="star"></i><span class="me-row-label">Partner programme</span><i data-icon="chevronRight" class="me-chev"></i>
+    </a>
+    <a class="me-row" href="admin.html" id="meAdmin" hidden>
+      <i data-icon="shield"></i><span class="me-row-label">Admin dashboard</span><i data-icon="chevronRight" class="me-chev"></i>
+    </a>
+    <button class="me-row me-row-danger" type="button" id="meLogout" data-auth>
+      <i data-icon="logout"></i><span class="me-row-label">Log out</span>
+    </button>
+  </nav>
+
+  <footer class="me-compliance">
+    <h2>Payment partners</h2>
+    <div class="me-partners" id="mePartners"></div>
+    <div class="me-rg">
+      <span class="me-18">18+</span>
+      <p>RendoWin is only for people aged 18 and over. Gambling can be addictive — set a budget, take breaks and stop
+        when it stops being fun. If gambling is causing problems for you or someone close to you, talk to a support
+        service in your country.</p>
+    </div>
+    <p class="me-legal"><a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a> · © <span id="meYear"></span> RendoWin</p>
+  </footer>
+</main>
+
+<script src="assets/js/data.js?v=50"></script>
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/me.js?v=36"></script>
+</body>
+</html>

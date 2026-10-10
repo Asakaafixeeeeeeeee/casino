@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#2b2409">
+<title>Hi-Lo — RendoWin</title>
+<meta name="description" content="Hi-Lo: call whether the next card is higher or lower than the card showing. Aces high, odds shown on every call. Play with credits or real money.">
+<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/minigame.css">
+<link rel="stylesheet" href="assets/css/hilo.css">
+<link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+<script src="assets/js/data.js?v=50"></script>
+<!-- the splash screen: the game's picture and a loading bar, shown before the page draws -->
+<script src="assets/js/splash.js?v=33"></script>
+</head>
+<body class="game-page mg-page hilo-page" data-shell="game">
+
+<!-- card suits, drawn once and reused by every card face -->
+<svg class="hl-sprite" aria-hidden="true" focusable="false">
+  <symbol id="hlH" viewBox="0 0 100 100"><path d="M50 92C47 86 38 77 26 66C12 53 4 43 4 29C4 15 15 5 28 5C38 5 46 11 50 20C54 11 62 5 72 5C85 5 96 15 96 29C96 43 88 53 74 66C62 77 53 86 50 92Z"/></symbol>
+  <symbol id="hlD" viewBox="0 0 100 100"><path d="M50 2C60 20 72 36 88 50C72 64 60 80 50 98C40 80 28 64 12 50C28 36 40 20 50 2Z"/></symbol>
+  <symbol id="hlS" viewBox="0 0 100 100"><path d="M50 3C56 14 68 24 80 34C92 44 97 52 97 62C97 75 87 83 75 83C66 83 59 79 54 72C55 82 59 90 67 97H33C41 90 45 82 46 72C41 79 34 83 25 83C13 83 3 75 3 62C3 52 8 44 20 34C32 24 44 14 50 3Z"/></symbol>
+  <symbol id="hlC" viewBox="0 0 100 100"><circle cx="50" cy="27" r="21"/><circle cx="27" cy="57" r="21"/><circle cx="73" cy="57" r="21"/><circle cx="50" cy="50" r="12"/><path d="M47 56C47 74 43 86 34 97H66C57 86 53 74 53 56Z"/></symbol>
+</svg>
+
+<header class="mg-header">
+  <a class="mg-icon-btn" href="games.html?category=Instant%20Win" aria-label="Back to the lobby"><i data-icon="close"></i></a>
+  <span class="hl-wallet"><i data-icon="wallet"></i>GHS <b id="hlBalance">0.00</b><small class="mg-bal-label" id="hlBalLabel">Credits</small></span>
+  <h1 class="mg-title">Hi-Lo</h1>
+  <button class="mg-icon-btn" type="button" id="hlChat" aria-label="Live chat"><i data-icon="chat"></i></button>
+  <button class="mg-icon-btn" type="button" id="hlMenuBtn" aria-label="Game menu" aria-expanded="false" aria-controls="hlMenu"><i data-icon="menu"></i></button>
+  <nav class="mg-menu" id="hlMenu" aria-label="Game menu" hidden>
+    <div class="mg-menu-label">Play with</div>
+    <div class="mg-modes">
+      <button type="button" data-mode="fun" aria-pressed="true">Credits</button>
+      <button type="button" data-mode="real" aria-pressed="false">Wallet</button>
+    </div>
+    <button type="button" id="hlTopUp"><i data-icon="plus"></i>Top up credits</button>
+    <button type="button" id="hlSound" aria-pressed="true"><i data-icon="sound"></i><span>Sound: on</span></button>
+    <button type="button" id="hlRulesBtn"><i data-icon="info"></i>How to play &amp; odds</button>
+    <a href="wallet.html"><i data-icon="wallet"></i>Deposit</a>
+    <a href="games.html?category=Instant%20Win"><i data-icon="arrowLeft"></i>Back to the lobby</a>
+  </nav>
+</header>
+<span class="mg-delta" id="hlDelta" aria-hidden="true"></span>
+
+<main class="mg-main">
+  <!-- the table: the hands played down the left, the base card and the next card in the middle -->
+  <section class="hl-board" aria-label="Card table">
+    <div class="hl-felt">
+      <div class="hl-history">
+        <h2 class="hl-cap">Hands</h2>
+        <ol class="hl-hist" id="hlHistory" aria-label="Hands played this round, newest first"></ol>
+      </div>
+
+      <div class="hl-cards">
+        <div class="hl-pair">
+          <div class="hl-slot">
+            <div class="hl-card is-up" id="hlBase" role="img" aria-label="The base card">
+              <div class="hl-card-inner"><div class="hl-face hl-back"></div><div class="hl-face hl-front" id="hlBaseFace"></div></div>
+            </div>
+          </div>
+          <div class="hl-slot">
+            <span class="hl-pays hl-pays-top" id="hlPaysTop">HIGHER · PAYS 1.76x</span>
+            <div class="hl-card" id="hlNext" role="img" aria-label="The next card, face down">
+              <div class="hl-card-inner"><div class="hl-face hl-back"></div><div class="hl-face hl-front" id="hlNextFace"></div></div>
+            </div>
+            <span class="hl-pays hl-pays-bottom" id="hlPaysBottom">LOWER · PAYS 2.47x</span>
+          </div>
+        </div>
+        <p class="hl-aces">ACES HIGH</p>
+      </div>
+
+      <div class="hl-status" id="hlStatus">
+        <span class="hl-badge" id="hlBadge" hidden></span>
+        <p class="hl-msg" id="hlMsg">Higher or lower? Make your call.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="mg-bet" aria-label="Your bet">
+    <div class="hl-bet-row">
+      <div class="mg-amount"><span>Bet</span> <span class="mg-coin" aria-hidden="true"></span> <b id="hlAmount">0.20</b></div>
+      <button class="hl-new" type="button" id="hlNew">New Round</button>
+    </div>
+    <input class="mg-slider" id="hlSlider" type="range" min="0" max="1000" step="1" value="0" aria-label="Bet amount">
+    <div class="mg-chips" id="hlChips"></div>
+    <div class="mg-limits"><span>Min: 0.20</span> <span id="hlMaxLabel">Max: 10K</span></div>
+  </section>
+  <p class="mg-note">Live play · RTP <span id="hlRtp">96.8%</span> · every call pays 97% ÷ its odds</p>
+</main>
+
+<div class="mg-actions" id="hlActions">
+  <button class="mg-act hl-act-lower" type="button" data-pick="LOWER"><b>LOWER</b><span id="hlLowerPays">Pays : 2.47x</span></button>
+  <button class="mg-act hl-act-higher" type="button" data-pick="HIGHER"><b>HIGHER</b><span id="hlHigherPays">Pays : 1.76x</span></button>
+  <button class="mg-act hl-act-next" type="button" id="hlNextHand" hidden><b>Play Next Hand</b></button>
+</div>
+
+<canvas class="mg-confetti" id="hlConfetti" aria-hidden="true"></canvas>
+<div class="sr-only" id="hlLive" aria-live="polite"></div>
+
+<!-- the bet, confirmed before the card turns -->
+<dialog class="mg-sheet hl-confirm" id="hlConfirm" aria-labelledby="hlConfirmTitle">
+  <h2 id="hlConfirmTitle">Place bet of GHS 0.20 for Higher?</h2>
+  <p id="hlConfirmText">The next card turns over. Win and it pays 1.76x.</p>
+  <div class="mg-sheet-actions hl-sheet-actions">
+    <button class="hl-sheet-cancel" type="button" id="hlConfirmNo">Cancel</button>
+    <button class="hl-sheet-ok" type="button" id="hlConfirmYes" autofocus>Confirm</button>
+  </div>
+</dialog>
+
+<dialog class="mg-sheet" id="hlNewConfirm" aria-labelledby="hlNewTitle">
+  <h2 id="hlNewTitle">New round?</h2>
+  <p>A new round clears the hands played and deals a fresh card.</p>
+  <div class="mg-sheet-actions hl-sheet-actions">
+    <button class="hl-sheet-cancel" type="button" id="hlNewNo" autofocus>Stay</button>
+    <button class="hl-sheet-ok" type="button" id="hlNewYes">New Round</button>
+  </div>
+</dialog>
+
+<dialog class="mg-dialog" id="hlRules" aria-labelledby="hlRulesTitle">
+  <h2 id="hlRulesTitle">How to play &amp; odds</h2>
+  <ol>
+    <li>A card is dealt face up. Call whether the next card will be <b>HIGHER</b> or <b>LOWER</b>. Aces are high; a card of the same rank loses.</li>
+    <li>Choose your bet, tap a call and confirm. The next card turns over.</li>
+    <li>A right call pays the multiplier shown on the button: <b>97% ÷ the chance of that call</b>, rounded down to the cent. A sure thing pays little; a long shot pays a lot.</li>
+    <li><b>Play Next Hand</b> moves the pair to the hands column and deals a fresh card. <b>New Round</b> clears the column.</li>
+  </ol>
+  <table class="hl-odds" id="hlOdds"></table>
+  <p><b>Fairness:</b> the next card is one of the other 51 cards of a full deck, each equally likely — for real money it's drawn and paid by our server, which prices the call from the card showing. The return of each call is its multiplier × its chance; every call returns between 96.47% and 96.94%, and the average over every call is <span id="hlRulesRtp">96.8%</span>.</p>
+  <form method="dialog"><button class="btn btn-primary btn-block">Got it</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=43"></script>
+<script src="assets/js/minigame.js?v=34"></script>
+<script src="assets/js/hilo.js?v=1"></script>
+</body>
+</html>
