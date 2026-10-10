@@ -20,9 +20,6 @@ import {
 import { adminReply, adminThread, adminThreads, setThreadStatus, SupportError, unreadThreads } from "../services/support.js";
 import { listAdminMinesSignals } from "../services/minesSignal.js";
 import { DepositError, recheckDeposit, waitingDeposits } from "../services/depositRecheck.js";
-import {
-  createRegionalAdmin, listRegionalAdmins, RegionalError, resetRegionalPin, setRegionalStatus,
-} from "../services/regional.js";
 
 const STATUSES = ["REQUESTED", "PAYING", "PAID", "DECLINED"];
 
@@ -37,8 +34,7 @@ export function adminRouter(db: Pool): Router {
       try {
         await fn(req, res);
       } catch (e) {
-        if (e instanceof WithdrawalError || e instanceof AdminError || e instanceof PartnerError || e instanceof SupportError ||
-            e instanceof RegionalError) {
+        if (e instanceof WithdrawalError || e instanceof AdminError || e instanceof PartnerError || e instanceof SupportError) {
           res.status(e.status).json({ error: e.code, message: e.message });
           return;
         }
@@ -107,12 +103,6 @@ export function adminRouter(db: Pool): Router {
   r.post("/partners/:id", send((req) => updatePartner(db, adminOf(req), req.params.id, req.body ?? {})));
   r.get("/partner-payouts", send((req) => listPartnerPayouts(db, query(req))));
 
-  /* regional admins (the Ghana Regional Admin): made, re-PINned and switched off only by full admins; a new PIN is
-     in the answer once and never stored */
-  r.get("/regional-admins", send(() => listRegionalAdmins(db)));
-  r.post("/regional-admins", send((req) => createRegionalAdmin(db, adminOf(req), req.body ?? {})));
-  r.post("/regional-admins/:id/reset-pin", send((req) => resetRegionalPin(db, adminOf(req), req.params.id)));
-  r.post("/regional-admins/:id/status", send((req) => setRegionalStatus(db, adminOf(req), req.params.id, req.body ?? {})));
   r.post("/partner-payouts/:id", send((req) => decidePartnerPayout(db, adminOf(req), req.params.id, req.body ?? {})));
 
   /* live support chat: the inbox, a conversation, a reply, close or reopen */

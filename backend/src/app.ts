@@ -11,7 +11,6 @@ import { paymentsRouter } from "./routes/payments.js";
 import { adminRouter } from "./routes/admin.js";
 import { gamesRouter } from "./routes/games.js";
 import { partnersRouter } from "./routes/partners.js";
-import { regionalRouter } from "./routes/regional.js";
 import { supportRouter } from "./routes/support.js";
 import { authenticate } from "./middleware/authenticate.js";
 
@@ -74,7 +73,6 @@ export function createApp(db: Pool): express.Express {
   app.use("/api/admin", adminRouter(db));
   app.use("/api/games", gamesRouter(db));
   app.use("/api/partners", partnersRouter(db));
-  app.use("/api/regional", regionalRouter(db));
   app.use("/api/support", supportRouter(db));
 
   // A health check that also proves the DB connection still works.

@@ -1,4 +1,4 @@
-/* Admin dashboard: the numbers, players, the money feed, games and studios, partners, Ghana admins, withdrawals and
+/* Admin dashboard: the numbers, players, the money feed, games and studios, partners, withdrawals and
    support, grouped in a sections menu (a sidebar on a computer, a menu that slides in on a phone).
    Access is enforced by the balance service (every /api/admin route needs an ADMIN_PHONES account); this page only
    shows what the server allows. Each section keeps its own small state and redraws from it; sections switch without
@@ -659,92 +659,6 @@
     draw();
   }
 
-  /* ================= Ghana admins ================= */
-  /* regional admins: made here with a 6-digit PIN shown once (only its hash is kept), re-PINned or switched off here;
-     they sign in at regional.html and see Ghana players' payments and revenue only */
-  const REGIONAL_PAGE = location.origin + location.pathname.replace(/[^/]*$/, "") + "regional.html";
-  function showPin(username, pin) {
-    const s = sheet("PIN for " + username);
-    s.set('<p class="me-sheet-note">Give this PIN to <b>' + esc(username) + "</b> privately. It's shown only now: it can't be looked up later, only replaced.</p>" +
-      '<div aria-label="PIN" style="margin:14px 0;padding:16px;border-radius:12px;background:var(--surface-2);text-align:center;font:800 2.1rem ui-monospace,Menlo,monospace;letter-spacing:.35em">' + esc(pin) + "</div>" +
-      '<button class="btn btn-ghost btn-sm" type="button" data-copy-pin>Copy PIN</button>' +
-      '<p class="me-sheet-note">They sign in at <a href="' + esc(REGIONAL_PAGE) + '" target="_blank" rel="noopener">' + esc(REGIONAL_PAGE) + "</a> with the username <b>" +
-      esc(username) + "</b> and this PIN. They see only Ghana players' payments and revenue.</p>");
-    s.body.addEventListener("click", (e) => {
-      if (e.target.closest("[data-copy-pin]")) copyText(pin, "PIN copied.", "Select the PIN and copy it.");
-    });
-  }
-  async function copyText(text, done, fallback) {
-    try {
-      await navigator.clipboard.writeText(text);
-      flash("ok", done);
-    } catch (er) {
-      flash("info", fallback);
-    }
-  }
-  async function loadRegional() {
-    const panel = panelOf("regional");
-    panel.innerHTML = loading;
-    const r = await api("/regional-admins");
-    if (state.tab !== "regional") return;
-    if (!r.ok) return flash("error", errText(r, "Couldn't load the Ghana admins."));
-    const list = r.data.admins;
-    const btn = (cls, attrs, label) => '<button class="btn ' + cls + ' btn-sm" type="button" ' + attrs + ">" + label + "</button>";
-    panel.innerHTML =
-      '<section class="adm-card"><h3 class="adm-h">' + U.icon("plus") + "New Ghana admin</h3>" +
-      '<p class="adm-note">They sign in with a username and a 6-digit PIN and see only Ghana players\' payments and revenue: no other players, no site-wide totals, no settings. Five wrong PINs lock the account for 15 minutes, ten for a day.</p>' +
-      '<form class="adm-terms" data-form="regional">' +
-        '<div class="field"><label for="rgNewUser">Username</label><input id="rgNewUser" maxlength="24" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. kofi.gh" required></div>' +
-        '<div class="field"><label for="rgNewName">Name</label><input id="rgNewName" maxlength="60" autocomplete="off" placeholder="e.g. Kofi Mensah"></div>' +
-        '<button class="btn btn-primary btn-sm" type="submit">Create and show PIN</button></form>' +
-      '<p class="adm-signin-link">They sign in at <a href="' + esc(REGIONAL_PAGE) + '" target="_blank" rel="noopener">' + esc(REGIONAL_PAGE) + "</a>" +
-        '<button class="btn btn-ghost btn-sm" type="button" data-copy-link>Copy link</button></p></section>' +
-      '<h3 class="adm-h">Ghana admins (' + list.length + ")</h3>" +
-      (list.length
-        ? '<div class="txr-group">' + list.map((a) => {
-            const who = 'data-rg-id="' + esc(a.id) + '" data-rg-name="' + esc(a.username) + '"';
-            return '<div class="txr-row adm-item">' + avatar(a.name || a.username) +
-              '<span class="txr-main"><strong>' + esc(a.name || a.username) + "</strong>" +
-              "<small>Username <b>" + esc(a.username) + "</b> · " + esc(a.region_name) + "</small>" +
-              "<small>Last sign-in " + (a.last_login_at ? when(a.last_login_at) : "never") + " · PIN set " + when(a.pin_set_at) + "</small>" +
-              "<small>Made by " + esc(a.created_by) + " · " + when(a.created_at) + "</small></span>" +
-              '<span class="txr-end"><span class="adm-pills">' + statusPill(a.status) + (a.locked_until ? pill("Locked until " + when(a.locked_until), "bad") : "") + "</span></span>" +
-              '<span class="adm-item-actions">' + btn("btn-ghost", "data-rg-pin " + who, "New PIN") +
-                (a.status === "ACTIVE"
-                  ? (a.locked_until ? btn("btn-ghost", 'data-rg-status="ACTIVE" ' + who, "Unlock") : "") + btn("btn-danger", 'data-rg-status="DISABLED" ' + who, "Switch off")
-                  : btn("btn-success", 'data-rg-status="ACTIVE" ' + who, "Switch on")) +
-              "</span></div>";
-          }).join("") + "</div>"
-        : empty("No Ghana admins yet.", "shield"));
-  }
-  async function createRegional(form) {
-    const btn = form.querySelector("button[type=submit]");
-    btn.disabled = true;
-    const r = await api("/regional-admins", { username: form.querySelector("#rgNewUser").value.trim(), name: form.querySelector("#rgNewName").value.trim() });
-    btn.disabled = false;
-    if (!r.ok) return flash("error", errText(r, "Couldn't create the Ghana admin."));
-    await loadRegional();
-    showPin(r.data.admin.username, r.data.pin);
-  }
-  async function regionalPin(b) {
-    const ok = await ask({ title: "Give " + esc(b.dataset.rgName) + " a new PIN?", text: "Their old PIN stops working and they're signed out everywhere. You'll see the new PIN once.", yes: "New PIN" });
-    if (ok === null) return;
-    const r = await api("/regional-admins/" + encodeURIComponent(b.dataset.rgId) + "/reset-pin", {});
-    if (!r.ok) return flash("error", errText(r, "Couldn't set a new PIN."));
-    await loadRegional();
-    showPin(r.data.admin.username, r.data.pin);
-  }
-  async function regionalStatus(b) {
-    const status = b.dataset.rgStatus;
-    if (status === "DISABLED") {
-      const ok = await ask({ title: "Switch off " + esc(b.dataset.rgName) + "?", text: "They're signed out at once and can't sign in until you switch them back on.", yes: "Switch off", danger: true });
-      if (ok === null) return;
-    }
-    const r = await api("/regional-admins/" + encodeURIComponent(b.dataset.rgId) + "/status", { status });
-    flash(r.ok ? "ok" : "error", r.ok ? (status === "ACTIVE" ? "Switched on." : "Switched off.") : errText(r, "Couldn't update."));
-    loadRegional();
-  }
-
   /* ================= Withdrawals ================= */
   const wd = { status: "REQUESTED" };
   const NETWORK = (p) =>
@@ -1016,7 +930,7 @@
   }
 
   /* ================= sections, menu, events, badges ================= */
-  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, games: loadGames, mines: loadMinesSignals, partners: loadPartners, regional: loadRegional, withdrawals: loadWithdrawals, support: () => loadSupport() };
+  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, games: loadGames, mines: loadMinesSignals, partners: loadPartners, withdrawals: loadWithdrawals, support: () => loadSupport() };
   const ADD_MONEY = '<button class="btn btn-primary btn-sm" type="button" data-credit>' + U.icon("plus") + "Add money</button>";
   /* each section's title, a line on what it's for, and its buttons */
   const SECTIONS = {
@@ -1027,7 +941,6 @@
     games: { title: "Games", lead: "Switching a game off takes it out of the lobby and stops new real-money bets on it; rounds already in play can still finish. A studio's switch does the same for all its games." },
     mines: { title: "Mines Signal", lead: "Admin only: where the hidden mines are in the rounds being played." },
     partners: { title: "Partners", lead: "Applications, active partners, and the payouts they ask for." },
-    regional: { title: "Ghana admins", lead: "Accounts that sign in with a PIN and see only Ghana players' payments and revenue." },
     support: { title: "Support", lead: "Players write from the chat button on every page; your replies show in their chat as “RendoWin Support”. Unread conversations come first." },
   };
   const panelOf = (tab) => document.querySelector('[data-panel="' + tab + '"]');
@@ -1085,10 +998,6 @@
   $("admActions").addEventListener("click", (e) => { if (e.target.closest("[data-credit]")) openCredit(); });
   $("admReload").addEventListener("click", () => { flash("", ""); refreshBadges(); LOADERS[state.tab](); });
 
-  document.querySelector(".adm-wrap").addEventListener("submit", (e) => {
-    if (e.target.matches('form[data-form="regional"]')) { e.preventDefault(); createRegional(e.target); }
-  });
-
   document.querySelector(".adm-wrap").addEventListener("click", (e) => {
     const chip = e.target.closest("[data-chips] [data-v]");
     if (chip) {
@@ -1112,7 +1021,6 @@
       showTab(go.dataset.go);
       return window.scrollTo(0, 0);
     }
-    if (e.target.closest("[data-copy-link]")) return copyText(REGIONAL_PAGE, "Link copied.", "Select the link and copy it.");
     const more = e.target.closest("[data-more]");
     if (more) return more.dataset.more === "players" ? loadPlayers(true) : olderMoney();
     const user = e.target.closest("[data-user]");
@@ -1123,10 +1031,6 @@
     if (w) return withdrawalAction(w);
     const payout = e.target.closest("[data-payout]");
     if (payout) return decidePayout(payout);
-    const rgPin = e.target.closest("[data-rg-pin]");
-    if (rgPin) return regionalPin(rgPin);
-    const rgStatus = e.target.closest("[data-rg-status]");
-    if (rgStatus) return regionalStatus(rgStatus);
     const thread = e.target.closest("[data-thread]");
     if (thread) return openThread(thread.dataset.thread);
   });

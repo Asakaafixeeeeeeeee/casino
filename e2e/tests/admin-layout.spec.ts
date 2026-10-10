@@ -6,7 +6,7 @@ import { ACCOUNTS, adminSession, adminTab, newPhone, PASSWORD, serverBalance, se
 
 const SECTIONS: [string, string][] = [
   ["overview", "Overview"], ["players", "Players"], ["money", "Money"], ["withdrawals", "Withdrawals"], ["games", "Games"],
-  ["mines", "Mines Signal"], ["partners", "Partners"], ["regional", "Ghana admins"], ["support", "Support"],
+  ["mines", "Mines Signal"], ["partners", "Partners"], ["support", "Support"],
 ];
 
 for (const vp of [{ name: "phone", width: 375, height: 812 }, { name: "desktop", width: 1366, height: 860 }]) {
