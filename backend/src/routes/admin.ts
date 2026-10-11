@@ -20,6 +20,7 @@ import {
 import { adminReply, adminThread, adminThreads, setThreadStatus, SupportError, unreadThreads } from "../services/support.js";
 import { listAdminMinesSignals } from "../services/minesSignal.js";
 import { DepositError, recheckDeposit, waitingDeposits } from "../services/depositRecheck.js";
+import { aviatorOverview, saveAviatorSettings } from "../services/aviatorAdmin.js";
 
 const STATUSES = ["REQUESTED", "PAYING", "PAID", "DECLINED"];
 
@@ -49,7 +50,8 @@ export function adminRouter(db: Pool): Router {
   r.get("/me", handle(async (_req, res) => {
     let payouts = false;
     try {
-      payouts = !!loadTellerConfig(process.env).payoutPasscode;
+      loadTellerConfig(process.env); /* payouts need TheTeller's keys; the float passcode is optional */
+      payouts = true;
     } catch {
       payouts = false;
     }
@@ -81,6 +83,10 @@ export function adminRouter(db: Pool): Router {
   r.get("/transactions", send((req) => transactions(db, query(req))));
   r.get("/actions", send((req) => auditLog(db, query(req))));
   r.get("/mines/signals", send(() => listAdminMinesSignals(db)));
+
+  /* Aviator: live monitor (a round's crash point only once it's over), published RTP and bet limits */
+  r.get("/aviator", send(() => aviatorOverview(db)));
+  r.post("/aviator/settings", send((req) => saveAviatorSettings(db, adminOf(req), req.body ?? {})));
 
   /* players */
   r.get("/users", send((req) => searchUsers(db, query(req))));

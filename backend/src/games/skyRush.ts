@@ -57,26 +57,75 @@ const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex"
  * u in [0, 1), then floor(97 ÷ (1 − u)) hundredths, at least 1.00x and at most the top. The page repeats this sum
  * with the browser's own crypto to check a finished round.
  */
-export function skyCrashFromSeed(seed: string, no: number): number {
+export function skyCrashFromSeed(seed: string, no: number, rtp = SKY_RTP): number {
   const h = crypto.createHmac("sha256", seed).update(`${SKY_ID}:${no}`).digest("hex");
-  return skyCrashFromUniform(parseInt(h.slice(0, 13), 16) / 2 ** 52);
+  return skyCrashFromUniform(parseInt(h.slice(0, 13), 16) / 2 ** 52, rtp);
 }
 
-/** u uniform on [0, 1) → a crash point with P(crash ≥ m) = 97% ÷ m (to the cent, capped at the top). */
-export const skyCrashFromUniform = (u: number) =>
-  Math.min(SKY_MAX_CRASH, Math.max(1, Math.floor((100 * SKY_RTP) / (1 - u)) / 100));
+/** u uniform on [0, 1) → a crash point with P(crash ≥ m) = RTP ÷ m (to the cent, capped at the top). */
+export const skyCrashFromUniform = (u: number, rtp = SKY_RTP) =>
+  Math.min(SKY_MAX_CRASH, Math.max(1, Math.floor((100 * rtp) / (1 - u)) / 100));
 
 /* ---------------- storage ---------------- */
 
 interface RoundRow {
   no: string; seed: string; hash: string; crash: string; starts_at: Date | string; ends_at: Date | string; settled: boolean;
+  /** The RTP the round was drawn with. */
+  rtp: string;
 }
 interface BetRow {
   id: string; round_no: string; user_id: string; panel: number; stake: string; auto_target: string | null;
   status: "ACTIVE" | "WON" | "LOST" | "CANCELLED"; cashed_x: string | null; payout: string; idempotency_key: string;
   created_at: Date | string;
+  /** The maximum win in force when the bet was placed (null: bets from before it could be changed, so MAX_WIN). */
+  max_win: string | null;
 }
 type Db = Pool | PoolClient;
+
+/* ---------------- settings (admin: published RTP and bet limits) ---------------- */
+
+export interface SkySettings { rtp: number; min_bet: number; max_bet: number; max_win: number; updated_by: string | null; updated_at: string | null }
+const SKY_DEFAULTS: SkySettings = { rtp: SKY_RTP, min_bet: 1, max_bet: 1000, max_win: MAX_WIN, updated_by: null, updated_at: null };
+let settingsCache: { at: number; value: SkySettings } | null = null;
+
+/** The settings in force (a few seconds' cache; a change made here clears it at once). */
+export async function getSkySettings(db: Db): Promise<SkySettings> {
+  if (settingsCache && Date.now() - settingsCache.at < 3000) return settingsCache.value;
+  const row = (await db.query<{ rtp: string; min_bet: string; max_bet: string; max_win: string; updated_by: string | null; updated_at: Date | null }>(
+    `SELECT rtp, min_bet, max_bet, max_win, updated_by, updated_at FROM sky_settings WHERE id = 1`)).rows[0];
+  const value: SkySettings = row
+    ? { rtp: Number(row.rtp), min_bet: Number(row.min_bet), max_bet: Number(row.max_bet), max_win: Number(row.max_win),
+        updated_by: row.updated_by, updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : null }
+    : SKY_DEFAULTS;
+  settingsCache = { at: Date.now(), value };
+  return value;
+}
+
+/** Saves new settings (checked here). They apply from the next round that opens and the next bet placed; a round
+ *  already drawn and bets already placed keep what they had. The RTP comes in as a percentage (97). */
+export async function saveSkySettings(
+  db: Pool, by: string, input: { rtp?: unknown; min_bet?: unknown; max_bet?: unknown; max_win?: unknown }
+): Promise<SkySettings> {
+  const cur = await getSkySettings(db);
+  const pick = (v: unknown, fallback: number) => (v === undefined || v === null || v === "" ? fallback : numeric(v));
+  const rtpPct = Math.round(pick(input.rtp, cur.rtp * 100) * 100) / 100;
+  const minBet = Math.round(pick(input.min_bet, cur.min_bet) * 100) / 100;
+  const maxBet = Math.round(pick(input.max_bet, cur.max_bet) * 100) / 100;
+  const maxWin = Math.round(pick(input.max_win, cur.max_win) * 100) / 100;
+  if (!Number.isFinite(rtpPct) || rtpPct < 80 || rtpPct > 99) throw new GameError("invalid_rtp", "RTP must be between 80% and 99%");
+  if (!Number.isFinite(minBet) || minBet < 0.1) throw new GameError("invalid_min_bet", "Minimum bet must be at least GHS 0.10");
+  if (!Number.isFinite(maxBet) || maxBet < minBet || maxBet > 1_000_000) {
+    throw new GameError("invalid_max_bet", "Maximum bet must be at least the minimum bet (and at most GHS 1,000,000)");
+  }
+  if (!Number.isFinite(maxWin) || maxWin < maxBet || maxWin > 100_000_000) {
+    throw new GameError("invalid_max_win", "Maximum win must be at least the maximum bet (and at most GHS 100,000,000)");
+  }
+  await db.query(
+    `UPDATE sky_settings SET rtp = $1, min_bet = $2, max_bet = $3, max_win = $4, updated_by = $5, updated_at = now() WHERE id = 1`,
+    [rtpPct / 100, minBet, maxBet, maxWin, by]);
+  settingsCache = null;
+  return getSkySettings(db);
+}
 
 const startOf = (r: RoundRow) => new Date(r.starts_at).getTime();
 /** The exact crash moment (ends_at is the same, rounded up to the millisecond, for the database's own queries). */
@@ -97,6 +146,8 @@ export interface SkyRoundView {
   hash: string;
   /** Take-off (ms since the epoch); betting closes then. */
   starts_at: number;
+  /** The RTP the crash point was drawn with (P(crash ≥ m) = rtp ÷ m); public, for checking the round. */
+  rtp: number;
   over: boolean;
   /** Only once the plane has flown away. */
   crash?: number;
@@ -123,13 +174,15 @@ function roundView(r: RoundRow, now: number): SkyRoundView {
     no: Number(r.no),
     hash: r.hash,
     starts_at: startOf(r),
+    rtp: Number(r.rtp ?? SKY_RTP),
     over,
     ...(over ? { crash: Number(r.crash), seed: r.seed, ends_at: Math.ceil(endOf(r)) } : {}),
   };
 }
 
+const maxWinOf = (b: BetRow) => (b.max_win === null || b.max_win === undefined ? MAX_WIN : Number(b.max_win));
 const autoOf = (b: BetRow) =>
-  Math.min(b.auto_target === null ? Infinity : Number(b.auto_target), capOf(Number(b.stake), SKY_MAX_CRASH));
+  Math.min(b.auto_target === null ? Infinity : Number(b.auto_target), capOf(Number(b.stake), SKY_MAX_CRASH, maxWinOf(b)));
 
 function betView(b: BetRow): SkyBetView {
   return {
@@ -145,7 +198,7 @@ function betView(b: BetRow): SkyBetView {
 }
 
 const verdictOf = (b: BetRow, r: RoundRow, now: number, manual: boolean) =>
-  judge(SKY, { stake: Number(b.stake), kind: "classic", auto: b.auto_target === null ? null : Number(b.auto_target) },
+  judge({ ...SKY, maxWin: maxWinOf(b) }, { stake: Number(b.stake), kind: "classic", auto: b.auto_target === null ? null : Number(b.auto_target) },
     { crash: Number(r.crash), startsAt: startOf(r) }, now, manual);
 
 async function balanceOf(db: Db, userId: string): Promise<number> {
@@ -187,12 +240,14 @@ export async function currentSkyRound(db: Pool, now = Date.now()): Promise<Round
   if (latest && now < endOf(latest)) return latest;
   const no = latest ? Number(latest.no) + 1 : 1;
   const seed = crypto.randomBytes(32).toString("hex");
-  const crash = skyCrashFromSeed(seed, no);
+  /* the published RTP in force now, stored with the round so the round can still be checked after a change */
+  const { rtp } = await getSkySettings(db);
+  const crash = skyCrashFromSeed(seed, no, rtp);
   const startsAt = Math.ceil(Math.max(latest ? endOf(latest) : 0, now)) + SKY_WAIT_MS;
   await db.query(
-    `INSERT INTO sky_rounds (no, seed, hash, crash, starts_at, ends_at) VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO sky_rounds (no, seed, hash, crash, starts_at, ends_at, rtp) VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (no) DO NOTHING`,
-    [no, seed, sha256(seed), crash, new Date(startsAt), new Date(Math.ceil(startsAt + skyFlightMs(crash)))]);
+    [no, seed, sha256(seed), crash, new Date(startsAt), new Date(Math.ceil(startsAt + skyFlightMs(crash))), rtp]);
   return (await roundByNo(db, no))!;
 }
 
@@ -260,8 +315,9 @@ export async function placeSkyBet(
   const panel = numeric(input.panel);
   if (panel !== 0 && panel !== 1) throw new GameError("invalid_panel", "Choose bet 1 or bet 2");
   const stake = Math.round(numeric(input.stake) * 100) / 100;
-  if (!Number.isFinite(stake) || stake < SKY.minBet || stake > SKY.maxBet) {
-    throw new GameError("invalid_stake", `Bet between GHS ${SKY.minBet.toFixed(2)} and GHS ${SKY.maxBet.toLocaleString("en-GH")}`);
+  const limits = await getSkySettings(db);
+  if (!Number.isFinite(stake) || stake < limits.min_bet || stake > limits.max_bet) {
+    throw new GameError("invalid_stake", `Bet between GHS ${limits.min_bet.toFixed(2)} and GHS ${limits.max_bet.toLocaleString("en-GH")}`);
   }
   let auto: number | null = null;
   if (input.auto !== undefined && input.auto !== null) {
@@ -281,9 +337,9 @@ export async function placeSkyBet(
       const live = (await client.query<{ settled: boolean }>(`SELECT settled FROM sky_rounds WHERE no = $1 FOR SHARE`, [no])).rows[0];
       if (!live || live.settled) throw new GameError("too_late", "That round is over — your bet goes on the next one.", 409);
       const bet = (await client.query<BetRow>(
-        `INSERT INTO sky_bets (round_no, user_id, panel, stake, auto_target, idempotency_key)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-        [no, userId, panel, stake, auto, key])).rows[0]!;
+        `INSERT INTO sky_bets (round_no, user_id, panel, stake, auto_target, idempotency_key, max_win)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [no, userId, panel, stake, auto, key, limits.max_win])).rows[0]!;
       await postMovement(client, {
         idempotencyKey: `bet:sky:${bet.id}`,
         entryType: "BET_PLACED",
@@ -539,10 +595,11 @@ export interface SkyState {
   rules: { wait_ms: number; growth: number; rtp: number; min_bet: number; max_bet: number; max_crash: number; max_win: number };
 }
 
-const RULES = {
-  wait_ms: SKY_WAIT_MS, growth: SKY_GROWTH, rtp: SKY_RTP, min_bet: SKY.minBet, max_bet: SKY.maxBet, max_crash: SKY_MAX_CRASH,
-  max_win: MAX_WIN,
-};
+/** The rules the page shows and plays by: the fixed curve, and the admin's published RTP and limits. */
+async function rules(db: Db): Promise<SkyState["rules"]> {
+  const s = await getSkySettings(db);
+  return { wait_ms: SKY_WAIT_MS, growth: SKY_GROWTH, rtp: s.rtp, min_bet: s.min_bet, max_bet: s.max_bet, max_crash: SKY_MAX_CRASH, max_win: s.max_win };
+}
 
 /**
  * What the routes serve, with short caches in front of the database: every page asks for the same round, so one
@@ -610,7 +667,7 @@ export function createSkyLive(db: Pool, opts: { clock?: () => number; sleep?: (m
     async state(): Promise<SkyState> {
       const r = await round();
       const now = clock();
-      return { server_now: now, round: roundView(r, now), history: await finished(Number(r.no)), rules: RULES };
+      return { server_now: now, round: roundView(r, now), history: await finished(Number(r.no)), rules: await rules(db) };
     },
 
     /** Held until round `no` is over (or MAX_WAIT_MS); once it is, the answer carries the crash and the next round. */

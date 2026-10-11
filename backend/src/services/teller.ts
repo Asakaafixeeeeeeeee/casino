@@ -247,7 +247,7 @@ export async function initiatePayout(
   config: TellerConfig,
   args: { transactionId: string; amountMajor: number; phone: string; network: MomoNetwork; desc: string }
 ): Promise<TellerStatusResponse> {
-  if (!config.payoutPasscode) throw new TellerConfigurationError("Payouts are disabled; set TELLER_PASSCODE");
+  /* the float passcode is optional (guide: sent only when set) */
   const payload = JSON.stringify({
     account_number: "+233" + args.phone.replace(/^0/, ""),
     merchant_id: config.merchantId,
@@ -257,7 +257,7 @@ export async function initiatePayout(
     "r-switch": "FLT",
     desc: args.desc,
     account_issuer: args.network,
-    pass_code: config.payoutPasscode,
+    ...(config.payoutPasscode ? { pass_code: config.payoutPasscode } : {}),
   });
   let result: { status: number; body: Record<string, unknown> };
   try {

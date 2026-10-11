@@ -29,6 +29,8 @@ async function player(env: Env, name: string) {
 async function fund(env: Env, userId: string, amount: number) {
   await env.client.query("BEGIN");
   await deposit(env.client, userId, "GHS", amount, "deposit:" + key());
+  /* treated as winnings too, so the tests that withdraw can (deposits on their own can't be withdrawn) */
+  await env.client.query("UPDATE user_balances SET withdrawable = available WHERE user_id = $1", [userId]);
   await env.client.query("COMMIT");
 }
 async function bet(env: Env, userId: string, stake: number, payout: number) {

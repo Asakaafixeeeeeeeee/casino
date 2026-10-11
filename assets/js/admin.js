@@ -687,7 +687,7 @@
     const panel = panelOf("withdrawals");
     const head = chips("wstatus", [["REQUESTED", "Waiting"], ["PAYING", "Sending"], ["PAID", "Paid"], ["DECLINED", "Returned"]], wd.status) +
       (state.me && !state.me.payoutsEnabled
-        ? "<div class='alert alert-info'>Payouts are switched off: set <b>TELLER_PASSCODE</b> (your TheTeller float passcode) on the asakaa-balance service in Render. You can still reject requests, which returns the money to the player.</div>"
+        ? "<div class='alert alert-info'>Payouts are switched off: TheTeller's keys (<b>TELLER_MERCHANT_ID</b>, <b>TELLER_API_USERNAME</b>, <b>TELLER_API_KEY</b>) aren't set on the asakaa-balance service in Render. You can still reject requests, which returns the money to the player.</div>"
         : "");
     panel.innerHTML = head + loading;
     const r = await api("/withdrawals?status=" + wd.status);
@@ -929,8 +929,103 @@
     renderMinesSignals(r.data);
   }
 
+  /* ================= Aviator ================= */
+  /* live monitor (a round's crash point shows only once the plane has flown away), pause, and the published RTP and
+     bet limits. The settings form is drawn once per visit so the 2-second refresh never wipes what's being typed. */
+  const av = { loading: false, last: null };
+  const AV_PHASE = { betting: ["Taking bets", "warn"], flying: ["In the air", "live"], ended: ["Idle: no one playing", ""] };
+  const avStat = (label, value, cls) => "<div><span>" + label + "</span><b" + (cls ? ' class="' + cls + '"' : "") + ">" + value + "</b></div>";
+  const avTotals = (t, title) => '<section class="adm-card"><h3 class="adm-h">' + title + '</h3><div class="adm-mines-meta">' +
+    avStat("Rounds", count(t.rounds)) + avStat("Bets", count(t.bets)) + avStat("Players", count(t.players)) +
+    avStat("Staked", money(t.staked)) + avStat("Paid out", money(t.paid)) + avStat("House profit", money(t.profit), t.profit >= 0 ? "in" : "bad") +
+    avStat("Actual RTP", t.actual_rtp === null ? "—" : t.actual_rtp + "%") + "</div></section>";
+  function avForm(s) {
+    const f = (id, label, value, step, min, hint) => '<div class="field"><label for="' + id + '">' + label + "</label>" +
+      '<input id="' + id + '" type="number" inputmode="decimal" step="' + step + '" min="' + min + '" value="' + value + '" required>' +
+      (hint ? '<small class="adm-note">' + hint + "</small>" : "") + "</div>";
+    return '<section class="adm-card"><h3 class="adm-h">Settings</h3>' +
+      '<p class="adm-note">Changes apply from the next round and the next bet; a round already drawn and bets already placed keep what they had. ' +
+      "The RTP is published on the game page, and every round keeps the RTP it was drawn with so players can still check it.</p>" +
+      '<form class="adm-terms" data-form="aviator">' +
+      f("avRtp", "RTP (%)", s.rtp_pct, "0.01", "80", "Between 80 and 99. Players get this much back on average.") +
+      f("avMin", "Minimum bet (GHS)", s.min_bet, "0.01", "0.1") +
+      f("avMax", "Maximum bet (GHS)", s.max_bet, "0.01", "0.1") +
+      f("avWin", "Maximum win per bet (GHS)", s.max_win, "0.01", "1") +
+      '<button class="btn btn-primary btn-sm" type="submit">Save settings</button></form>' +
+      '<p class="adm-note">Last changed ' + (s.updated_at ? when(s.updated_at) + " by " + esc(s.updated_by || "—") : "never (defaults)") + ".</p></section>";
+  }
+  function renderAviator(d) {
+    const panel = panelOf("aviator");
+    if (!panel.querySelector("#avLive")) {
+      panel.innerHTML = '<div id="avTop"></div>' + avForm(d.settings) + '<div id="avLive"></div>';
+    }
+    $("avTop").innerHTML = '<section class="adm-card"><div class="adm-studio-head"><div><strong>Aviator is ' + (d.enabled ? "on" : "paused") + "</strong><small>" +
+      (d.enabled ? "Players can bet. Pausing stops new bets; a round in the air still finishes." : "No new bets are taken. Resume to open it again.") + "</small></div>" +
+      '<button class="btn ' + (d.enabled ? "btn-danger" : "btn-success") + ' btn-sm" type="button" data-av-toggle>' + (d.enabled ? "Pause Aviator" : "Resume Aviator") + "</button></div>" +
+      '<div class="adm-mines-meta">' + avStat("RTP", d.settings.rtp_pct + "%") + avStat("Bets", money(d.settings.min_bet) + " – " + money(d.settings.max_bet)) +
+      avStat("Max win", money(d.settings.max_win)) + "</div></section>";
+    const r = d.round;
+    const phase = r ? AV_PHASE[r.phase] : null;
+    const roundCard = !r ? empty("No rounds yet. A round starts when someone opens Aviator.", "bolt") :
+      '<section class="adm-card"><div class="adm-mines-card-head"><strong>Round ' + count(r.no) + "</strong><span class='adm-mines-pills'>" +
+        pill(phase[0], phase[1]) + (r.phase === "ended" ? pill("Crashed at " + r.crash.toFixed(2) + "x", "") : "") + pill("Refreshing every 2s", "live") + "</span></div>" +
+        '<div class="adm-mines-meta">' + avStat("Players", count(r.players)) + avStat("Bets", count(r.bets.length)) + avStat("Staked", money(r.staked)) +
+        avStat("RTP", Math.round(r.rtp * 10000) / 100 + "%") + "</div>" +
+        (r.bets.length
+          ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Player</th><th>Phone</th><th>Stake</th><th>Auto</th><th>Status</th><th>Cashed</th><th>Win</th></tr></thead><tbody>' +
+            r.bets.map((b) => "<tr><td>" + esc(b.name) + "</td><td>" + esc(b.phone || "—") + "</td><td>" + money(b.stake) + "</td><td>" +
+              (b.auto ? b.auto.toFixed(2) + "x" : "—") + "</td><td>" + pill(b.status === "ACTIVE" ? "Riding" : b.status === "WON" ? "Cashed out" : "Lost",
+              b.status === "WON" ? "ok" : b.status === "LOST" ? "bad" : "live") + "</td><td>" + (b.x ? b.x.toFixed(2) + "x" : "—") + "</td><td>" +
+              (b.payout ? money(b.payout) : "—") + "</td></tr>").join("") + "</tbody></table></div>"
+          : '<p class="adm-note">No bets in this round.</p>') + "</section>";
+    const recent = d.recent.length
+      ? '<section class="adm-card"><h3 class="adm-h">Recent rounds</h3><div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Round</th><th>Crash</th><th>Bets</th><th>Players</th><th>Staked</th><th>Paid</th><th>Profit</th><th>When</th></tr></thead><tbody>' +
+        d.recent.map((x) => "<tr><td>" + count(x.no) + "</td><td>" + x.crash.toFixed(2) + "x</td><td>" + count(x.bets) + "</td><td>" + count(x.players) + "</td><td>" +
+          money(x.staked) + "</td><td>" + money(x.paid) + '</td><td class="' + (x.profit >= 0 ? "in" : "bad") + '">' + money(x.profit) + "</td><td>" + when(new Date(x.at).toISOString()) + "</td></tr>").join("") +
+        "</tbody></table></div></section>"
+      : "";
+    $("avLive").innerHTML = roundCard + avTotals(d.today, "Today") + avTotals(d.week, "Last 7 days") + recent;
+  }
+  async function loadAviator(fresh) {
+    if (av.loading || state.tab !== "aviator") return;
+    if (fresh) panelOf("aviator").innerHTML = loading;
+    av.loading = true;
+    const r = await api("/aviator");
+    av.loading = false;
+    if (state.tab !== "aviator") return;
+    if (!r.ok) return flash("error", errText(r, "Couldn't load Aviator."));
+    av.last = r.data;
+    renderAviator(r.data);
+  }
+  async function aviatorToggle() {
+    const on = !(av.last && av.last.enabled);
+    if (!on) {
+      const ok = await ask({ title: "Pause Aviator?", text: "No new bets are taken until you resume it. A round already in the air still finishes and pays out.", yes: "Pause", danger: true });
+      if (ok === null) return;
+    }
+    const r = await api("/catalog/game/aviator", { enabled: on });
+    flash(r.ok ? "ok" : "error", r.ok ? "Aviator is now " + (on ? "on" : "paused") + "." : errText(r, "Couldn't change it."));
+    loadAviator(false);
+  }
+  async function saveAviator(form) {
+    const v = (id) => form.querySelector("#" + id).value;
+    const body = { rtp: v("avRtp"), min_bet: v("avMin"), max_bet: v("avMax"), max_win: v("avWin") };
+    if (av.last && Number(body.rtp) !== av.last.settings.rtp_pct) {
+      const ok = await ask({ title: "Change the RTP to " + esc(body.rtp) + "%?", text: "It applies to every round from the next one, for every player, and the game page will show the new figure.", yes: "Change RTP" });
+      if (ok === null) return;
+    }
+    const btn = form.querySelector("button[type=submit]");
+    btn.disabled = true;
+    const r = await api("/aviator/settings", body);
+    btn.disabled = false;
+    if (!r.ok) return flash("error", errText(r, "Couldn't save the settings."));
+    flash("ok", "Aviator settings saved. They apply from the next round.");
+    panelOf("aviator").innerHTML = "";
+    loadAviator(true);
+  }
+
   /* ================= sections, menu, events, badges ================= */
-  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, games: loadGames, mines: loadMinesSignals, partners: loadPartners, withdrawals: loadWithdrawals, support: () => loadSupport() };
+  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), partners: loadPartners, withdrawals: loadWithdrawals, support: () => loadSupport() };
   const ADD_MONEY = '<button class="btn btn-primary btn-sm" type="button" data-credit>' + U.icon("plus") + "Add money</button>";
   /* each section's title, a line on what it's for, and its buttons */
   const SECTIONS = {
@@ -940,6 +1035,7 @@
     withdrawals: { title: "Withdrawals", lead: "Players' requests to cash out. Pay sends the money through TheTeller; Reject returns it to the player's balance." },
     games: { title: "Games", lead: "Switching a game off takes it out of the lobby and stops new real-money bets on it; rounds already in play can still finish. A studio's switch does the same for all its games." },
     mines: { title: "Mines Signal", lead: "Admin only: where the hidden mines are in the rounds being played." },
+    aviator: { title: "Aviator", lead: "Watch rounds and bets live, pause the game, and set its published RTP and bet limits." },
     partners: { title: "Partners", lead: "Applications, active partners, and the payouts they ask for." },
     support: { title: "Support", lead: "Players write from the chat button on every page; your replies show in their chat as “RendoWin Support”. Unread conversations come first." },
   };
@@ -998,7 +1094,12 @@
   $("admActions").addEventListener("click", (e) => { if (e.target.closest("[data-credit]")) openCredit(); });
   $("admReload").addEventListener("click", () => { flash("", ""); refreshBadges(); LOADERS[state.tab](); });
 
+  document.querySelector(".adm-wrap").addEventListener("submit", (e) => {
+    if (e.target.matches('form[data-form="aviator"]')) { e.preventDefault(); saveAviator(e.target); }
+  });
+
   document.querySelector(".adm-wrap").addEventListener("click", (e) => {
+    if (e.target.closest("[data-av-toggle]")) return aviatorToggle();
     const chip = e.target.closest("[data-chips] [data-v]");
     if (chip) {
       const group = chip.closest("[data-chips]").dataset.chips;
@@ -1086,7 +1187,8 @@
       setInterval(pollMoney, 10000),
       setInterval(refreshBadges, 20000),
       setInterval(() => { if (state.tab === "support" && !document.hidden && !document.querySelector(".adm-sheet")) loadSupport(true); }, 15000),
-      setInterval(() => { if (state.tab === "mines" && !document.hidden) loadMinesSignals(); }, 2000));
+      setInterval(() => { if (state.tab === "mines" && !document.hidden) loadMinesSignals(); }, 2000),
+      setInterval(() => { if (state.tab === "aviator" && !document.hidden && !document.querySelector(".adm-sheet")) loadAviator(false); }, 2000));
     /* the round countdowns tick every second between refreshes */
     setInterval(() => { if (state.tab === "mines" && !document.hidden && minesSignals.last.some((s) => s.source === "live")) renderMinesSignals(minesSignals.last); }, 1000);
   })();

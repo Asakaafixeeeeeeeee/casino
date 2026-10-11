@@ -128,7 +128,7 @@
   </aside>
 </main>
 
-<div class="sr-foot-note">RTP 97% · <button type="button" class="sr-link" data-open="srFair">Provably fair</button> · <button type="button" class="sr-link" data-open="srRules">Rules</button></div>
+<div class="sr-foot-note">RTP <span data-rtp>97</span>% · <button type="button" class="sr-link" data-open="srFair">Provably fair</button> · <button type="button" class="sr-link" data-open="srRules">Rules</button></div>
 
 <div class="sr-only" id="srLive" aria-live="polite"></div>
 
@@ -149,7 +149,7 @@
   <ul class="sr-rules">
     <li>A round takes bets for 8 seconds after the last plane flew away. Then the plane takes off and the multiplier climbs: e<sup>0.09 × seconds</sup>, so 2x after about 8 seconds, 10x after about 26.</li>
     <li>Each round's crash point is set before take-off and told to no one until the plane has flown away.</li>
-    <li>The chance the plane reaches any multiplier <i>m</i> is 97% ÷ <i>m</i>. About 4 rounds in 100 fly away at 1.00x. Whichever way you play, bets return 97% on average over many rounds (RTP 97%).</li>
+    <li>The chance the plane reaches any multiplier <i>m</i> is <span data-rtp>97</span>% ÷ <i>m</i>. About <span data-rtp-instant>4</span> rounds in 100 fly away at 1.00x. Whichever way you play, bets return <span data-rtp>97</span>% on average over many rounds (RTP <span data-rtp>97</span>%).</li>
     <li>A cash-out pays your bet × the multiplier at the moment our server receives it, rounded down to the cent. An auto cash-out pays exactly its multiplier.</li>
     <li>A bet can win at most <span data-max-win>GHS 250,000</span>: it cashes itself out when it gets there. The highest round is 10,000x.</li>
     <li>If your connection drops, your bets still count: auto cash-outs still pay, and a bet nobody cashed out loses when the plane flies away.</li>
@@ -161,8 +161,8 @@
 <dialog class="sr-dialog" id="srLimits" aria-labelledby="srLimitsTitle">
   <h2 id="srLimitsTitle">Game limits</h2>
   <dl class="sr-limits">
-    <div><dt>Minimum bet</dt><dd>GHS 1.00</dd></div>
-    <div><dt>Maximum bet</dt><dd>GHS 1,000.00</dd></div>
+    <div><dt>Minimum bet</dt><dd data-min-bet>GHS 1.00</dd></div>
+    <div><dt>Maximum bet</dt><dd data-max-bet>GHS 1,000.00</dd></div>
     <div><dt>Maximum win per bet</dt><dd data-max-win>GHS 250,000.00</dd></div>
     <div><dt>Highest round</dt><dd>10,000x</dd></div>
   </dl>
@@ -173,7 +173,7 @@
   <h2 id="srFairTitle">Provably fair</h2>
   <p>Before each round takes off we publish a fingerprint (SHA-256 hash) of a secret seed. After the plane flies away we show the seed itself. The crash point comes from the seed, so you can check that it was fixed before the round and not changed after.</p>
   <div class="sr-fair-now"><span>Next round's fingerprint</span><code id="srFairHash">…</code></div>
-  <p class="sr-fair-how">To check a round, tap its multiplier in the strip above the plane. Your browser works out the crash point from the seed: HMAC-SHA256 with the seed as key over “sky-rush:” and the round number; the first 13 hex digits, divided by 2<sup>52</sup>, give <i>u</i>; the crash point is ⌊97 ÷ (1 − <i>u</i>)⌋ ÷ 100, at least 1.00x.</p>
+  <p class="sr-fair-how">To check a round, tap its multiplier in the strip above the plane. Your browser works out the crash point from the seed: HMAC-SHA256 with the seed as key over “sky-rush:” and the round number; the first 13 hex digits, divided by 2<sup>52</sup>, give <i>u</i>; the crash point is ⌊100 × RTP ÷ (1 − <i>u</i>)⌋ ÷ 100, at least 1.00x, using the RTP shown for that round (97% for rounds before the RTP could change).</p>
   <form method="dialog"><button class="sr-dialog-btn">Close</button></form>
 </dialog>
 
@@ -189,6 +189,6 @@
 </dialog>
 
 <script src="assets/js/site.js?v=44"></script>
-<script src="assets/js/aviator.js?v=2"></script>
+<script src="assets/js/aviator.js?v=3"></script>
 </body>
 </html>

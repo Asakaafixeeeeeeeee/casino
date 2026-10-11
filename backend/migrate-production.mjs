@@ -30,6 +30,7 @@ const migrationFiles = [
   "022_regional_admins.sql",
   "023_user_full_name.sql",
   "024_withdrawable_winnings.sql",
+  "025_aviator_settings.sql",
 ];
 
 if (!process.env.DATABASE_URL) {

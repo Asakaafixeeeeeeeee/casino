@@ -8,7 +8,6 @@ import {
   networkForPhone,
   newTxId,
   reasonText,
-  TellerConfigurationError,
   TellerRequestError,
   verdict,
   type TellerConfig,
@@ -169,8 +168,6 @@ export async function payWithdrawal(
   id: string,
   admin: string
 ): Promise<{ status: "PAID" | "DECLINED" | "PAYING"; note: string | null }> {
-  // checked before claiming, so a missing passcode leaves the request waiting rather than stuck mid-payout
-  if (!config.payoutPasscode) throw new TellerConfigurationError("Payouts are disabled; set TELLER_PASSCODE");
   const owner = (await db.query<{ phone: string }>(`SELECT phone FROM withdrawals WHERE id = $1`, [id])).rows[0];
   if (owner && samePhone(owner.phone, admin)) throw new WithdrawalError("own_withdrawal", "Another admin has to approve your own withdrawal", 403);
   const txId = newTxId();

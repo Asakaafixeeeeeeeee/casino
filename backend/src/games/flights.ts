@@ -41,6 +41,8 @@ export interface FlightGame extends Curve {
   waitMs: number;
   /** The highest crash point; a bet still riding when a round gets there is paid at it. */
   maxCrash: number;
+  /** The most one bet can win, if not MAX_WIN. */
+  maxWin?: number;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -85,8 +87,9 @@ export function colours(rtp: number): Record<Colour, { pay: number; test: (x: nu
   };
 }
 
-/** A bet cashes itself out where it would win MAX_WIN, or at the top crash point. */
-export const capOf = (stake: number, maxCrash = MAX_CRASH) => Math.min(maxCrash, Math.floor((MAX_WIN / stake) * 100 + 1e-9) / 100);
+/** A bet cashes itself out where it would win the maximum win (MAX_WIN unless the game sets its own), or at the top. */
+export const capOf = (stake: number, maxCrash = MAX_CRASH, maxWin = MAX_WIN) =>
+  Math.min(maxCrash, Math.floor((maxWin / stake) * 100 + 1e-9) / 100);
 
 export type Verdict = { status: "WON"; x: number } | { status: "LOST" } | { status: "ACTIVE" };
 
@@ -109,7 +112,7 @@ export function judge(
     if (!over) return { status: "ACTIVE" };
     return c.test(crash) ? { status: "WON", x: c.pay } : { status: "LOST" };
   }
-  const target = Math.min(bet.auto ?? Infinity, capOf(bet.stake, game.maxCrash));
+  const target = Math.min(bet.auto ?? Infinity, capOf(bet.stake, game.maxCrash, game.maxWin));
   if (target <= crash && now >= startsAt + game.flightMs(target)) return { status: "WON", x: target };
   if (over) return { status: "LOST" };
   if (manual && now >= startsAt) return { status: "WON", x: game.multiplierAt(now - startsAt) };

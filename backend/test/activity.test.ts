@@ -15,6 +15,8 @@ test("Transaction records list deposits with their outcome and withdrawals as pe
   await intentWithTx(20, "000000000103"); // still waiting on TheTeller
   await new Promise((r) => setTimeout(r, 10)); // distinct timestamps: the in-memory clock is coarse
   await client.query("BEGIN");
+  /* only winnings can be withdrawn: count the balance as winnings for this listing test */
+  await client.query("UPDATE user_balances SET withdrawable = available WHERE user_id = $1", [userId]);
   await withdraw(client, userId, "GHS", 25, "withdraw:test-1", "momo:0241234194");
   await client.query("COMMIT");
 

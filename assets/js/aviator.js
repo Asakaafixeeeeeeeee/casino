@@ -16,8 +16,10 @@
   const GROWTH = 0.09;        // multiplier = e^(GROWTH × seconds)
   const FLEW_MS = 3000;       // "FLEW AWAY!" stays up this long, then the waiting screen
   const CRUISE_S = 5;         // seconds the plane takes to climb to its cruising spot
-  const MIN_BET = 1;
-  const MAX_BET = 1000;
+  /* the published RTP and the limits are set by the admin; the server's rules replace these defaults on load */
+  let MIN_BET = 1;
+  let MAX_BET = 1000;
+  let RTP = 0.97;
   const MAX_CRASH = 10000;
   const FUN_CREDITS = 3000;
   const QUICK = [1, 5, 10, 50];
@@ -162,6 +164,19 @@
     if (d.rules && d.rules.max_win) {
       MAX_WIN = d.rules.max_win;
       document.querySelectorAll("[data-max-win]").forEach((el) => (el.textContent = "GHS " + money(MAX_WIN)));
+    }
+    if (d.rules && d.rules.min_bet > 0 && d.rules.max_bet >= d.rules.min_bet) {
+      MIN_BET = d.rules.min_bet;
+      MAX_BET = d.rules.max_bet;
+      document.querySelectorAll("[data-min-bet]").forEach((el) => (el.textContent = "GHS " + money(MIN_BET)));
+      document.querySelectorAll("[data-max-bet]").forEach((el) => (el.textContent = "GHS " + money(MAX_BET)));
+    }
+    if (d.rules && d.rules.rtp > 0) {
+      RTP = d.rules.rtp;
+      const pct = String(Math.round(RTP * 10000) / 100);
+      document.querySelectorAll("[data-rtp]").forEach((el) => (el.textContent = pct));
+      /* rounds that fly away at 1.00x: P(crash < 1.01) = 1 − RTP ÷ 1.01 */
+      document.querySelectorAll("[data-rtp-instant]").forEach((el) => (el.textContent = String(Math.round((1 - RTP / 1.01) * 100))));
     }
     history = d.history || [];
     renderHistory(false);
@@ -915,7 +930,9 @@
     const key = await crypto.subtle.importKey("raw", enc.encode(v.seed), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
     const h = hex(await crypto.subtle.sign("HMAC", key, enc.encode("sky-rush:" + v.no)));
     const u = parseInt(h.slice(0, 13), 16) / Math.pow(2, 52);
-    const x = Math.min(MAX_CRASH, Math.max(1, Math.floor(97 / (1 - u)) / 100));
+    /* the RTP the round was drawn with (rounds from before it could be changed: 97%), the same sum as the server */
+    const rtp = v.rtp > 0 ? v.rtp : 0.97;
+    const x = Math.min(MAX_CRASH, Math.max(1, Math.floor((100 * rtp) / (1 - u)) / 100));
     return { hashOk: digest === v.hash, x, crashOk: x === v.crash };
   }
 

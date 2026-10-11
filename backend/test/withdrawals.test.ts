@@ -22,11 +22,12 @@ const config = loadTellerConfig({
   TELLER_PASSCODE: "float-pass",
 });
 
-/** A player with ₵100 who has asked to withdraw ₵40. */
+/** A player with ₵100 of winnings (only winnings can be withdrawn) who has asked to withdraw ₵40. */
 async function withRequest() {
   const env = await setupWalletDb();
   await env.client.query("BEGIN");
   await deposit(env.client, env.userId, "GHS", 100, "deposit:seed-100");
+  await env.client.query("UPDATE user_balances SET withdrawable = available WHERE user_id = $1", [env.userId]);
   await env.client.query("COMMIT");
   const { id } = await requestWithdrawal(env.db, { id: env.userId, phone: PHONE }, 40, "withdraw:test-40");
   const row = async () => (await env.db.query("SELECT * FROM withdrawals WHERE id = $1", [id])).rows[0];
@@ -131,20 +132,24 @@ test("A timeout keeps the payout pending — never refunded — until a status c
   assert.equal(await balance(), 60);
 });
 
-test("Payouts refuse to run without the float passcode", async () => {
+test("The float passcode is optional: without it a payout still goes, and no pass_code is sent", async () => {
   const { db, id, row } = await withRequest();
-  const noPass = loadTellerConfig({ TELLER_MERCHANT_ID: "m", TELLER_API_USERNAME: "u", TELLER_API_KEY: "k" });
-  const sent = await withTeller(json({ code: "000" }), async () => {
-    await assert.rejects(() => payWithdrawal(db, noPass, id, "0200000001"), /TELLER_PASSCODE/);
+  const noPass = loadTellerConfig({ TELLER_BASE_URL: "https://test.theteller.net", TELLER_MERCHANT_ID: "m", TELLER_API_USERNAME: "u", TELLER_API_KEY: "k" });
+  const sent = await withTeller(json({ code: "000", status: "approved" }), async () => {
+    assert.equal((await payWithdrawal(db, noPass, id, "0200000001")).status, "PAID");
   });
-  assert.equal(sent.length, 0);
-  assert.equal((await row()).status, "REQUESTED"); // still waiting; nothing was sent
+  assert.equal(sent.length, 1);
+  assert.equal("pass_code" in sent[0]!.body, false);
+  assert.equal((await row()).status, "PAID");
 });
 
 test("Requests made before the withdrawals table existed are picked up by the migration", async () => {
   const env = await setupWalletDb({ stopBefore: "007_withdrawals.sql" });
+  /* today's ledger code needs the winnings column, which this deliberately old schema doesn't have yet */
+  await env.db.query("ALTER TABLE user_balances ADD COLUMN IF NOT EXISTS withdrawable NUMERIC(38,18) NOT NULL DEFAULT 0");
   await env.client.query("BEGIN");
   await deposit(env.client, env.userId, "GHS", 50, "deposit:legacy");
+  await env.client.query("UPDATE user_balances SET withdrawable = available WHERE user_id = $1", [env.userId]);
   await withdraw(env.client, env.userId, "GHS", 25, "withdraw:legacy", "momo:0551234567");
   await env.client.query("COMMIT");
   await env.runMigration("007_withdrawals.sql");

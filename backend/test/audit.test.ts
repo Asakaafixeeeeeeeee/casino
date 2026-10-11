@@ -19,12 +19,13 @@ import { cashOutSession, settleAbandonedSessions, startSession, stepSession, ABA
 
 const key = () => "k-" + Math.random().toString(36).slice(2, 12);
 
-/** A player with GHS 100 and the registered number 0241234567 (MTN). */
+/** A player with GHS 100, all of it withdrawable winnings, and the registered number 0241234567 (MTN). */
 async function funded(amount = 100) {
   const env = await setupWalletDb();
   await env.db.query(`UPDATE users SET phone = '0241234567' WHERE id = $1`, [env.userId]);
   await env.client.query("BEGIN");
   await deposit(env.client, env.userId, "GHS", amount, "deposit:audit-" + key());
+  await env.client.query("UPDATE user_balances SET withdrawable = available WHERE user_id = $1", [env.userId]);
   await env.client.query("COMMIT");
   return env;
 }
