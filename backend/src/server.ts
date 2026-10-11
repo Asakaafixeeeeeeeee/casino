@@ -10,6 +10,7 @@ import { startFlightSweep } from "./games/flights.js";
 import { startLiveSweep } from "./games/minesLive.js";
 import { startSessionSweep } from "./games/sessions.js";
 import { startSkySweep } from "./games/skyRush.js";
+import { startPartnerSweep } from "./services/affiliates.js";
 import { startKeepWarm } from "./keepWarm.js";
 
 const PORT = Number(process.env.PORT ?? 8781);
@@ -31,6 +32,7 @@ async function main(): Promise<void> {
   startLiveSweep(db);
   startSessionSweep(db);
   startSkySweep(db);
+  startPartnerSweep(db);
   startKeepWarm();
 }
 

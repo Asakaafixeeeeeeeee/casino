@@ -124,7 +124,22 @@ function fullNameProblem(name) {
 /* the currency the player chose at sign-up (the balance their header shows by default): US dollars or Ghana cedis */
 const CURRENCIES = ["USD", "GHS"];
 const currencyOf = (v) => (CURRENCIES.includes(String(v || "").toUpperCase()) ? String(v).toUpperCase() : "");
-const publicUser = (u) => ({ phone: u.phone, username: u.username, full_name: u.full_name || null, currency: u.currency || "USD", country: u.country || "GH" });
+const publicUser = (u) => ({ phone: u.phone, username: u.username, full_name: u.full_name || null, email: u.email || null, currency: u.currency || "USD", country: u.country || "GH" });
+
+/* an optional email address: "" when none was given, null when it isn't a valid address */
+const EMAIL_RE = /^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,}$/;
+function emailOf(v) {
+  const s = String(v || "").trim().toLowerCase();
+  if (!s) return "";
+  return s.length <= 254 && EMAIL_RE.test(s) ? s : null;
+}
+/* the device a session was opened on, for the "login sessions" list: browser and system, never the full string */
+function deviceOf(req) {
+  const ua = String(req.headers["user-agent"] || "");
+  const browser = /Edg\//.test(ua) ? "Edge" : /OPR\/|Opera/.test(ua) ? "Opera" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "Browser";
+  const os = /Android/.test(ua) ? "Android" : /iPhone|iPad|iPod/.test(ua) ? "iOS" : /Windows/.test(ua) ? "Windows" : /Mac OS X/.test(ua) ? "macOS" : /Linux/.test(ua) ? "Linux" : "";
+  return os ? browser + " on " + os : browser;
+}
 const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
 
 /* ---------------- per-IP rate limit for the sign-in endpoints ---------------- */
@@ -226,10 +241,11 @@ async function main() {
   const db = await open();
   DUMMY_HASH = await hashPassword(crypto.randomBytes(12).toString("hex"));
 
-  async function newSession(userId, remember) {
+  async function newSession(userId, remember, req) {
     const token = crypto.randomBytes(32).toString("base64url");
     const expires = new Date(Date.now() + (remember ? REMEMBER_MS : SESSION_MS));
-    await db.query("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)", [sha256(token), userId, expires]);
+    await db.query("INSERT INTO sessions (token_hash, user_id, expires_at, device, last_seen_at) VALUES ($1, $2, $3, $4, now())",
+      [sha256(token), userId, expires, req ? deviceOf(req) : null]);
     return token;
   }
 
@@ -237,9 +253,12 @@ async function main() {
     const m = /^Bearer\s+(\S+)$/.exec(req.headers.authorization || "");
     if (!m) throw new HttpError(401, "Please log in.");
     const { rows } = await db.query(
-      `SELECT u.*, s.token_hash FROM sessions s JOIN users u ON u.id = s.user_id
+      `SELECT u.*, s.token_hash, s.last_seen_at FROM sessions s JOIN users u ON u.id = s.user_id
         WHERE s.token_hash = $1 AND s.expires_at > now()`, [sha256(m[1])]);
     if (!rows.length) throw new HttpError(401, "Your session has ended. Please log in again.");
+    /* "last active" for the sessions list, at most every 5 minutes */
+    const seen = rows[0].last_seen_at ? new Date(rows[0].last_seen_at).getTime() : 0;
+    if (Date.now() - seen > 5 * 60 * 1000) await db.query("UPDATE sessions SET last_seen_at = now() WHERE token_hash = $1", [rows[0].token_hash]);
     return rows[0];
   }
 
@@ -295,11 +314,13 @@ async function main() {
       const dob = String(body.dob || "");
       const age = ageFrom(dob);
       const currency = currencyOf(body.currency || "USD");
+      const email = emailOf(body.email);
       const problem =
         fullNameProblem(fullName) ? ["fullName", fullNameProblem(fullName)] :
         !country ? ["country", "Choose your country."] :
         !phone ? ["phone", country.code === "GH" ? "That is not a valid Ghanaian mobile number." : "Enter a valid " + country.name + " mobile number (+" + country.dial + " …)."] :
         !currency ? ["currency", "Choose US dollars or Ghana cedis."] :
+        email === null ? ["email", "That email address doesn't look right — check it, or leave it empty."] :
         !USER_RE.test(username) ? ["username", "Use 4–16 letters or numbers, no spaces."] :
         RESERVED.includes(username.toLowerCase()) ? ["username", "That username is taken."] :
         passwordProblem(body.password) ? ["pw", passwordProblem(body.password)] :
@@ -310,19 +331,22 @@ async function main() {
       const taken = await db.query("SELECT phone, lower(username) = lower($2) AS same_name FROM users WHERE phone = $1 OR lower(username) = lower($2)", [phone, username]);
       if (taken.rows.some((r) => r.phone === phone)) throw new HttpError(409, "An account already exists for this number — log in instead.", { field: "phone" });
       if (taken.rows.length) throw new HttpError(409, "That username is taken.", { field: "username" });
+      if (email && (await db.query("SELECT 1 FROM users WHERE lower(email) = $1", [email])).rows.length) {
+        throw new HttpError(409, "That email address is already used by another account.", { field: "email" });
+      }
 
       const hash = await hashPassword(body.password);
       let user;
       try {
         ({ rows: [user] } = await db.query(
-          "INSERT INTO users (phone, username, password_hash, dob, news, currency, country, full_name) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
-          [phone, username, hash, dob, !!body.news, currency, country.code, fullName || null]));
+          "INSERT INTO users (phone, username, password_hash, dob, news, currency, country, full_name, email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
+          [phone, username, hash, dob, !!body.news, currency, country.code, fullName || null, email || null]));
       } catch (err) {
         /* two sign-ups for the same number or name at the same moment: the unique index decides */
-        if (err.code === "23505") throw new HttpError(409, "That number or username was just taken. Try again.");
+        if (err.code === "23505") throw new HttpError(409, "That number, username or email was just taken. Try again.");
         throw err;
       }
-      const token = await newSession(user.id, true);
+      const token = await newSession(user.id, true, req);
       return { status: 201, body: { token, user: publicUser(user) } };
     },
 
@@ -344,7 +368,7 @@ async function main() {
       }
       await db.query("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = $1", [user.id]);
       await db.query("DELETE FROM sessions WHERE expires_at < now()");
-      const token = await newSession(user.id, body.remember !== false);
+      const token = await newSession(user.id, body.remember !== false, req);
       return { body: { token, user: publicUser(user) } };
     },
 
@@ -370,7 +394,67 @@ async function main() {
 
     "GET /api/session/verify": async (req) => {
       const user = await signedIn(req);
-      return { body: { user: { id: user.id, phone: user.phone, username: user.username, full_name: user.full_name || null, currency: user.currency || "USD", country: user.country || "GH" } } };
+      return { body: { user: { id: user.id, phone: user.phone, username: user.username, full_name: user.full_name || null, email: user.email || null, currency: user.currency || "USD", country: user.country || "GH" } } };
+    },
+
+    /* the optional email address, added or changed from the account settings (empty removes it) */
+    "POST /api/me/email": async (req, body) => {
+      const user = await signedIn(req);
+      const email = emailOf(body.email);
+      if (email === null) throw new HttpError(400, "That email address doesn't look right.", { field: "email" });
+      if (email && (await db.query("SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2", [email, user.id])).rows.length) {
+        throw new HttpError(409, "That email address is already used by another account.", { field: "email" });
+      }
+      try {
+        await db.query("UPDATE users SET email = $2 WHERE id = $1", [user.id, email || null]);
+      } catch (err) {
+        if (err.code === "23505") throw new HttpError(409, "That email address is already used by another account.", { field: "email" });
+        throw err;
+      }
+      return { body: { user: publicUser({ ...user, email: email || null }) } };
+    },
+
+    /* change the password: the current one confirms it's you; every other device is signed out */
+    "POST /api/me/password": async (req, body) => {
+      const user = await signedIn(req);
+      const wait = lockedFor(user);
+      if (wait) throw new HttpError(429, "Too many wrong attempts. Try again in " + wait + " seconds.", { retryIn: wait });
+      if (!(await checkPassword(String(body.current || ""), user.password_hash))) {
+        const { lockS, triesLeft } = await failedAttempt(user);
+        if (lockS) throw new HttpError(429, "Too many wrong attempts — paused for " + lockS + " seconds.", { retryIn: lockS });
+        throw new HttpError(401, "Your current password is wrong.", { field: "current", triesLeft });
+      }
+      const problem = passwordProblem(body.password);
+      if (problem) throw new HttpError(400, problem, { field: "password" });
+      await db.query("UPDATE users SET password_hash = $2, failed_logins = 0, locked_until = NULL WHERE id = $1",
+        [user.id, await hashPassword(body.password)]);
+      await db.query("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2", [user.id, user.token_hash]);
+      return { body: { ok: true } };
+    },
+
+    /* the devices signed in to this account (a session's id is a prefix of its stored hash, never the token) */
+    "GET /api/me/sessions": async (req) => {
+      const user = await signedIn(req);
+      const { rows } = await db.query(
+        "SELECT token_hash, device, created_at, last_seen_at, expires_at FROM sessions WHERE user_id = $1 AND expires_at > now() ORDER BY coalesce(last_seen_at, created_at) DESC LIMIT 50",
+        [user.id]);
+      return { body: { sessions: rows.map((r) => ({
+        id: r.token_hash.slice(0, 16), device: r.device || "Unknown device", created_at: r.created_at,
+        last_seen_at: r.last_seen_at, expires_at: r.expires_at, current: r.token_hash === user.token_hash
+      })) } };
+    },
+
+    /* sign out one other device ({ id }) or every other device ({ all: true }) */
+    "POST /api/me/sessions/revoke": async (req, body) => {
+      const user = await signedIn(req);
+      if (body.all === true) {
+        await db.query("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2", [user.id, user.token_hash]);
+        return { body: { ok: true } };
+      }
+      const id = String(body.id || "");
+      if (!/^[0-9a-f]{16}$/.test(id)) throw new HttpError(400, "Choose a session.");
+      await db.query("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2 AND left(token_hash, 16) = $3", [user.id, user.token_hash, id]);
+      return { body: { ok: true } };
     },
 
     /* forgot password: the date of birth given at sign-up confirms it's you */
@@ -395,7 +479,7 @@ async function main() {
       return { body: { ok: true } };
     }
   };
-  const RATE_LIMITED = new Set(["POST /api/register", "POST /api/login", "POST /api/reset"]);
+  const RATE_LIMITED = new Set(["POST /api/register", "POST /api/login", "POST /api/reset", "POST /api/me/password"]);
 
   const server = http.createServer(async (req, res) => {
     cors(req, res);

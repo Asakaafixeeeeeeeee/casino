@@ -1196,7 +1196,8 @@
     contact: CONTACT, telHref, faq: FAQ,
     wallet, session, api, paymentApi, refreshBalance, favs, recent, streak, toast, icon, gameCard, miniCard, markActiveNav, countdown, nextSundayEnd,
     format, money: format, esc, normalizePhone, isGhanaMobile, categoryIcon: (c) => CATEGORY_ICONS[c] || "grid", thumbFace,
-    testMode, openChat: (topic) => chat.open(topic), openConvert, switchCurrency, moneyInDollars, attributeRef
+    testMode, openChat: (topic) => chat.open(topic), openConvert, switchCurrency, moneyInDollars, attributeRef,
+    referral: { get: storedRef, setPromo: setRefPromo }
   };
 
   /* Leaving a game must not trap the browser Back button. A "back to the lobby" control is a plain <a href>, which
@@ -1242,11 +1243,23 @@
   });
 
   /* ---------------- partner links ---------------- */
-  /* ?ref=CODE (and &sub=campaign) on any page: remembered for 30 days on this device, the visit counted once. Once
-     someone is signed in, their account is credited to the partner — the server only accepts accounts opened in the
-     last week, so an existing player can't be claimed. The link is kept until an account is actually credited: if
-     the account signed in is the partner's own or an older one, a new account opened here later still counts. */
+  /* ?ref=CODE (and &sub=campaign) on any page: remembered for 30 days on this device, the visit counted once, and
+     kept while the visitor moves between pages. A promo code typed at sign-up is stored with it. Once someone is
+     signed in, their account is credited to the partner — the server only accepts newly opened accounts, so an
+     existing player can't be claimed, and refuses a link and a promo code of two different partners. The link is
+     kept until an account is actually credited: if the account signed in is the partner's own or an older one, a
+     new account opened here later still counts. */
   const REF = "vb.ref";
+  function storedRef() {
+    const ref = read(REF, null);
+    return ref && Date.now() - ref.at <= 30 * 864e5 ? ref : null;
+  }
+  function setRefPromo(promo) {
+    const p = String(promo || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
+    const ref = storedRef();
+    if (!p && !ref) return;
+    write(REF, Object.assign({ code: "", sub: "", at: Date.now() }, ref || {}, { promo: p, tried: [] }));
+  }
   async function attributeRef() {
     const ref = read(REF, null);
     const s = session.get();
@@ -1254,7 +1267,9 @@
     if (Date.now() - ref.at > 30 * 864e5) return remove(REF);
     const who = s.phone || "";
     if ((ref.tried || []).includes(who)) return; /* this account was already checked against this link */
-    const r = await paymentApi("/api/partners/attribute", { body: { code: ref.code, sub_id: ref.sub }, timeout: 15000 });
+    const r = await paymentApi("/api/partners/attribute", { body: { code: ref.code, promo: ref.promo || "", sub_id: ref.sub }, timeout: 15000 });
+    /* a code that's no longer valid, or a link and promo code of two partners: nothing to retry */
+    if (r.status === 404 || r.status === 409) return remove(REF);
     if (!r.ok || !r.data) return; /* try again on the next page */
     if (r.data.attributed) return remove(REF);
     const now = read(REF, null);
@@ -1267,7 +1282,7 @@
       const sub = (p.get("sub") || p.get("utm_campaign") || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
       const prev = read(REF, null);
       if (!prev || prev.code !== code) {
-        write(REF, { code, sub, at: Date.now() });
+        write(REF, { code, sub, promo: (prev && prev.promo) || "", at: Date.now() });
         paymentApi("/api/partners/click", { body: { code, sub } });
       }
     }

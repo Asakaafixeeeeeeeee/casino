@@ -129,3 +129,41 @@ test("Without CF-Connecting-IP, TRUSTED_PROXY_HOPS picks the proxy-appended addr
   const health = await (await fetch(s.base + "/health", { headers: { "x-forwarded-for": "1.2.3.4, 5.6.7.8" } })).json();
   assert.deepEqual(health.proxy, { cf: false, xffHops: 2, trustedHops: 1 }, "the shape of the proxy headers, never their values");
 });
+
+test("An optional email at sign-up: checked, unique, changeable, and handed to the balance service", async (t) => {
+  const s = await server(); t.after(s.stop);
+  assert.equal((await s.call("POST", "/api/register", player(40))).status, 201, "no email is fine");
+  const bad = await s.call("POST", "/api/register", { ...player(41), email: "not-an-email" });
+  assert.deepEqual([bad.status, bad.body.field], [400, "email"]);
+  const reg = await s.call("POST", "/api/register", { ...player(41), email: " Ama@Example.COM " });
+  assert.equal(reg.status, 201);
+  assert.equal(reg.body.user.email, "ama@example.com");
+  const dup = await s.call("POST", "/api/register", { ...player(42), email: "ama@example.com" });
+  assert.deepEqual([dup.status, dup.body.field], [409, "email"]);
+  const auth = { authorization: "Bearer " + reg.body.token };
+  assert.equal((await s.call("GET", "/api/session/verify", null, auth)).body.user.email, "ama@example.com");
+  assert.equal((await s.call("POST", "/api/me/email", { email: "new@example.com" }, auth)).body.user.email, "new@example.com");
+  assert.equal((await s.call("POST", "/api/me/email", { email: "" }, auth)).body.user.email, null, "empty removes it");
+});
+
+test("Change password needs the current one and signs out every other device; sessions can be listed and revoked", async (t) => {
+  const s = await server(); t.after(s.stop);
+  const reg = await s.call("POST", "/api/register", player(50));
+  const other = await s.call("POST", "/api/login", { phone: player(50).phone, password: PW }, { "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari/604.1" });
+  const auth = { authorization: "Bearer " + reg.body.token };
+  const list = (await s.call("GET", "/api/me/sessions", null, auth)).body.sessions;
+  assert.equal(list.length, 2);
+  assert.equal(list.filter((x) => x.current).length, 1);
+  assert.ok(list.some((x) => x.device === "Safari on iOS"));
+  assert.ok(!JSON.stringify(list).includes(reg.body.token), "tokens are never listed");
+  const wrong = await s.call("POST", "/api/me/password", { current: "nope-nope-1", password: "Brand-new-pw1" }, auth);
+  assert.deepEqual([wrong.status, wrong.body.field], [401, "current"]);
+  assert.equal((await s.call("POST", "/api/me/password", { current: PW, password: "123" }, auth)).status, 400);
+  assert.equal((await s.call("POST", "/api/me/password", { current: PW, password: "Brand-new-pw1" }, auth)).status, 200);
+  assert.equal((await s.call("GET", "/api/me", null, { authorization: "Bearer " + other.body.token })).status, 401, "the other device is out");
+  assert.equal((await s.call("GET", "/api/me", null, auth)).status, 200, "this one stays in");
+  assert.equal((await s.call("POST", "/api/login", { phone: player(50).phone, password: "Brand-new-pw1" })).status, 200);
+  const third = (await s.call("GET", "/api/me/sessions", null, auth)).body.sessions.find((x) => !x.current);
+  assert.equal((await s.call("POST", "/api/me/sessions/revoke", { id: third.id }, auth)).status, 200);
+  assert.equal((await s.call("GET", "/api/me/sessions", null, auth)).body.sessions.length, 1);
+});

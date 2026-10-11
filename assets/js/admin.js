@@ -100,7 +100,7 @@
 
   /* ---------------- little building blocks ---------------- */
   const pill = (text, tone) => '<span class="adm-pill' + (tone ? " " + tone : "") + '">' + esc(text) + "</span>";
-  const STATUS_TONE = { ACTIVE: "ok", SUSPENDED: "bad", CLOSED: "bad", PENDING: "warn", REJECTED: "bad", REQUESTED: "warn", PAID: "ok", VERIFIED: "ok", UNVERIFIED: "", PAYING: "warn", DECLINED: "bad", DISABLED: "bad", FAILED: "bad" };
+  const STATUS_TONE = { ACTIVE: "ok", SUSPENDED: "bad", CLOSED: "bad", PENDING: "warn", REJECTED: "bad", REQUESTED: "warn", PAID: "ok", VERIFIED: "ok", UNVERIFIED: "", PAYING: "warn", DECLINED: "bad", DISABLED: "bad", FAILED: "bad", APPROVED: "brand" };
   const statusPill = (s) => pill(s.charAt(0) + s.slice(1).toLowerCase(), STATUS_TONE[s]);
   const kpi = (label, value, sub, tone) =>
     '<div class="adm-kpi' + (tone ? " " + tone : "") + '"><span>' + label + "</span><strong>" + value + "</strong>" + (sub ? "<small>" + sub + "</small>" : "") + "</div>";
@@ -392,7 +392,7 @@
         const r = await api("/users/" + id + "/kyc", { kyc: s.body.querySelector("#kycSel").value });
         flash(r.ok ? "ok" : "error", r.ok ? "KYC status saved." : errText(r, "Couldn't save."));
       } else if (act === "make-partner") {
-        const ok = await ask({ title: "Make this player a partner?", text: "They get a referral code and earn 5% of every deposit their players make. You can change the rate on their partner page.", yes: "Make partner" });
+        const ok = await ask({ title: "Make this player a partner?", text: "They become an active partner with a referral link and promo code, earning the default revenue share: a share of the net gaming revenue (losses) of the players they bring in, less a deduction on those players' net winnings. You can change their rate on their partner profile.", yes: "Make partner" });
         if (ok === null) return;
         const r = await api("/partners/" + id, { status: "ACTIVE" });
         flash(r.ok ? "ok" : "error", r.ok ? "They're now a partner (code " + esc(r.data.code) + ")." : errText(r, "Couldn't make them a partner."));
@@ -531,130 +531,720 @@
   }
 
   /* ================= Partners ================= */
-  const pt = { view: "PENDING" };
-  const PVIEWS = [["PENDING", "Applications"], ["ACTIVE", "Active"], ["payouts", "Payout requests"], ["", "All"]];
-  const terms = (p) => p.deposit_pct + "% of every deposit";
+  /* Partners earn a revenue share: their % of the net gaming revenue (stakes − winnings) of every losing bet settled by a
+     player they brought in, less the win deduction % of the net winnings of every winning bet. Commission is recorded per
+     settled bet, credited to the partner's commission wallet when its settlement period closes, and paid out by hand on
+     request. Everything here comes from the server; this page only draws it. */
+  const pt = { view: "PENDING", q: "", pay: "OPEN", range: "30d", from: "", to: "", timer: 0, seq: 0, settings: null };
+  const PVIEWS = [["PENDING", "Applications"], ["ACTIVE", "Active"], ["SUSPENDED", "Suspended"], ["DISABLED", "Disabled"], ["", "All"],
+    ["payouts", "Payout requests"], ["stats", "Statistics"], ["settings", "Commission settings"]];
+  const LIST_VIEWS = ["PENDING", "ACTIVE", "SUSPENDED", "DISABLED", ""];
+  const PAY_VIEWS = [["OPEN", "Open"], ["REQUESTED", "Requested"], ["APPROVED", "Approved"], ["PAID", "Paid"], ["REJECTED", "Rejected"]];
+  const PRANGES = [["today", "Today"], ["yesterday", "Yesterday"], ["7d", "7 days"], ["30d", "30 days"], ["this_month", "This month"],
+    ["last_month", "Last month"], ["all", "All time"], ["custom", "Custom"]];
   const METHOD = { MOMO: "Mobile Money", BANK: "Bank transfer", CRYPTO: "Crypto" };
-  const payTo = (p) => {
-    const d = p.details || {};
-    return p.method === "MOMO" ? esc(d.phone) + " · " + esc(d.name) :
-      p.method === "BANK" ? esc(d.bank) + " · " + esc(d.account_number) + " · " + esc(d.account_name) :
-      esc(d.asset) + " (" + esc(d.network) + ") · <span class='adm-addr'>" + esc(d.address) + "</span>";
+  const WALLET_KIND = { OPENING: "Opening balance", SETTLEMENT: "Settlement credited", CORRECTION: "Correction by admin",
+    PAYOUT_HOLD: "Held for a payout request", PAYOUT_RELEASE: "Payout rejected: returned" };
+  const tx = (s) => esc(s === null || s === undefined ? "" : s);
+  const refLink = (code) => location.origin + "/?ref=" + encodeURIComponent(code || "");
+  const rateOf = (n) => (n === null || n === undefined ? "—" : Number(n).toLocaleString("en-GB", { maximumFractionDigits: 2 }) + "%");
+  const tone = (n) => (n > 0 ? "in" : n < 0 ? "bad" : "");
+  const dayOf = (v) => (v ? new Date(v).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—");
+  /* a statistics bucket: "2026-10-03" (a day) or "2026-10" (a month), both UTC */
+  const bucket = (d) => d.length === 7
+    ? new Date(d + "-01T00:00:00Z").toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" })
+    : new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  const detailsOf = (p) => {
+    if (p.details && typeof p.details === "object") return p.details;
+    try { return JSON.parse(p.details || "{}") || {}; } catch (e) { return {}; }
   };
-  async function loadPartners() {
-    const panel = panelOf("partners");
-    panel.innerHTML = chips("pview", PVIEWS, pt.view) + loading;
-    const r = await api(pt.view === "payouts" ? "/partner-payouts?status=REQUESTED" : "/partners?status=" + pt.view);
-    if (state.tab !== "partners") return;
-    if (!r.ok) return flash("error", errText(r, "Couldn't load partners."));
-    let html = chips("pview", PVIEWS, pt.view);
-    if (pt.view === "payouts") {
-      const list = r.data.payouts;
-      html += list.length
-        ? '<div class="txr-group">' + list.map((p) => '<div class="txr-row adm-item">' +
-            '<span class="txr-ico out">' + U.icon("withdraw") + "</span>" +
-            '<span class="txr-main"><strong>' + esc(p.username || "Partner") + " · " + esc(p.code) + "</strong>" +
-            "<small>" + METHOD[p.method] + ": " + payTo(p) + "</small><small>Requested " + when(p.created_at) + "</small></span>" +
-            '<span class="txr-end"><b class="out">' + money(p.amount) + "</b></span>" +
-            '<span class="adm-item-actions">' +
-            '<button class="btn btn-primary btn-sm" type="button" data-payout="' + esc(p.id) + '" data-do="pay" data-amount="' + p.amount + '">Mark paid</button>' +
-            '<button class="btn btn-ghost btn-sm" type="button" data-payout="' + esc(p.id) + '" data-do="reject">Reject</button></span></div>').join("") + "</div>"
-        : empty("No payout requests waiting.", "wallet");
-    } else {
-      const list = r.data.partners;
-      html += list.length
-        ? '<div class="txr-group">' + list.map((p) => '<div class="txr-row adm-player" data-partner="' + esc(p.user_id) + '" role="button" tabindex="0">' + avatar(p.username) +
-            '<span class="txr-main"><strong>' + esc(p.username || "Player") + " · " + esc(p.code) + "</strong>" +
-            "<small>" + esc(p.phone || "") + " · applied " + when(p.created_at) + "</small>" +
-            '<small class="txr-detail">' + (p.status === "PENDING" ? "“" + esc(p.channel || "") + "”"
-              : esc(terms(p)) + " · " + count(p.signups) + " players · deposits " + money(p.deposits) + " · earned " + money(p.earned) +
-                " · paid " + money(p.paid) + " · available " + money(p.available)) + "</small></span>" +
-            '<span class="txr-end">' + statusPill(p.status) + (p.payoutWaiting ? pill("Payout waiting", "warn") : "") + "</span></div>").join("") + "</div>"
-        : empty(pt.view === "PENDING" ? "No applications waiting." : "No partners here yet.", "star");
+  const payTo = (p) => {
+    const d = detailsOf(p);
+    return p.method === "MOMO" ? "number <b>" + tx(d.phone) + "</b> · name " + tx(d.name) :
+      p.method === "BANK" ? tx(d.bank) + " · account <b>" + tx(d.account_number) + "</b> · " + tx(d.account_name) :
+      p.method === "CRYPTO" ? tx(d.asset) + " (" + tx(d.network) + ") · <span class='adm-addr'>" + tx(d.address) + "</span>" : "—";
+  };
+  const table = (heads, rows, foot) => '<div class="adm-table-wrap"><table class="adm-table"><thead><tr>' + heads.map((h) => "<th>" + h + "</th>").join("") +
+    "</tr></thead><tbody>" + rows.join("") + "</tbody>" + (foot ? "<tfoot>" + foot + "</tfoot>" : "") + "</table></div>";
+  const fold = (title, n, inner, open) => '<details class="adm-pdet"' + (open ? " open" : "") + "><summary>" + title +
+    (n !== null && n !== undefined ? " <small>(" + count(n) + ")</small>" : "") + "</summary>" + inner + "</details>";
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      flash("ok", "Copied: " + esc(text));
+    } catch (e) {
+      window.prompt("Copy this:", text);
     }
-    panel.innerHTML = html;
   }
 
+  /* what changing a partner's status does, asked before doing it; resolves true to go ahead */
+  async function confirmStatus(status, from, name) {
+    const who = esc(name || "this partner");
+    const c = status === "ACTIVE"
+      ? from === "PENDING" || from === "REJECTED"
+        ? { title: "Approve " + who + "?", yes: "Approve",
+            text: "They become an active partner on the default revenue share (change it on their profile). Their referral link and promo code start bringing in players straight away." }
+        : { title: "Reactivate " + who + "?", yes: "Reactivate",
+            text: "Their link and promo code work again and they can ask for payouts." +
+              (from === "DISABLED" ? " Bets their players settled while the account was disabled never earn commission." : "") }
+      : status === "REJECTED"
+        ? { title: "Reject " + who + "'s application?", yes: "Reject", danger: true, text: "Their link and promo code won't bring in players. You can still approve them later." }
+        : status === "SUSPENDED"
+          ? { title: "Suspend " + who + "?", yes: "Suspend", danger: true,
+              text: "Their link and promo code stop bringing in new players and they can't ask for payouts until you reactivate them. Players they already brought in keep earning them commission while suspended." }
+          : { title: "Disable " + who + "?", yes: "Disable", danger: true,
+              text: "Their link and promo code stop working, they can't ask for payouts, and <b>no commission is recorded</b> for bets settled while disabled — not even after you reactivate them. Their commission balance stays." };
+    return (await ask(c)) !== null;
+  }
+  const STATUS_DONE = { ACTIVE: "Partner is active.", REJECTED: "Application rejected.", SUSPENDED: "Partner suspended.", DISABLED: "Partner disabled." };
+
+  /* ---- the section: the views share one panel, each draws into #ptBody ---- */
+  const ptHere = (view) => state.tab === "partners" && pt.view === view && $("ptBody");
+  async function loadPartners() {
+    const panel = panelOf("partners");
+    panel.innerHTML = chips("pview", PVIEWS, pt.view) + '<div id="ptBody"></div>';
+    if (pt.view === "payouts") return loadPartnerPayouts();
+    if (pt.view === "stats") return loadPartnerStats();
+    if (pt.view === "settings") return loadPartnerSettings();
+    $("ptBody").innerHTML = '<div class="adm-toolbar"><label class="searchbar adm-search">' + U.icon("search") +
+      '<input id="ptQ" type="search" placeholder="Name, phone, email, Partner ID or promo code" autocomplete="off" aria-label="Search partners" value="' + esc(pt.q) + '"></label></div>' +
+      '<p class="txr-count" id="ptCount"></p><div id="ptList"></div>';
+    $("ptQ").addEventListener("input", () => {
+      clearTimeout(pt.timer);
+      pt.timer = setTimeout(() => { pt.q = $("ptQ").value.trim(); loadPartnerList(); }, 300);
+    });
+    loadPartnerList();
+  }
+
+  function partnerRow(p) {
+    const name = p.full_name || p.username || "Player";
+    const fig = (label, v, cls) => "<span>" + label + " <b" + (cls ? ' class="' + cls + '"' : "") + ">" + v + "</b></span>";
+    const actions = (p.status === "PENDING" || p.status === "REJECTED"
+      ? '<button class="btn btn-success btn-sm" type="button" data-pact="ACTIVE" data-id="' + esc(p.user_id) + '" data-from="' + esc(p.status) + '" data-name="' + esc(name) + '">Approve</button>'
+      : "") +
+      (p.status === "PENDING"
+        ? '<button class="btn btn-ghost btn-sm" type="button" data-pact="REJECTED" data-id="' + esc(p.user_id) + '" data-from="PENDING" data-name="' + esc(name) + '">Reject</button>'
+        : "") +
+      '<button class="btn btn-ghost btn-sm" type="button" data-partner="' + esc(p.user_id) + '">Open profile</button>';
+    return '<div class="txr-row adm-item adm-prow">' + avatar(name) +
+      '<span class="txr-main"><strong>' + esc(name) + "</strong>" +
+        "<small>" + [p.full_name && p.username ? esc(p.username) : "", tx(p.phone), tx(p.email)].filter(Boolean).join(" · ") + "</small>" +
+        "<small>Partner ID <b>" + tx(p.partner_id || p.code) + "</b> · registered " + when(p.created_at) +
+          " · promo code " + (p.promo_code ? "<b>" + esc(p.promo_code) + "</b>" : "none") + "</small>" +
+        '<span class="adm-pills">' + statusPill(p.status) + pill(rateOf(p.revshare_pct) + " revenue share", "brand") +
+          (p.link_live ? "" : pill(p.link_enabled ? "Link not live" : "Link off", "bad")) +
+          (p.promo_request ? pill("Asks for promo " + p.promo_request, "warn") : "") +
+          (p.payoutWaiting ? pill("Payout waiting", "warn") : "") + "</span>" +
+        '<span class="adm-plink"><span class="adm-addr">' + esc(refLink(p.code)) + "</span>" +
+          '<button class="btn btn-ghost btn-sm adm-copy" type="button" data-copy="' + esc(refLink(p.code)) + '" aria-label="Copy referral link">Copy</button></span>' +
+        (p.status === "PENDING" && p.channel ? '<small class="txr-detail">Where they promote: “' + esc(p.channel) + "”</small>" : "") +
+        '<span class="adm-pfig">' + fig("Referrals", count(p.referrals)) + fig("Total earnings", money(p.totalEarnings), tone(p.totalEarnings)) +
+          fig("Available", money(p.available)) + fig("Pending", money(p.pending), p.pending ? "warn" : "") + fig("Withdrawn", money(p.withdrawn)) + "</span>" +
+      "</span>" +
+      '<span class="adm-item-actions">' + actions + "</span></div>";
+  }
+  async function loadPartnerList() {
+    const view = pt.view;
+    const seq = ++pt.seq;
+    if (!$("ptList")) return;
+    $("ptList").innerHTML = loading;
+    const r = await api("/partners?" + new URLSearchParams({ status: view, q: pt.q }));
+    if (!ptHere(view) || !$("ptList") || seq !== pt.seq) return;
+    if (!r.ok) {
+      $("ptList").innerHTML = "";
+      return flash("error", errText(r, "Couldn't load partners."));
+    }
+    const list = r.data.partners;
+    $("ptCount").textContent = count(list.length) + " partner" + (list.length === 1 ? "" : "s") + (list.length >= 300 ? " (the first 300 — search to narrow it down)" : "");
+    $("ptList").innerHTML = list.length
+      ? '<div class="txr-group">' + list.map(partnerRow).join("") + "</div>"
+      : empty(pt.q ? "No partners match." : view === "PENDING" ? "No applications waiting." : "No partners here yet.", "star");
+  }
+  /* Approve / Reject straight from the Applications list */
+  async function partnerQuick(btn) {
+    const status = btn.dataset.pact;
+    if (!(await confirmStatus(status, btn.dataset.from, btn.dataset.name))) return;
+    btn.disabled = true;
+    const r = await api("/partners/" + encodeURIComponent(btn.dataset.id), { status });
+    btn.disabled = false;
+    flash(r.ok ? "ok" : "error", r.ok ? esc(btn.dataset.name) + ": " + STATUS_DONE[status] : errText(r, "Couldn't update the partner."));
+    refreshBadges();
+    if (state.tab === "partners") loadPartnerList();
+  }
+
+  /* ---- payout requests ---- */
+  function payoutRow(p) {
+    const open = p.status === "REQUESTED" || p.status === "APPROVED";
+    const name = p.full_name || p.username || "Partner";
+    const data = ' data-payout="' + esc(p.id) + '" data-amount="' + Number(p.amount) + '" data-who="' + esc(name) + '"';
+    const actions = (p.status === "REQUESTED" ? '<button class="btn btn-ghost btn-sm" type="button"' + data + ' data-do="approve">Approve</button>' : "") +
+      (open ? '<button class="btn btn-primary btn-sm" type="button"' + data + ' data-do="pay">Mark paid</button>' +
+        '<button class="btn btn-ghost btn-sm" type="button"' + data + ' data-do="reject">Reject</button>' : "") +
+      (p.affiliate_id ? '<button class="btn btn-ghost btn-sm" type="button" data-partner="' + esc(p.affiliate_id) + '">Partner</button>' : "");
+    return '<div class="txr-row adm-item">' +
+      '<span class="txr-ico out">' + U.icon("withdraw") + "</span>" +
+      '<span class="txr-main"><strong>' + esc(name) + " · " + tx(p.code) + "</strong>" +
+        "<small>" + [p.full_name && p.username ? esc(p.username) : "", tx(p.phone), p.promo_code ? "promo " + esc(p.promo_code) : ""].filter(Boolean).join(" · ") + "</small>" +
+        "<small>" + tx(METHOD[p.method] || p.method) + ": " + payTo(p) + "</small>" +
+        "<small>Requested " + when(p.created_at) +
+          (p.approved_at ? " · approved " + when(p.approved_at) + (p.approved_by ? " by " + esc(p.approved_by) : "") : "") +
+          (p.decided_at ? " · " + (p.status === "PAID" ? "paid " : "decided ") + when(p.decided_at) + (p.decided_by ? " by " + esc(p.decided_by) : "") : "") + "</small>" +
+        (p.status === "PAID" && (p.reference || p.note) ? "<small>Payment reference <b>" + tx(p.reference || p.note) + "</b></small>" :
+          p.note ? '<small class="txr-detail' + (p.status === "REJECTED" ? " bad" : "") + '">' + esc(p.note) + "</small>" : "") +
+        "<small>Commission balance now <b>" + money(p.available) + "</b>" + (open ? " (this request is already held from it)" : "") + "</small></span>" +
+      '<span class="txr-end"><b class="out">' + money(p.amount) + "</b>" + statusPill(p.status) + "</span>" +
+      '<span class="adm-item-actions">' + actions + "</span></div>";
+  }
+  async function loadPartnerPayouts() {
+    const head = chips("ppay", PAY_VIEWS, pt.pay) +
+      "<div class='alert alert-info'>Partner commission is paid by hand. <b>Approve</b> once you've checked a request, send the money yourself " +
+      "(mobile money, bank or crypto), then <b>Mark paid</b> with the transfer's payment reference. <b>Reject</b> returns the held amount to the partner's commission balance.</div>";
+    $("ptBody").innerHTML = head + loading;
+    const status = pt.pay;
+    const r = await api("/partner-payouts?status=" + status);
+    if (!ptHere("payouts") || status !== pt.pay) return;
+    if (!r.ok) {
+      $("ptBody").innerHTML = head;
+      return flash("error", errText(r, "Couldn't load payout requests."));
+    }
+    const items = r.data.payouts;
+    const total = items.reduce((s, p) => s + Number(p.amount), 0);
+    $("ptBody").innerHTML = head + (items.length
+      ? '<p class="txr-count">' + count(items.length) + (items.length === 1 ? " request · " : " requests · ") + money(total) + "</p>" +
+        '<div class="txr-group">' + items.map(payoutRow).join("") + "</div>"
+      : empty(status === "OPEN" ? "No payout requests waiting." : "Nothing here.", "wallet"));
+  }
+  /* approve, mark paid (only with the transfer's reference) or reject (with a reason) one payout; resolves true when done */
+  async function decidePayout(btn) {
+    const act = btn.dataset.do;
+    const amount = money(Number(btn.dataset.amount));
+    const who = esc(btn.dataset.who || "the partner");
+    let body;
+    if (act === "approve") {
+      const ok = await ask({ title: "Approve " + amount + " for " + who + "?",
+        text: "This marks it checked and about to be paid. The site sends no money: pay it yourself, then press <b>Mark paid</b> with the payment reference.", yes: "Approve" });
+      if (ok === null) return false;
+      body = { action: "approve" };
+    } else if (act === "pay") {
+      const reference = await ask({ title: "Mark " + amount + " to " + who + " as paid?",
+        text: "Only once the money has gone out. Enter the transfer's payment reference (mobile money transaction ID, bank reference or crypto transaction hash); the partner sees it and it's kept in the audit log.",
+        yes: "Mark paid", input: true, placeholder: "Payment reference", required: 3 });
+      if (reference === null) return false;
+      body = { action: "pay", reference };
+    } else {
+      const note = await ask({ title: "Reject " + amount + " for " + who + "?", text: "The held amount goes back to their commission balance.",
+        yes: "Reject", danger: true, input: true, placeholder: "Reason shown to the partner", required: 3 });
+      if (note === null) return false;
+      body = { action: "reject", note };
+    }
+    btn.disabled = true;
+    const r = await api("/partner-payouts/" + encodeURIComponent(btn.dataset.payout), body);
+    btn.disabled = false;
+    flash(r.ok ? "ok" : "error", r.ok
+      ? (act === "approve" ? "Approved " + amount + " for " + who + ". Mark it paid once the money is sent." : act === "pay" ? "Recorded " + amount + " to " + who + " as paid." : "Rejected — " + amount + " returned to " + who + "'s commission balance.")
+      : errText(r, "Couldn't update the payout."));
+    refreshBadges();
+    if (ptHere("payouts")) loadPartnerPayouts();
+    return r.ok;
+  }
+
+  /* ---- statistics for the whole programme ---- */
+  async function loadPartnerStats() {
+    const custom = pt.range === "custom";
+    const today = new Date().toISOString().slice(0, 10);
+    $("ptBody").innerHTML = chips("prange", PRANGES, pt.range) +
+      (custom ? '<form class="adm-prange" data-form="pstats">' +
+        '<div class="field"><label for="pstFrom">From</label><input id="pstFrom" type="date" max="' + today + '" value="' + esc(pt.from) + '" required></div>' +
+        '<div class="field"><label for="pstTo">To</label><input id="pstTo" type="date" max="' + today + '" value="' + esc(pt.to) + '" required></div>' +
+        '<button class="btn btn-primary btn-sm" type="submit">Show</button></form>' : "") +
+      '<p class="adm-note">Days are UTC (Ghana time). Figures come from the commission recorded for each settled bet of a referred player.</p><div id="ptStats"></div>';
+    if (custom && !(pt.from && pt.to)) return ($("ptStats").innerHTML = '<p class="me-sheet-note">Choose a start and end date.</p>');
+    $("ptStats").innerHTML = loading;
+    const qs = new URLSearchParams({ range: pt.range });
+    if (custom) { qs.set("from", pt.from); qs.set("to", pt.to); }
+    const key = qs.toString();
+    const r = await api("/partner-stats?" + key);
+    const now = new URLSearchParams({ range: pt.range });
+    if (pt.range === "custom") { now.set("from", pt.from); now.set("to", pt.to); }
+    if (!ptHere("stats") || !$("ptStats") || now.toString() !== key) return;
+    if (!r.ok) {
+      $("ptStats").innerHTML = "";
+      return flash("error", errText(r, "Couldn't load the statistics."));
+    }
+    const { totals: t, partners: p, top, range } = r.data;
+    $("ptStats").innerHTML =
+      '<h3 class="adm-h">Referred players · ' + esc(range.label) + '</h3><div class="adm-kpis">' +
+        kpi("Stakes", money(t.stakes), "settled bets of referred players") +
+        kpi("Winnings paid", money(t.payouts), "to referred players") +
+        kpi("Net gaming revenue", money(t.ngr), "stakes − winnings", t.ngr >= 0 ? "in" : "bad") +
+        kpi("Commission earned", money(t.commission), "revenue share on losing bets") +
+        kpi("Win deductions", money(t.negative), "on players' net winnings", t.negative < 0 ? "bad" : "") +
+        kpi("Net commission", money(t.net), "earned + deductions", t.net >= 0 ? "in" : "bad") +
+        kpi("Active players", count(t.activePlayers), "referred players who settled a bet") +
+        kpi("New referrals", count(t.signups), "sign-ups through a partner") +
+      "</div>" +
+      '<h3 class="adm-h">Partners now</h3><div class="adm-kpis">' +
+        kpi("Active partners", count(p.active)) +
+        kpi("Applications", count(p.pending), "waiting for you", p.pending ? "warn" : "") +
+        kpi("Suspended or disabled", count(p.paused)) +
+        kpi("Commission balances", money(p.owed), "available in partners' wallets (open requests already held)") +
+        kpi("Paid to partners", money(p.paid), "all time") +
+      "</div>" +
+      '<h3 class="adm-h">Top partners · ' + esc(range.label) + "</h3>" +
+      (top.length
+        ? table(["Partner", "Partner ID", "Active players", "NGR", "Net commission"], top.map((x) =>
+            '<tr class="adm-trow" data-partner="' + esc(x.user_id) + '" role="button" tabindex="0"><td>' + esc(x.full_name || x.username || "Player") + "</td><td>" + tx(x.code) +
+            "</td><td>" + count(x.players) + '</td><td class="' + tone(x.ngr) + '">' + money(x.ngr) + '</td><td class="' + tone(x.net) + '">' + money(x.net) + "</td></tr>"))
+        : empty("No partner commission in this period.", "star"));
+  }
+
+  /* ---- the programme's settings ---- */
+  function partnerSettingsHtml(s, history) {
+    const num = (id, label, value, step, min, max, hint) => '<div class="field"><label for="' + id + '">' + label + "</label>" +
+      '<input id="' + id + '" type="number" inputmode="decimal" step="' + step + '" min="' + min + '"' + (max !== undefined ? ' max="' + max + '"' : "") +
+      ' value="' + esc(String(value)) + '" required>' + (hint ? '<small class="hint">' + hint + "</small>" : "") + "</div>";
+    const sw = (id, label, on, hint) => '<div class="adm-pset-sw"><div><b>' + label + "</b><small>" + hint + "</small></div>" +
+      '<label class="adm-switch"><input type="checkbox" id="' + id + '"' + (on ? " checked" : "") + ' aria-label="' + esc(label) + '"><span aria-hidden="true"></span></label></div>';
+    const now = Date.now();
+    return '<section class="adm-card"><h3 class="adm-h">Commission settings</h3>' +
+      '<p class="adm-note">Partners earn their revenue share % of the net gaming revenue (stakes − winnings) on every losing bet settled by a player they brought in; ' +
+      "on every winning bet, the win deduction % of the player's net winnings is taken off. A change applies to bets settled after it takes effect — commission already recorded is never recalculated. " +
+      "<b>Each partner's own rate is set on their profile</b> (open a partner → Commission rate).</p>" +
+      '<form class="adm-pset" data-form="psettings">' +
+        num("psDefault", "Default revenue share (%)", s.default_revshare_pct, "0.01", "0", "90", "Given to a partner when they're approved or added. Doesn't change partners who already have a rate.") +
+        num("psDed", "Winning bet deduction (%)", s.win_deduction_pct, "0.01", "0", "100", "Of a referred player's net winnings on a winning bet, taken off the partner's commission. All partners.") +
+        '<div class="field"><label for="psDedFrom">Deduction change starts <span class="opt">(optional)</span></label><input id="psDedFrom" type="datetime-local">' +
+          '<small class="hint">Empty means now. Now or later only, never in the past.</small></div>' +
+        '<div class="field"><label for="psPeriod">Settlement period</label><select id="psPeriod">' +
+          [["DAILY", "Daily"], ["WEEKLY", "Weekly (Monday to Sunday)"], ["MONTHLY", "Monthly"]].map(([v, l]) => '<option value="' + v + '"' + (v === s.settlement_period ? " selected" : "") + ">" + l + "</option>").join("") +
+          '</select><small class="hint">How often pending commission is closed and credited to partners\' balances (UTC days).</small></div>' +
+        num("psMin", "Minimum partner withdrawal (GHS)", s.min_payout, "0.01", "0.01") +
+        num("psMax", "Maximum partner withdrawal (GHS)", s.max_payout, "0.01", "0.01") +
+        num("psDays", "Referral window (days)", s.referral_days, "1", "0", "365", "How new an account must be for a partner's link or promo code to claim it.") +
+        '<div class="adm-pset-sws">' +
+          sw("psCarry", "Carry negative balances over", s.carry_negative, "A period that ends below zero is taken off the next periods. Off: it's written off.") +
+          sw("psLinks", "Referral links", s.links_enabled, "Off: no partner link brings in players or counts clicks.") +
+          sw("psPromos", "Promo codes", s.promo_codes_enabled, "Off: promo codes can't be used at sign-up.") +
+          sw("psPromoEdit", "Partners set their own promo code", s.partner_promo_edit, "Off: a partner's choice waits for your approval on their profile.") +
+        "</div>" +
+        '<button class="btn btn-primary btn-sm" type="submit">Save settings</button></form>' +
+      '<p class="adm-note">Last changed ' + (s.updated_by ? when(s.updated_at) + " by " + esc(s.updated_by) : "never (defaults)") + ".</p></section>" +
+      '<section class="adm-card"><h3 class="adm-h">Settlement</h3>' +
+        '<p class="adm-note">Closed periods settle by themselves a few minutes after they end. This settles any closed period now (for example right after changing the period). Open periods are never settled early.</p>' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-psettle>Settle closed periods now</button></section>' +
+      '<section class="adm-card"><h3 class="adm-h">Win deduction history</h3>' +
+        (history.length
+          ? table(["Deduction", "Applies from", "Set by", "Recorded"], history.map((d) => "<tr><td>" + rateOf(d.pct) +
+              (d.effective_from && new Date(d.effective_from).getTime() > now ? " " + pill("scheduled", "warn") : "") + "</td><td>" + when(d.effective_from) +
+              "</td><td>" + tx(d.set_by || "—") + "</td><td>" + when(d.created_at) + "</td></tr>"))
+          : '<p class="me-sheet-note">No changes yet.</p>') + "</section>";
+  }
+  async function loadPartnerSettings() {
+    $("ptBody").innerHTML = loading;
+    const r = await api("/partner-settings");
+    if (!ptHere("settings")) return;
+    if (!r.ok) {
+      $("ptBody").innerHTML = "";
+      return flash("error", errText(r, "Couldn't load the commission settings."));
+    }
+    pt.settings = r.data.settings;
+    $("ptBody").innerHTML = partnerSettingsHtml(r.data.settings, r.data.deductionHistory || []);
+  }
+  async function savePartnerSettings(form) {
+    const s = pt.settings;
+    if (!s) return;
+    const el = (id) => form.querySelector("#" + id);
+    const body = {};
+    [["psDefault", "default_revshare_pct"], ["psDed", "win_deduction_pct"], ["psMin", "min_payout"], ["psMax", "max_payout"], ["psDays", "referral_days"]].forEach(([id, key]) => {
+      const v = el(id).value.trim();
+      if (v !== "" && Number(v) !== Number(s[key])) body[key] = v;
+    });
+    if (body.referral_days !== undefined) body.referral_days = Number(body.referral_days);
+    if (el("psPeriod").value !== s.settlement_period) body.settlement_period = el("psPeriod").value;
+    [["psCarry", "carry_negative"], ["psLinks", "links_enabled"], ["psPromos", "promo_codes_enabled"], ["psPromoEdit", "partner_promo_edit"]].forEach(([id, key]) => {
+      if (el(id).checked !== Boolean(s[key])) body[key] = el(id).checked;
+    });
+    const from = el("psDedFrom").value;
+    if (body.win_deduction_pct !== undefined && from) {
+      const d = new Date(from);
+      if (Number.isNaN(d.getTime())) return flash("error", "Enter a valid date and time for the deduction change.");
+      if (d.getTime() < Date.now() - 60000) return flash("error", "The deduction change can start now or later, never in the past.");
+      body.effective_from = d.toISOString();
+    }
+    if (!Object.keys(body).length) return flash("info", "Nothing changed.");
+    const lines = [];
+    if (body.default_revshare_pct !== undefined) lines.push("Default revenue share " + rateOf(s.default_revshare_pct) + " → <b>" + esc(body.default_revshare_pct) + "%</b> (new partners only)");
+    if (body.win_deduction_pct !== undefined) lines.push("Win deduction " + rateOf(s.win_deduction_pct) + " → <b>" + esc(body.win_deduction_pct) + "%</b> from " + (body.effective_from ? when(body.effective_from) : "now") + ", for every partner");
+    if (body.links_enabled === false) lines.push("<b>All referral links switched off</b>");
+    if (body.promo_codes_enabled === false) lines.push("<b>All promo codes switched off</b>");
+    if (body.settlement_period) lines.push("Settlement period → <b>" + esc(body.settlement_period.toLowerCase()) + "</b>");
+    if (lines.length) {
+      const ok = await ask({ title: "Save these changes?", text: lines.join("<br>") + "<br>Commission already recorded stays as it is.", yes: "Save" });
+      if (ok === null) return;
+    }
+    const btn = form.querySelector("button[type=submit]");
+    btn.disabled = true;
+    const r = await api("/partner-settings", body);
+    btn.disabled = false;
+    if (!r.ok) return flash("error", errText(r, "Couldn't save the settings."));
+    flash("ok", "Commission settings saved.");
+    loadPartnerSettings();
+  }
+  async function settleNow(btn) {
+    const ok = await ask({ title: "Settle closed periods now?", text: "Pending commission from periods that have already ended is credited to partners' balances (or carried over if negative). Each period is settled only once.", yes: "Settle now" });
+    if (ok === null) return;
+    btn.disabled = true;
+    const r = await api("/partner-settings/settle", {});
+    btn.disabled = false;
+    flash(r.ok ? "ok" : "error", r.ok
+      ? (r.data.settled ? "Settled " + count(r.data.settled) + " partner" + (r.data.settled === 1 ? "" : "s") + "." : "Nothing to settle: no closed period has pending commission (or the period ended less than 5 minutes ago).")
+      : errText(r, "Couldn't settle."));
+  }
+
+  /* ---- "Add partner": find a registered player and make them a partner ---- */
+  function openAddPartner() {
+    const s = sheet("Add a partner");
+    const settings = api("/partner-settings");
+    s.set('<form class="adm-padd" data-form="plookup" autocomplete="off">' +
+        '<div class="field"><label for="paQ">Find a registered player</label><input id="paQ" type="search" maxlength="120" placeholder="Phone number, username or email" required></div>' +
+        '<button class="btn btn-primary" type="submit">Find</button></form>' +
+      '<div class="adm-sheet-msg" aria-live="polite"></div><div id="paFound"></div>' +
+      '<p class="adm-credit-note">The player becomes an active partner straight away, with a referral link and a Partner ID. They earn the revenue share you set of the net gaming revenue from players they bring in, less the win deduction on those players\' net winnings.</p>');
+    const say = (html) => (s.body.querySelector(".adm-sheet-msg").innerHTML = html ? "<div class='alert alert-err'>" + html + "</div>" : "");
+    const card = (u, def) => {
+      const name = u.full_name || u.username || "Player";
+      return '<div class="adm-pfound-card">' + avatar(name) + '<div class="adm-pfound-main"><strong>' + esc(name) + "</strong>" +
+        "<small>" + [u.full_name && u.username ? esc(u.username) : "", tx(u.phone), tx(u.email)].filter(Boolean).join(" · ") + "</small>" +
+        "<small>Joined " + when(u.joined) + " " + (u.status && u.status !== "ACTIVE" ? statusPill(u.status) : "") + "</small></div>" +
+        (u.partner_status
+          ? '<div class="adm-pfound-act">' + pill("Already a partner · " + u.partner_status.toLowerCase(), "brand") +
+            '<button class="btn btn-ghost btn-sm" type="button" data-open-partner="' + esc(u.user_id) + '">Open partner profile</button></div>'
+          : '<div class="adm-pfound-act"><div class="field"><label for="paPct-' + esc(u.user_id) + '">Revenue share (%)</label>' +
+            '<input id="paPct-' + esc(u.user_id) + '" type="number" inputmode="decimal" min="0" max="90" step="0.01" value="' + esc(def === null ? "" : String(def)) + '"></div>' +
+            '<button class="btn btn-primary btn-sm" type="button" data-make="' + esc(u.user_id) + '" data-name="' + esc(name) + '">Make partner</button></div>') +
+        "</div>";
+    };
+    s.body.addEventListener("submit", async (e) => {
+      if (!e.target.matches('form[data-form="plookup"]')) return;
+      e.preventDefault();
+      say("");
+      const q = s.body.querySelector("#paQ").value.trim();
+      if (q.length < 3) return say("Enter at least 3 characters: a phone number, username or email.");
+      const found = s.body.querySelector("#paFound");
+      found.innerHTML = loading;
+      const [r, st] = await Promise.all([api("/partner-lookup?q=" + encodeURIComponent(q)), settings]);
+      const def = st.ok ? st.data.settings.default_revshare_pct : null;
+      if (!r.ok) {
+        found.innerHTML = "";
+        return say(errText(r, "Couldn't find that player."));
+      }
+      found.innerHTML = '<div class="adm-pfound">' + r.data.players.map((u) => card(u, def)).join("") + "</div>";
+    });
+    s.body.addEventListener("click", async (e) => {
+      const open = e.target.closest("[data-open-partner]");
+      if (open) {
+        s.close();
+        return openPartner(open.dataset.openPartner);
+      }
+      const b = e.target.closest("[data-make]");
+      if (!b) return;
+      say("");
+      const id = b.dataset.make;
+      const pct = s.body.querySelector("#paPct-" + CSS.escape(id)).value.trim();
+      if (pct === "" || !(Number(pct) >= 0 && Number(pct) <= 90)) return say("Enter a revenue share from 0% to 90%.");
+      const ok = await ask({ title: "Make " + esc(b.dataset.name) + " a partner?",
+        text: "They become an active partner now on <b>" + esc(pct) + "%</b> revenue share of the net gaming revenue from players they bring in, with a new referral link and Partner ID.", yes: "Make partner" });
+      if (ok === null) return;
+      b.disabled = true;
+      const r = await api("/partners/" + encodeURIComponent(id), { status: "ACTIVE", revshare_pct: pct });
+      if (!r.ok) {
+        b.disabled = false;
+        return say(errText(r, "Couldn't make them a partner."));
+      }
+      s.close();
+      flash("ok", esc(b.dataset.name) + " is now a partner (Partner ID " + esc(r.data.code) + ").");
+      refreshBadges();
+      if (state.tab === "partners") loadPartners();
+      openPartner(id);
+    });
+    s.body.querySelector("#paQ").focus();
+  }
+
+  /* ---- one partner's profile: account, link and promo code, totals, statistics, money, history, and every action ---- */
   async function openPartner(userId) {
     const s = sheet("Partner");
-    const draw = async () => {
-      const r = await api("/partners/" + encodeURIComponent(userId));
-      if (!r.ok) return s.set("<div class='alert alert-err'>" + errText(r, "Couldn't load this partner.") + "</div>");
-      const { partner: p, stats: st, referrals, payouts } = r.data;
-      const c = st.commission;
-      s.set(
-        '<div class="adm-who">' + avatar(p.username) + "<div><strong>" + esc(p.username || "Player") + " · " + esc(p.code) + "</strong>" +
-          "<small>" + esc(p.phone || "") + " · applied " + when(p.created_at) + "</small></div>" +
-          '<div class="adm-who-bal"><span>Available</span><b>' + money(c.available) + "</b></div></div>" +
-        '<div class="adm-pills adm-pills-row">' + statusPill(p.status) + (p.decided_by ? pill("by " + p.decided_by, "") : "") + "</div>" +
+    const uid = encodeURIComponent(userId);
+    let cur = null;
+    const statRow = (x, label) => "<tr><td>" + label + "</td><td>" + count(x.signups) + "</td><td>" + (x.activePlayers === null ? "—" : count(x.activePlayers)) + "</td><td>" + money(x.stakes) +
+      "</td><td>" + money(x.payouts) + '</td><td class="' + tone(x.ngr) + '">' + money(x.ngr) + "</td><td>" + money(x.commission) + '</td><td class="' + tone(x.negative) + '">' +
+      money(x.negative) + '</td><td class="' + tone(x.earnings) + '"><b>' + money(x.earnings) + "</b></td></tr>";
+    const STAT_HEADS = ["Period", "Sign-ups", "Active players", "Stakes", "Payouts", "NGR", "Commission", "Deductions", "Net"];
+    const sum = (rows, k) => rows.reduce((a, x) => a + Number(x[k] || 0), 0);
+    const statTable = (rows, footLabel, foot) => table(STAT_HEADS, rows.slice().reverse().map((x) => statRow(x, bucket(x.date))),
+      foot ? statRow(foot, "<b>" + footLabel + "</b>") : "");
+
+    function html(d) {
+      const { partner: p, rate: rt, lifetime: lt, wallet: w } = d;
+      const name = p.full_name || p.username || "Player";
+      const link = refLink(p.code);
+      const st = p.status;
+      const btn = (cls, attrs, label) => '<button class="btn ' + cls + ' btn-sm" type="button" ' + attrs + ">" + label + "</button>";
+      const statusBtns =
+        (st === "PENDING" || st === "REJECTED" ? btn("btn-success", 'data-pa="status" data-status="ACTIVE"', st === "PENDING" ? "Approve application" : "Approve") : "") +
+        (st === "PENDING" ? btn("btn-ghost", 'data-pa="status" data-status="REJECTED"', "Reject application") : "") +
+        (st === "SUSPENDED" || st === "DISABLED" ? btn("btn-success", 'data-pa="status" data-status="ACTIVE"', "Reactivate") : "") +
+        (st === "ACTIVE" ? btn("btn-danger", 'data-pa="status" data-status="SUSPENDED"', "Suspend") : "") +
+        (st === "ACTIVE" || st === "SUSPENDED" ? btn("btn-ghost", 'data-pa="status" data-status="DISABLED"', "Disable partner") : "");
+      const nowMs = Date.now();
+      const currentRate = rt.history.find((x) => new Date(x.effective_from).getTime() <= nowMs);
+      const ref = d.referrals || [];
+      return (
+        '<div class="adm-who">' + avatar(name) + "<div><strong>" + esc(name) + "</strong>" +
+          "<small>" + [p.full_name && p.username ? esc(p.username) : "", p.phone ? '<a href="tel:' + esc(p.phone) + '">' + esc(p.phone) + "</a>" : "",
+            p.email ? '<a href="mailto:' + esc(p.email) + '">' + esc(p.email) + "</a>" : ""].filter(Boolean).join(" · ") + "</small>" +
+          "<small>Partner ID <b>" + tx(p.partner_id || p.code) + "</b> · registered " + when(p.created_at) + "</small>" +
+          '<small class="adm-id">' + esc(p.user_id) + "</small></div>" +
+          '<div class="adm-who-bal"><span>Available</span><b>' + money(w.available) + "</b></div></div>" +
+        '<div class="adm-pills adm-pills-row">' + statusPill(st) + pill(rateOf(rt.pct) + " revenue share", "brand") +
+          (rt.scheduled ? pill(rateOf(rt.scheduled.pct) + " from " + when(rt.scheduled.effective_from), "warn") : "") +
+          (p.link_live ? pill("Link live", "ok") : pill(p.link_enabled ? "Link not live (" + st.toLowerCase() + ")" : "Link switched off", "bad")) +
+          (p.payoutWaiting ? pill("Payout waiting", "warn") : "") +
+          (p.decided_by ? pill("Status by " + p.decided_by, "") : "") + "</div>" +
         (p.channel ? '<p class="me-sheet-note">Where they promote: <b>' + esc(p.channel) + "</b></p>" : "") +
+        (p.accrue_from ? '<p class="me-sheet-note">Earning again since ' + when(p.accrue_from) + " — bets settled while they were disabled don't count.</p>" : "") +
         '<div class="adm-actions-box">' +
-          (p.status !== "ACTIVE" ? '<button class="btn btn-success btn-sm" type="button" data-status="ACTIVE">' + (p.status === "PENDING" ? "Approve" : "Reactivate") + "</button>" : "") +
-          (p.status === "PENDING" ? '<button class="btn btn-ghost btn-sm" type="button" data-status="REJECTED">Reject application</button>' : "") +
-          (p.status === "ACTIVE" ? '<button class="btn btn-danger btn-sm" type="button" data-status="SUSPENDED">Suspend partner</button>' : "") +
+          '<a class="btn btn-primary btn-sm" href="partners.html?preview=' + uid + '" target="_blank" rel="noopener">' + U.icon("user") + "View partner dashboard</a>" +
+          statusBtns + "</div>" +
+
+        '<h3 class="me-sheet-sub">Referral link &amp; promo code</h3>' +
+        '<div class="adm-plinkbox"><span class="adm-addr">' + esc(link) + "</span>" +
+          '<div class="adm-actions-box">' + btn("btn-ghost", 'data-copy="' + esc(link) + '"', "Copy link") +
+            (p.link_enabled ? btn("btn-ghost", 'data-pa="link"', "Disable link") : btn("btn-success", 'data-pa="link"', "Enable link")) +
+            btn("btn-ghost", 'data-pa="regen"', "Generate new link") + "</div></div>" +
+        (p.promo_request
+          ? '<div class="alert alert-info adm-preq">They asked for promo code <b>' + esc(p.promo_request) + "</b>. " +
+            btn("btn-success", 'data-pa="promo-yes"', "Approve") + " " + btn("btn-ghost", 'data-pa="promo-no"', "Decline") + "</div>"
+          : "") +
+        '<form class="adm-terms" data-pf="promo"><div class="field"><label for="pPromo">Promo code</label>' +
+          '<input id="pPromo" type="text" maxlength="16" autocapitalize="characters" spellcheck="false" class="adm-upper" value="' + tx(p.promo_code) + '" placeholder="None"></div>' +
+          '<button class="btn btn-primary btn-sm" type="submit">Save promo code</button></form>' +
+        '<p class="hint">4 to 16 letters and numbers. Leave it empty to remove it. The old code stops working at once; players already brought in stay theirs.</p>' +
+
+        '<h3 class="me-sheet-sub">Totals (lifetime)</h3><div class="adm-minis">' +
+          mini("Referred users", count(p.referrals)) +
+          mini("Stakes", money(lt.stakes)) +
+          mini("Payouts (winnings)", money(lt.payouts)) +
+          mini("Net gaming revenue", money(lt.ngr), tone(lt.ngr)) +
+          mini("Total commission", money(lt.commission), "in") +
+          mini("Negative adjustments", money(lt.negative), lt.negative < 0 ? "bad" : "") +
+          mini("Net commission", money(lt.net), tone(lt.net)) +
+          (Math.abs(p.totalEarnings - lt.net) >= 0.005 ? mini("Total earnings", money(p.totalEarnings) + " <small>(incl. opening balance)</small>") : "") +
+          mini("Pending (period open)", money(w.pending), w.pending ? "warn" : "") +
+          (w.carriedNegative ? mini("Negative carried over", money(w.carriedNegative), "bad") : "") +
+          (w.corrections ? mini("Corrections", money(w.corrections), tone(w.corrections)) : "") +
+          mini("Available", money(w.available), "in") +
+          mini("Pending withdrawals", money(w.pendingWithdrawals), w.pendingWithdrawals ? "warn" : "") +
+          mini("Completed withdrawals", money(w.withdrawn)) +
         "</div>" +
-        '<h3 class="me-sheet-sub">Commission rate</h3><form class="adm-terms" data-form="terms">' +
-          '<div class="field"><label for="tPct">% of every deposit</label><input id="tPct" type="number" min="0" max="30" step="0.5" value="' + p.deposit_pct + '"></div>' +
-          '<div class="field adm-wide"><label for="tNote">Note (admins only)</label><input id="tNote" type="text" maxlength="300" value="' + esc(p.note || "") + '"></div>' +
-          '<button class="btn btn-primary btn-sm" type="submit">Save</button></form>' +
-        '<p class="hint">The partner earns this percentage of every confirmed deposit their players make, from 0% to 30%. A new rate applies to all of their players\' deposits so far.</p>' +
-        '<h3 class="me-sheet-sub">Commission</h3><div class="adm-minis">' +
-          mini("Rate", c.pct + "% of deposits") +
-          mini("Earned", money(c.earned) + " <small>(" + c.pct + "% of " + money(st.money.deposits) + ")</small>", "in") +
-          mini("Paid", money(c.paid)) +
-          mini("Waiting", money(c.pending), c.pending ? "warn" : "") +
-          mini("Available", money(c.available)) +
-        "</div>" +
-        '<h3 class="me-sheet-sub">Their players\' money</h3><div class="adm-minis">' +
-          mini("Deposits", money(st.money.deposits) + " <small>(" + money(st.money.deposits30) + " in 30 d)</small>", "in") +
-          mini("Withdrawals paid", money(st.money.withdrawals)) +
-          mini("Bets", money(st.money.stakes)) +
-          mini("Wins", money(st.money.wins)) +
-          mini("Kept by the house", money(st.money.stakes - st.money.wins) + " <small>(bets − wins)</small>", st.money.stakes - st.money.wins >= 0 ? "in" : "bad") +
-        "</div>" +
-        '<h3 class="me-sheet-sub">Traffic</h3><div class="adm-minis">' +
-          mini("Clicks", count(st.clicks.total) + " <small>(" + count(st.clicks.last30) + " in 30 d)</small>") +
-          mini("Sign-ups", count(st.signups.total) + " <small>(" + count(st.signups.last30) + " in 30 d)</small>") +
-          mini("Active players", count(st.activePlayers)) +
-          mini("Depositors", count(st.depositors)) +
-        "</div>" +
-        '<h3 class="me-sheet-sub">Payouts</h3>' +
-          (payouts.length
-            ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Amount</th><th>Method</th><th>Status</th><th>When</th></tr></thead><tbody>' +
-              payouts.map((x) => "<tr><td>" + money(x.amount) + "</td><td>" + METHOD[x.method] + "</td><td>" + statusPill(x.status) + (x.note ? "<small> " + esc(x.note) + "</small>" : "") + "</td><td>" + when(x.created_at) + "</td></tr>").join("") +
-              "</tbody></table></div>"
-            : '<p class="me-sheet-note">No payouts yet.</p>') +
-        '<h3 class="me-sheet-sub">Their players (' + referrals.length + ")</h3>" +
-          (referrals.length
-            ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Player</th><th>Joined</th><th>Deposits</th><th>Commission</th><th>Active</th></tr></thead><tbody>' +
-              referrals.slice(0, 50).map((x) => "<tr><td>" + esc(x.player) + (x.sub_id ? " <small>" + esc(x.sub_id) + "</small>" : "") + "</td><td>" + when(x.joined) + "</td><td>" +
-                (x.deposits ? money(x.deposits) : "—") + "</td><td>" + (x.commission ? money(x.commission) : "—") + "</td><td>" + (x.active ? "✓" : "—") + "</td></tr>").join("") +
-              "</tbody></table></div>"
-            : '<p class="me-sheet-note">No sign-ups yet.</p>'));
+        '<p class="hint">Settled ' + tx(String(w.settlementPeriod || "").toLowerCase()) + " · withdrawals from " + money(w.minPayout) + " to " + money(w.maxPayout) + ".</p>" +
+
+        '<h3 class="me-sheet-sub">Commission rate</h3>' +
+        '<p class="me-sheet-note">Now <b>' + rateOf(rt.pct) + "</b> of the net gaming revenue on their players' losing bets" +
+          (rt.scheduled ? "; <b>" + rateOf(rt.scheduled.pct) + "</b> from " + when(rt.scheduled.effective_from) : "") +
+          ". The win deduction is the same for every partner (Commission settings).</p>" +
+        '<form class="adm-terms" data-pf="rate">' +
+          '<div class="field"><label for="pRate">New revenue share (%)</label><input id="pRate" type="number" inputmode="decimal" min="0" max="90" step="0.01" value="' + esc(String(rt.pct)) + '" required></div>' +
+          '<div class="field"><label for="pRateFrom">Starts <span class="opt">(optional)</span></label><input id="pRateFrom" type="datetime-local"></div>' +
+          '<button class="btn btn-primary btn-sm" type="submit">Change rate</button></form>' +
+        '<p class="hint">0% to 90%. Applies to bets settled from the start time (empty = now; never in the past). Commission already recorded is never recalculated.</p>' +
+        fold("Rate history", rt.history.length, rt.history.length
+          ? table(["Rate", "From", "Set by", "Recorded"], rt.history.map((h) => {
+              const at = new Date(h.effective_from).getTime();
+              return "<tr><td>" + rateOf(h.pct) + " " + (at > nowMs ? pill("scheduled", "warn") : h === currentRate ? pill("current", "ok") : "") +
+                "</td><td>" + when(h.effective_from) + "</td><td>" + tx(h.set_by || "—") + "</td><td>" + when(h.created_at) + "</td></tr>";
+            }))
+          : '<p class="me-sheet-note">No rate set yet: the default applies once approved.</p>') +
+
+        '<h3 class="me-sheet-sub">Correct commission</h3>' +
+        '<form class="adm-terms" data-pf="correct">' +
+          '<div class="field"><label for="pCorAmt">Amount (GHS)</label><input id="pCorAmt" type="text" inputmode="decimal" maxlength="12" placeholder="12.50 or -12.50" required></div>' +
+          '<div class="field adm-wide"><label for="pCorWhy">Reason (kept in the audit log)</label><input id="pCorWhy" type="text" maxlength="200" minlength="8" placeholder="e.g. Bet #1234 was voided after settlement" required></div>' +
+          '<button class="btn btn-primary btn-sm" type="submit">Apply correction</button></form>' +
+        '<p class="hint">Only for a verified commission error. A positive amount adds to their available balance, a negative one takes off. It shows in their wallet history.</p>' +
+
+        '<h3 class="me-sheet-sub">Admin note</h3>' +
+        '<form class="adm-terms" data-pf="note"><div class="field adm-wide"><label for="pNote">Note (admins only)</label><input id="pNote" type="text" maxlength="300" value="' + tx(p.note) + '"></div>' +
+          '<button class="btn btn-ghost btn-sm" type="submit">Save note</button></form>' +
+
+        '<h3 class="me-sheet-sub">Statistics</h3>' +
+        fold("Daily · last 30 days", null, statTable(d.daily || [], "30 days", {
+          signups: sum(d.daily || [], "signups"), activePlayers: null, stakes: sum(d.daily || [], "stakes"), payouts: sum(d.daily || [], "payouts"),
+          ngr: sum(d.daily || [], "ngr"), commission: sum(d.daily || [], "commission"), negative: sum(d.daily || [], "negative"), earnings: sum(d.daily || [], "earnings") }), true) +
+        fold("Monthly · last 12 months", null, statTable(d.monthly || [], "Lifetime", {
+          signups: p.referrals, activePlayers: null, stakes: lt.stakes, payouts: lt.payouts, ngr: lt.ngr, commission: lt.commission, negative: lt.negative, earnings: lt.net })) +
+
+        fold("Referred users", ref.length, ref.length
+          ? table(["Player", "Joined", "Via", "Stakes", "Payouts", "NGR", "Commission", "Last bet"], ref.slice(0, 300).map((x) =>
+              "<tr><td>" + (x.user_id ? "<a href=\"#\" data-user=\"" + esc(x.user_id) + "\">" + esc(x.full_name || x.username || x.player) + "</a>" + (x.phone ? " <small>" + esc(x.phone) + "</small>" : "") : tx(x.player)) + " <small>" + tx(x.id) + "</small>" + (x.sub_id ? " <small>" + esc(x.sub_id) + "</small>" : "") + "</td><td>" + when(x.joined) + "</td><td>" + tx(x.via) +
+              "</td><td>" + money(x.stakes) + "</td><td>" + money(x.payouts) + '</td><td class="' + tone(x.ngr) + '">' + money(x.ngr) + '</td><td class="' + tone(x.commission) + '">' +
+              money(x.commission) + "</td><td>" + when(x.last_activity) + "</td></tr>")) +
+            (ref.length > 300 ? '<p class="hint">Showing the newest 300.</p>' : "")
+          : '<p class="me-sheet-note">No referred players yet.</p>') +
+
+        '<h3 class="me-sheet-sub">Money history</h3>' +
+        fold("Payouts", d.payouts.length, d.payouts.length
+          ? table(["Requested", "Amount", "Paid to", "Status", "Reference / note", ""], d.payouts.map((x) => {
+              const open = x.status === "REQUESTED" || x.status === "APPROVED";
+              const data = ' data-payout="' + esc(x.id) + '" data-amount="' + Number(x.amount) + '" data-who="' + esc(name) + '"';
+              return "<tr><td>" + when(x.created_at) + "</td><td><b>" + money(x.amount) + "</b></td><td class='adm-wrapcell'>" + tx(METHOD[x.method] || x.method) + ": " + payTo(x) +
+                "</td><td>" + statusPill(x.status) + "</td><td class='adm-wrapcell'>" + tx(x.reference || x.note || "") + (x.decided_at ? "<small> · " + when(x.decided_at) + "</small>" : "") + "</td><td>" +
+                (x.status === "REQUESTED" ? btn("btn-ghost", data + ' data-do="approve"', "Approve") : "") +
+                (open ? btn("btn-primary", data + ' data-do="pay"', "Mark paid") + btn("btn-ghost", data + ' data-do="reject"', "Reject") : "") + "</td></tr>";
+            }))
+          : '<p class="me-sheet-note">No payouts yet.</p>', d.payouts.some((x) => x.status === "REQUESTED" || x.status === "APPROVED")) +
+        fold("Wallet movements", d.entries.length, d.entries.length
+          ? table(["When", "What", "Amount", "Note"], d.entries.map((x) => "<tr><td>" + when(x.created_at) + "</td><td>" + tx(WALLET_KIND[x.kind] || x.kind) +
+              '</td><td class="' + tone(x.amount) + '">' + money(x.amount) + "</td><td class='adm-wrapcell'>" + tx(x.note) + "</td></tr>"))
+          : '<p class="me-sheet-note">No wallet movements yet.</p>') +
+        fold("Settlements", d.settlements.length, d.settlements.length
+          ? table(["Period", "Dates", "Commission", "Deductions", "Carried in", "Credited", "Carried out", "Settled"], d.settlements.map((x) =>
+              "<tr><td>" + tx(String(x.period || "").toLowerCase()) + "</td><td>" + dayOf(x.period_start) + " – " + dayOf(new Date(new Date(x.period_end).getTime() - 864e5)) +
+              "</td><td>" + money(x.positive) + '</td><td class="' + tone(x.negative) + '">' + money(x.negative) + "</td><td>" + money(x.carried_in) + '</td><td class="in">' + money(x.credited) +
+              "</td><td>" + money(x.carried_out) + "</td><td>" + when(x.created_at) + "</td></tr>"))
+          : '<p class="me-sheet-note">No settled periods yet.</p>') +
+
+        fold("Audit log", d.audit.length, d.audit.length
+          ? '<div class="adm-log">' + d.audit.map((a) => "<div><b>" + esc(a.action) + "</b> " + esc(JSON.stringify(a.details)) + "<small>" + tx(a.admin) + " · " + when(a.created_at) + "</small></div>").join("") + "</div>"
+          : '<p class="me-sheet-note">No admin changes yet.</p>')
+      );
+    }
+
+    const draw = async () => {
+      const r = await api("/partners/" + uid);
+      if (!r.ok) return s.set("<div class='alert alert-err'>" + errText(r, "Couldn't load this partner.") + "</div>");
+      cur = r.data;
+      /* keep the scroll position and which folds are open across a redraw */
+      const scroller = s.el.querySelector(".adm-sheet-panel");
+      const y = scroller ? scroller.scrollTop : 0;
+      const yb = s.body.scrollTop;
+      const open = Array.from(s.body.querySelectorAll("details.adm-pdet")).map((x) => x.open);
+      s.set(html(r.data));
+      if (open.length) s.body.querySelectorAll("details.adm-pdet").forEach((x, i) => { if (open[i] !== undefined) x.open = open[i]; });
+      if (scroller) scroller.scrollTop = y;
+      s.body.scrollTop = yb;
     };
-    s.body.addEventListener("click", async (e) => {
-      const b = e.target.closest("button[data-status]");
-      if (!b) return;
-      const status = b.dataset.status;
-      if (status !== "ACTIVE") {
-        const ok = await ask({ title: status === "REJECTED" ? "Reject this application?" : "Suspend this partner?",
-          text: status === "REJECTED" ? "They won't get a working referral link." : "Their link stops counting and they can't request payouts until you reactivate them.",
-          yes: status === "REJECTED" ? "Reject" : "Suspend", danger: true });
-        if (ok === null) return;
-      }
-      const r = await api("/partners/" + userId, { status });
-      flash(r.ok ? "ok" : "error", r.ok ? "Partner " + (status === "ACTIVE" ? "approved" : status.toLowerCase()) + "." : errText(r, "Couldn't update."));
+    const after = () => {
       draw();
       refreshBadges();
       if (state.tab === "partners") loadPartners();
+    };
+    const update = async (body, done, b) => {
+      if (b) b.disabled = true;
+      const r = await api("/partners/" + uid, body);
+      if (b) b.disabled = false;
+      flash(r.ok ? "ok" : "error", r.ok ? done(r.data) : errText(r, "Couldn't update the partner."));
+      if (r.ok) after();
+      return r.ok;
+    };
+
+    s.body.addEventListener("click", async (e) => {
+      const cp = e.target.closest("[data-copy]");
+      if (cp) return copyText(cp.dataset.copy);
+      const pl = e.target.closest("[data-user]");
+      if (pl) {
+        e.preventDefault();
+        return openPlayer(pl.dataset.user);
+      }
+      const po = e.target.closest("[data-payout]");
+      if (po) {
+        if (await decidePayout(po)) after();
+        return;
+      }
+      const b = e.target.closest("button[data-pa]");
+      if (!b || !cur) return;
+      const p = cur.partner;
+      const name = p.full_name || p.username;
+      const act = b.dataset.pa;
+      if (act === "status") {
+        const status = b.dataset.status;
+        if (!(await confirmStatus(status, p.status, name))) return;
+        return update({ status }, () => STATUS_DONE[status], b);
+      }
+      if (act === "link") {
+        if (p.link_enabled) {
+          const ok = await ask({ title: "Disable their referral link?", text: "Visits through it stop counting and new sign-ups through it aren't theirs until you enable it again. Their promo code isn't affected.", yes: "Disable link", danger: true });
+          if (ok === null) return;
+        }
+        return update({ link_enabled: !p.link_enabled }, () => (p.link_enabled ? "Referral link disabled." : "Referral link enabled."), b);
+      }
+      if (act === "regen") {
+        const ok = await ask({ title: "Generate a new referral link?", text: "They get a new link and Partner ID. <b>The old link (" + esc(refLink(p.code)) + ") stops working at once</b>, wherever it's been shared. Players already brought in stay theirs.", yes: "Generate new link", danger: true });
+        if (ok === null) return;
+        return update({ regenerate_code: true }, (d) => "New referral link: " + esc(refLink(d.code)), b);
+      }
+      if (act === "promo-yes" || act === "promo-no") {
+        const yes = act === "promo-yes";
+        return update({ approve_promo_request: yes }, () => (yes ? "Promo code " + esc(p.promo_request) + " approved." : "Promo code request declined."), b);
+      }
     });
+
     s.body.addEventListener("submit", async (e) => {
-      if (!e.target.matches("form[data-form=terms]")) return;
+      const f = e.target.closest("form[data-pf]");
+      if (!f || !cur) return;
       e.preventDefault();
-      const v = (sel) => s.body.querySelector(sel).value;
-      const r = await api("/partners/" + userId, { deposit_pct: Number(v("#tPct")), note: v("#tNote") });
-      flash(r.ok ? "ok" : "error", r.ok ? "Rate saved." : errText(r, "Couldn't save the rate."));
-      if (r.ok) draw();
+      const p = cur.partner;
+      const v = (id) => f.querySelector("#" + id).value.trim();
+      const kind = f.dataset.pf;
+      const b = f.querySelector("button[type=submit]");
+      if (kind === "rate") {
+        const pctv = v("pRate");
+        if (pctv === "" || !(Number(pctv) >= 0 && Number(pctv) <= 90)) return flash("error", "Enter a revenue share from 0% to 90%.");
+        const at = v("pRateFrom");
+        let iso = "";
+        if (at) {
+          const d = new Date(at);
+          if (Number.isNaN(d.getTime())) return flash("error", "Enter a valid start date and time.");
+          if (d.getTime() < Date.now() - 60000) return flash("error", "A rate change can start now or later, never in the past.");
+          iso = d.toISOString();
+        }
+        const ok = await ask({ title: "Change the revenue share to " + esc(pctv) + "%?",
+          text: (iso ? "From " + when(iso) : "From now") + ", for bets their players settle from then on. Commission already recorded stays as it is.", yes: "Change rate" });
+        if (ok === null) return;
+        const body = { revshare_pct: pctv };
+        if (iso) body.effective_from = iso;
+        return update(body, () => "Revenue share set to " + esc(pctv) + "%" + (iso ? " from " + when(iso) : "") + ".", b);
+      }
+      if (kind === "promo") {
+        const code = v("pPromo").toUpperCase();
+        if (code === (p.promo_code || "")) return flash("info", "Nothing changed.");
+        if (code && !/^[A-Z0-9]{4,16}$/.test(code)) return flash("error", "Use 4 to 16 letters and numbers, no spaces or symbols.");
+        if (!code) {
+          const ok = await ask({ title: "Remove their promo code?", text: "<b>" + esc(p.promo_code) + "</b> stops working at once.", yes: "Remove", danger: true });
+          if (ok === null) return;
+        } else if (p.promo_code) {
+          const ok = await ask({ title: "Change the promo code to " + esc(code) + "?", text: "<b>" + esc(p.promo_code) + "</b> stops working at once.", yes: "Change" });
+          if (ok === null) return;
+        }
+        return update({ promo_code: code }, () => (code ? "Promo code set to " + esc(code) + "." : "Promo code removed."), b);
+      }
+      if (kind === "correct") {
+        const amount = v("pCorAmt").replace(/\s/g, "");
+        const reason = v("pCorWhy");
+        if (!/^-?\d+(\.\d{1,2})?$/.test(amount) || Number(amount) === 0) return flash("error", "Enter an amount like 12.50 or -12.50.");
+        if (reason.length < 8) return flash("error", "Explain the correction (at least 8 characters).");
+        const n = Number(amount);
+        const ok = await ask({ title: (n > 0 ? "Add " : "Take off ") + money(Math.abs(n)) + "?",
+          text: (n > 0 ? "Added to" : "Taken off") + " their available commission balance (now " + money(cur.wallet.available) + "), with your number and the reason in the audit log.", yes: "Apply correction", danger: n < 0 });
+        if (ok === null) return;
+        b.disabled = true;
+        const r = await api("/partners/" + uid + "/correction", { amount, reason });
+        b.disabled = false;
+        flash(r.ok ? "ok" : "error", r.ok ? "Correction applied — available balance now " + money(r.data.wallet.available) + "." : errText(r, "Couldn't apply the correction."));
+        if (r.ok) after();
+        return;
+      }
+      if (kind === "note") return update({ note: v("pNote") }, () => "Note saved.", b);
     });
     draw();
   }
@@ -1025,11 +1615,11 @@
     overview: { title: "Overview", lead: "How the casino is doing, and anything waiting for you.", actions: ADD_MONEY },
     players: { title: "Players", lead: "Find a player by name, number or id to see their money, bets and account.", actions: ADD_MONEY },
     money: { title: "Money", lead: "Every deposit, withdrawal, bet and adjustment as it happens." },
-    withdrawals: { title: "Withdrawals", lead: "Players' requests to cash out. Pay sends the money through TheTeller; Reject returns it to the player's balance." },
+    withdrawals: { title: "Withdrawals", lead: "Players' requests to cash out. Send the money by hand, then Approve marks it paid; Reject returns it to the player's balance." },
     games: { title: "Games", lead: "Switching a game off takes it out of the lobby and stops new real-money bets on it; rounds already in play can still finish. A studio's switch does the same for all its games." },
     mines: { title: "Mines Signal", lead: "Admin only: where the hidden mines are in the rounds being played." },
     aviator: { title: "Aviator", lead: "Watch rounds and bets live, pause the game, and set its published RTP and bet limits." },
-    partners: { title: "Partners", lead: "Applications, active partners, and the payouts they ask for." },
+    partners: { title: "Partners", lead: "Partners earn a share of the net gaming revenue (players' losses) from the players they bring in, less a deduction on those players' net winnings. Approve applications, set rates, pay commission and change the programme's settings.", actions: '<button class="btn btn-primary btn-sm" type="button" data-add-partner>' + U.icon("plus") + "Add partner</button>" },
     support: { title: "Support", lead: "Players write from the chat button on every page; your replies show in their chat as “RendoWin Support”. Unread conversations come first." },
   };
   const panelOf = (tab) => document.querySelector('[data-panel="' + tab + '"]');
@@ -1084,15 +1674,31 @@
     showTab(b.dataset.tab);
     window.scrollTo(0, 0);
   });
-  $("admActions").addEventListener("click", (e) => { if (e.target.closest("[data-credit]")) openCredit(); });
+  $("admActions").addEventListener("click", (e) => {
+    if (e.target.closest("[data-credit]")) openCredit();
+    if (e.target.closest("[data-add-partner]")) openAddPartner();
+  });
   $("admReload").addEventListener("click", () => { flash("", ""); refreshBadges(); LOADERS[state.tab](); });
 
   document.querySelector(".adm-wrap").addEventListener("submit", (e) => {
     if (e.target.matches('form[data-form="aviator"]')) { e.preventDefault(); saveAviator(e.target); }
+    if (e.target.matches('form[data-form="psettings"]')) { e.preventDefault(); savePartnerSettings(e.target); }
+    if (e.target.matches('form[data-form="pstats"]')) {
+      e.preventDefault();
+      pt.from = e.target.querySelector("#pstFrom").value;
+      pt.to = e.target.querySelector("#pstTo").value;
+      loadPartnerStats();
+    }
   });
 
   document.querySelector(".adm-wrap").addEventListener("click", (e) => {
     if (e.target.closest("[data-av-toggle]")) return aviatorToggle();
+    const copy = e.target.closest("[data-copy]");
+    if (copy) return copyText(copy.dataset.copy);
+    const pact = e.target.closest("[data-pact]");
+    if (pact) return partnerQuick(pact);
+    const settle = e.target.closest("[data-psettle]");
+    if (settle) return settleNow(settle);
     const chip = e.target.closest("[data-chips] [data-v]");
     if (chip) {
       const group = chip.closest("[data-chips]").dataset.chips;
@@ -1101,6 +1707,8 @@
       if (group === "feed") { mf.type = v; return loadMoney(); }
       if (group === "grange") { gm.range = v; return loadGames(); }
       if (group === "pview") { pt.view = v; return loadPartners(); }
+      if (group === "ppay") { pt.pay = v; return loadPartners(); }
+      if (group === "prange") { pt.range = v; return loadPartners(); }
       if (group === "wstatus") { wd.status = v; return loadWithdrawals(); }
       if (group === "sview") { sp.view = v; return loadSupport(); }
     }
@@ -1109,6 +1717,7 @@
     if (go) {
       const view = go.dataset.view;
       if (go.dataset.go === "partners" && view) pt.view = view;
+      if (go.dataset.go === "partners" && view === "payouts") pt.pay = "OPEN";
       if (go.dataset.go === "money" && view) mf.type = view;
       if (go.dataset.go === "withdrawals") wd.status = "REQUESTED";
       if (go.dataset.go === "support") sp.view = "OPEN";
@@ -1136,7 +1745,7 @@
     }
   });
   document.querySelector(".adm-wrap").addEventListener("change", async (e) => {
-    const sw = e.target.closest(".adm-switch input");
+    const sw = e.target.closest(".adm-switch input[data-kind]");
     if (!sw) return;
     const on = sw.checked;
     const label = sw.dataset.label;
@@ -1148,18 +1757,6 @@
     flash(r.ok ? "ok" : "error", r.ok ? esc(label) + " is now " + (on ? "on" : "off") + "." : errText(r, "Couldn't change it."));
     loadGames();
   });
-
-  async function decidePayout(btn) {
-    const pay = btn.dataset.do === "pay";
-    const note = await ask(pay
-      ? { title: "Mark " + money(Number(btn.dataset.amount)) + " as paid?", text: "Send the money first (mobile money, bank or crypto), then record its reference here.", yes: "Mark paid", input: true, placeholder: "Payment reference", required: 3 }
-      : { title: "Reject this payout request?", text: "The amount becomes available to them again.", yes: "Reject", danger: true, input: true, placeholder: "Reason shown to the partner", required: 3 });
-    if (note === null) return;
-    const r = await api("/partner-payouts/" + btn.dataset.payout, { action: pay ? "pay" : "reject", note });
-    flash(r.ok ? "ok" : "error", r.ok ? (pay ? "Recorded as paid." : "Rejected.") : errText(r, "Couldn't update the payout."));
-    loadPartners();
-    refreshBadges();
-  }
 
   /* ================= start: only for admins ================= */
   (async () => {

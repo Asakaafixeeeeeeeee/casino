@@ -209,9 +209,36 @@
   document.addEventListener("vb:session", paintHead);
 
   /* clear an error as soon as its field is edited */
-  ["fullName", "phone", "pw", "age", "lphone", "lpw", "fphone", "fdob", "fpw"].forEach((id) =>
+  ["fullName", "phone", "email", "promo", "pw", "age", "lphone", "lpw", "fphone", "fdob", "fpw"].forEach((id) =>
     $(id).addEventListener("input", () => setError(id, id + "Err", "")));
   $("terms").addEventListener("change", () => { if ($("terms").checked) $("termsErr").textContent = ""; });
+
+  /* ---------------- partner link and promo code ---------------- */
+  /* a promo code from the link (?promo=CODE) or remembered from earlier fills the field; a partner link is noted */
+  const normPromo = (v) => String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
+  (function prefillPromo() {
+    const ref = U.referral.get();
+    const fromUrl = normPromo(new URLSearchParams(location.search).get("promo"));
+    if (fromUrl || (ref && ref.promo)) $("promo").value = fromUrl || ref.promo;
+    if (ref && ref.code) $("promoHint").textContent = "You came through a partner's link — it's linked to your account automatically. A promo code is optional.";
+  })();
+  $("promo").addEventListener("input", () => {
+    const v = normPromo($("promo").value);
+    if (v !== $("promo").value) $("promo").value = v;
+  });
+  /* checks the promo code (and that it's the same partner as the link) before the account is opened. If the server
+     can't be reached the sign-up goes ahead; the code is checked again when the account is linked. */
+  async function promoProblem(promo) {
+    const ref = U.referral.get();
+    const code = ref && ref.code ? ref.code : "";
+    if (!promo) return "";
+    if (promo.length < 4) return "Promo codes have at least 4 letters or numbers.";
+    const q = "?promo=" + encodeURIComponent(promo) + (code ? "&code=" + encodeURIComponent(code) : "");
+    const r = await U.paymentApi("/api/partners/check" + q, { timeout: 20000 });
+    if (r.ok || !r.status || r.status >= 500 || r.status === 429) return "";
+    return (r.data && r.data.message) || "That promo code isn't valid.";
+  }
+  const EMAIL_RE = /^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,}$/;
 
   /* ---------------- register ---------------- */
   forms.register.addEventListener("submit", async (e) => {
@@ -222,8 +249,11 @@
     const pw = $("pw").value;
     const dob = $("age").value;
     const age = dob ? ageFrom(dob) : NaN;
+    const email = $("email").value.trim();
+    const promo = normPromo($("promo").value);
 
     const ok = [
+      setError("email", "emailErr", email && !EMAIL_RE.test(email) ? "That email address doesn't look right — check it, or leave it empty." : ""),
       setError("fullName", "fullNameErr", fullNameProblem(fullName)),
       setError("phone", "phoneErr", registerPhoneProblem($("phone").value)),
       setError("pw", "pwErr", passwordProblem(pw)),
@@ -240,8 +270,16 @@
       return;
     }
 
-    const r = await call($("regBtn"), "Creating account…", "/api/register", { full_name: fullName, phone, password: pw, dob, currency: $("currency").value, country: country().code });
+    if (promo) {
+      busy($("regBtn"), true, "Checking promo code…");
+      const problem = await promoProblem(promo);
+      busy($("regBtn"), false);
+      if (!setError("promo", "promoErr", problem)) return $("promo").focus();
+    }
+    const r = await call($("regBtn"), "Creating account…", "/api/register", { full_name: fullName, phone, email, password: pw, dob, currency: $("currency").value, country: country().code });
     if (!r.ok) return fieldError(r);
+    /* the promo code goes with the account to the partner it belongs to (credited in leave()) */
+    if (promo) U.referral.setPromo(promo);
     U.session.set({ phone: r.data.user.phone, name: r.data.user.username, token: r.data.token, currency: r.data.user.currency }, { remember: true });
     forms.register.reset();
     $("phoneNet").hidden = true;

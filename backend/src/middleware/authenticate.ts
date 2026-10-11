@@ -27,21 +27,23 @@ export function suspendedMayDo(method: string, url: string): boolean {
   return method === "GET" || STILL_ALLOWED.test(url.split("?")[0]!);
 }
 
-/** Keeps the player's number, full name and "last seen" current for the admin pages (at most every 5 minutes, or
+/** Keeps the player's number, full name, optional email and "last seen" current for the admin pages (at most every 5 minutes, or
  *  as soon as the number or name changes), and returns the account's status. */
-async function touchUser(userId: string, phone: string, fullName: string): Promise<string> {
+async function touchUser(userId: string, phone: string, fullName: string, email: string): Promise<string> {
   await db.query(
-    `UPDATE users SET phone = COALESCE(NULLIF($2, ''), phone), full_name = COALESCE(NULLIF($3, ''), full_name), last_login_at = now()
+    `UPDATE users SET phone = COALESCE(NULLIF($2, ''), phone), full_name = COALESCE(NULLIF($3, ''), full_name),
+            contact_email = NULLIF($4, ''), last_login_at = now()
       WHERE id = $1 AND (last_login_at IS NULL OR last_login_at < now() - interval '5 minutes'
                          OR ($2 <> '' AND phone IS DISTINCT FROM $2)
-                         OR ($3 <> '' AND full_name IS DISTINCT FROM $3))`,
-    [userId, phone, fullName]);
+                         OR ($3 <> '' AND full_name IS DISTINCT FROM $3)
+                         OR contact_email IS DISTINCT FROM NULLIF($4, ''))`,
+    [userId, phone, fullName, email]);
   const { rows } = await db.query<{ status: string }>(`SELECT status::text AS status FROM users WHERE id = $1`, [userId]);
   return rows[0]?.status ?? "ACTIVE";
 }
 
 interface SessionVerifyResponse {
-  user?: { id: string | number; username?: string; phone?: string; country?: string; full_name?: string | null };
+  user?: { id: string | number; username?: string; phone?: string; country?: string; full_name?: string | null; email?: string | null };
 }
 
 export async function authenticate(
@@ -80,7 +82,8 @@ export async function authenticate(
     const phone = String(user?.phone ?? "");
     const fullName = String(user?.full_name ?? "").slice(0, 120);
     const balanceUserId = await ensureWalletAccount(db, String(accountId), user?.username, phone, user?.country);
-    const status = await touchUser(balanceUserId, phone, fullName);
+    const email = /^[^@s]{1,64}@[^@s]{1,190}.[^@s]{2,}$/.test(String(user?.email ?? "")) ? String(user!.email).toLowerCase() : "";
+    const status = await touchUser(balanceUserId, phone, fullName, email);
     (req as Request & { user: SessionUser }).user = { id: balanceUserId, accountId: String(accountId), phone, status };
     /* a suspended account can look, and finish what it started, but not bet, deposit or withdraw. The path tested is
        the one Express routed (mount + route path, no query or #fragment): testing originalUrl let a raw client send

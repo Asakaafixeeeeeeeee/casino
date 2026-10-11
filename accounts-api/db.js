@@ -22,6 +22,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS country TEXT NOT NULL DEFAULT 'GH';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_failures INT NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_locked_until TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower ON users (lower(email)) WHERE email IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash  TEXT        PRIMARY KEY,
@@ -30,6 +32,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id);
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS device TEXT;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
 `;
 
 async function open() {

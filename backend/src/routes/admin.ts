@@ -15,7 +15,8 @@ import {
   setUserKyc, setUserStatus, transactions, userDetail,
 } from "../services/admin.js";
 import {
-  decidePartnerPayout, listPartnerPayouts, listPartners, PartnerError, partnerDetail, updatePartner,
+  correctCommission, decidePartnerPayout, deductionHistory, getSettings, listPartnerPayouts, listPartners, lookupPlayer, PartnerError,
+  partnerDetail, partnerPreview, programmeStats, saveSettings, settleCommissions, updatePartner,
 } from "../services/affiliates.js";
 import { adminReply, adminThread, adminThreads, setThreadStatus, SupportError, unreadThreads } from "../services/support.js";
 import { listAdminMinesSignals } from "../services/minesSignal.js";
@@ -54,7 +55,7 @@ export function adminRouter(db: Pool): Router {
     const { rows } = await db.query(
       `SELECT (SELECT count(*) FROM withdrawals WHERE status = 'REQUESTED') AS withdrawals,
               (SELECT count(*) FROM affiliates WHERE status = 'PENDING') AS partners,
-              (SELECT count(*) FROM affiliate_payouts WHERE status = 'REQUESTED') AS partner_payouts`);
+              (SELECT count(*) FROM affiliate_payouts WHERE status IN ('REQUESTED', 'APPROVED')) AS partner_payouts`);
     res.setHeader("Cache-Control", "no-store");
     res.json({
       admin: true, payoutsEnabled: payouts, phone: requireUser(_req).phone,
@@ -98,10 +99,18 @@ export function adminRouter(db: Pool): Router {
   r.get("/catalog", send((req) => catalogAdmin(db, String(req.query.range ?? "30d"))));
   r.post("/catalog/:kind/:id", send((req) => setCatalog(db, adminOf(req), req.params.kind, req.params.id, req.body ?? {})));
 
-  /* partners */
+  /* partners: the programme's settings and numbers, find a player to add, each partner, and payout requests */
+  r.get("/partner-settings", send(async () => ({ settings: await getSettings(db), deductionHistory: await deductionHistory(db) })));
+  r.post("/partner-settings", send((req) => saveSettings(db, adminOf(req), req.body ?? {})));
+  r.post("/partner-settings/settle", send(() => settleCommissions(db)));
+  r.get("/partner-stats", send((req) => programmeStats(db, query(req))));
+  r.get("/partner-lookup", send((req) => lookupPlayer(db, query(req))));
   r.get("/partners", send((req) => listPartners(db, query(req))));
   r.get("/partners/:id", send((req) => partnerDetail(db, req.params.id)));
+  /* the partner's own dashboard, read-only: summary, referrals, statistics, wallet, settings */
+  r.get("/partners/:id/view/:view", send((req) => partnerPreview(db, req.params.id, String(req.params.view), query(req))));
   r.post("/partners/:id", send((req) => updatePartner(db, adminOf(req), req.params.id, req.body ?? {})));
+  r.post("/partners/:id/correction", send((req) => correctCommission(db, adminOf(req), req.params.id, req.body ?? {})));
   r.get("/partner-payouts", send((req) => listPartnerPayouts(db, query(req))));
 
   r.post("/partner-payouts/:id", send((req) => decidePartnerPayout(db, adminOf(req), req.params.id, req.body ?? {})));

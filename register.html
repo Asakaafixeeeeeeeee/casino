@@ -10,8 +10,18 @@
 <meta name="theme-color" content="#0d0e10">
 <title>Log in or register — RendoWin</title>
 <meta name="description" content="Log in or create your RendoWin account with your mobile number.">
-<link rel="stylesheet" href="assets/css/styles.css?v=33">
+<link rel="stylesheet" href="assets/css/styles.css?v=34">
 <link rel="icon" href="assets/img/rendowin-mark.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/img/app/apple-touch-icon-180.png">
+<link rel="apple-touch-icon" sizes="120x120" href="assets/img/app/apple-touch-icon-120.png">
+<link rel="apple-touch-icon" sizes="152x152" href="assets/img/app/apple-touch-icon-152.png">
+<link rel="apple-touch-icon" sizes="167x167" href="assets/img/app/apple-touch-icon-167.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/img/app/apple-touch-icon-180.png">
+<meta name="apple-mobile-web-app-title" content="WinB Casino">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 </head>
 <body>
 
@@ -59,6 +69,11 @@
           <span class="err" id="phoneErr"></span>
         </div>
         <div class="field">
+          <label for="email">Email <span class="opt">(optional)</span></label>
+          <input id="email" type="email" inputmode="email" placeholder="you@example.com" autocomplete="email" maxlength="254" spellcheck="false" autocapitalize="off">
+          <span class="err" id="emailErr"></span>
+        </div>
+        <div class="field">
           <label for="pw">Password</label>
           <div class="input-wrap">
             <input id="pw" type="password" placeholder="At least 8 characters" autocomplete="new-password">
@@ -78,6 +93,12 @@
             <option value="GHS">Ghana Cedi (₵)</option>
           </select>
           <span class="hint">The currency your balance is shown in. Deposits are made in cedis and converted at the day's rate.</span>
+        </div>
+        <div class="field">
+          <label for="promo">Promo code <span class="opt">(optional)</span></label>
+          <input id="promo" type="text" placeholder="e.g. AJABABA" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16">
+          <span class="hint" id="promoHint">From a partner who invited you.</span>
+          <span class="err" id="promoErr"></span>
         </div>
         <label class="checkbox auth-terms"><input type="checkbox" id="terms"><span>I'm 18 or older and accept the
           <a href="terms.html" target="_blank" rel="noopener">terms</a> and <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a>.</span></label>
@@ -142,7 +163,7 @@
 </main>
 
 <script src="assets/js/data.js?v=51"></script>
-<script src="assets/js/site.js?v=44"></script>
-<script src="assets/js/register.js?v=36"></script>
+<script src="assets/js/site.js?v=45"></script>
+<script src="assets/js/register.js?v=37"></script>
 </body>
 </html>

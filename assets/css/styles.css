@@ -520,6 +520,7 @@ a.provider:hover { border-color: var(--yellow); transform: translateY(-1px); }
 
 .field { display: grid; gap: 6px; margin-bottom: 14px; }
 .field label { font-size: .82rem; font-weight: 700; color: var(--muted); }
+.field label .opt { font-weight: 400; color: var(--dim); }
 .field input, .field select {
   width: 100%; min-height: 44px; padding: 11px 14px; border-radius: var(--r-sm);
   border: 1px solid var(--line); background: #141414; color: var(--text);
