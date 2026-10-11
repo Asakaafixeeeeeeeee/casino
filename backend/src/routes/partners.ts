@@ -10,11 +10,14 @@ import {
 import {
   assetFile, deleteFlyer, gameTools, PERMISSIONS, type Permission, partnerFlyers, permissionsOf, requirePermission, saveFlyer, toolsList,
 } from "../services/partnerPlatform.js";
+import { acceptInvite, inviteInfo, registerWithInvite } from "../services/partnerInvites.js";
 
 /*
  * The partner portal's API. Access:
  *   anyone           POST /click                  a visit through a partner link (counted, never trusted for money)
  *                    GET  /check                  is this link code / promo code valid (and the same partner)? before sign-up
+ *   setup link       POST /invite/info, /invite/register   a partner opens their secret setup link and registers
+ *                    POST /invite/accept (signed in)     ...or accepts it with the account that already has that number
  *   signed in        GET /me, POST /apply         where your partner application stands; apply
  *                    POST /attribute              link a newly opened account to the partner who sent it (link or promo code)
  *   partners         GET /summary, /referrals, /statistics, /wallet, /settings, /commissions, /payouts   (ACTIVE or SUSPENDED: read only)
@@ -105,6 +108,18 @@ export function partnersRouter(db: Pool): Router {
     }
     send(() => checkReferral(db, { code: req.query.code, promo: req.query.promo }))(req, res, next);
   });
+
+  /* partner setup links: the secret is sent in the body (never in a URL the server logs) */
+  const invite = (fn: (req: Request) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => {
+    if (!allowed(req, "invite")) {
+      res.status(429).json({ error: "too_many", message: "Too many tries — wait a minute." });
+      return;
+    }
+    send(fn)(req, res, next);
+  };
+  r.post("/invite/info", invite((req) => inviteInfo(db, req.body?.token)));
+  r.post("/invite/register", invite((req) => registerWithInvite(db, req.body?.token, req.body ?? {})));
+  r.post("/invite/accept", authenticate, invite((req) => acceptInvite(db, req.body?.token, requireUser(req).id, req.body ?? {})));
 
   r.get("/me", authenticate, send(async (req) => {
     const a = await partnerOf(db, requireUser(req).id);

@@ -65,7 +65,7 @@ export async function requirePermission(db: Db, a: Affiliate, key: Permission) {
   }
 }
 
-function permissionInput(raw: unknown, allowNull: boolean): Record<string, boolean | null> {
+export function permissionInput(raw: unknown, allowNull: boolean): Record<string, boolean | null> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new PartnerError("invalid_permissions", "Send the permissions to change");
   const out: Record<string, boolean | null> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
@@ -104,9 +104,45 @@ export async function savePartnerPermissions(db: Pool, admin: string, userId: un
 
 /* ---------------------------------------------------------------- partners an admin creates */
 
-interface CreateInput {
+export interface CreateInput {
   full_name?: unknown; phone?: unknown; email?: unknown; username?: unknown; password?: unknown; dob?: unknown; country?: unknown;
   revshare_pct?: unknown; status?: unknown; code?: unknown; promo_code?: unknown; permissions?: unknown; note?: unknown;
+}
+
+function accountsConfig(env: NodeJS.ProcessEnv) {
+  const url = env.ACCOUNTS_API_URL;
+  const secret = env.ACCOUNTS_INTERNAL_SECRET;
+  if (!url || !secret) {
+    throw new PartnerError("not_configured", "Creating accounts isn't set up yet: ACCOUNTS_INTERNAL_SECRET must be set on both the accounts and balance services.", 503);
+  }
+  return { url, secret };
+}
+
+/**
+ * Opens a sign-in account on the accounts service (checked exactly like a sign-up: name, number, 18+, password) and
+ * its wallet here. A number that already has an account is refused with already_registered (409); a taken username
+ * or email with <field>_taken.
+ */
+export async function openSignInAccount(db: Pool, input: CreateInput, env: NodeJS.ProcessEnv = process.env) {
+  const { url, secret } = accountsConfig(env);
+  const r = await fetch(url.replace(/\/$/, "") + "/api/internal/accounts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Internal-Secret": secret },
+    body: JSON.stringify({
+      full_name: input.full_name, phone: input.phone, email: input.email, username: input.username, password: input.password,
+      dob: input.dob, country: input.country ?? "GH", currency: "GHS",
+    }),
+  }).catch(() => null);
+  if (!r) throw new PartnerError("accounts_unavailable", "The accounts service didn't answer. Try again in a minute.", 503);
+  const body = (await r.json().catch(() => ({}))) as { user?: { id: string | number; phone: string; username: string; full_name?: string; email?: string | null; country?: string }; error?: string; field?: string };
+  if (!r.ok || !body.user) {
+    const code = r.status === 409 ? (body.field === "phone" ? "already_registered" : (body.field || "account") + "_taken") : "invalid_" + (body.field || "account");
+    throw new PartnerError(code, body.error || "Couldn't create the account", r.status === 409 ? 409 : 400);
+  }
+  const u = body.user;
+  const userId = await ensureWalletAccount(db, String(u.id), u.username, u.phone, u.country);
+  await db.query(`UPDATE users SET phone = $2, full_name = $3, contact_email = $4 WHERE id = $1`, [userId, u.phone, u.full_name ?? null, u.email ?? null]);
+  return { userId, user: u };
 }
 
 /**
@@ -115,11 +151,7 @@ interface CreateInput {
  * The accounts service checks the details (name, number, 18+, password) exactly as at sign-up.
  */
 export async function createPartnerAccount(db: Pool, admin: string, input: CreateInput, env: NodeJS.ProcessEnv = process.env) {
-  const url = env.ACCOUNTS_API_URL;
-  const secret = env.ACCOUNTS_INTERNAL_SECRET;
-  if (!url || !secret) {
-    throw new PartnerError("not_configured", "Creating accounts isn't set up yet: ACCOUNTS_INTERNAL_SECRET must be set on both the accounts and balance services.", 503);
-  }
+  accountsConfig(env);
   const status = input.status === undefined ? "ACTIVE" : String(input.status);
   if (!["ACTIVE", "SUSPENDED"].includes(status)) throw new PartnerError("invalid_status", "A new partner starts active or suspended");
   /* the partner's own choices are checked before the account is opened, so a taken code doesn't leave a stray account */
@@ -132,25 +164,8 @@ export async function createPartnerAccount(db: Pool, admin: string, input: Creat
       throw new PartnerError(field + "_taken", `That ${label} is already used by another partner`, 409);
     }
   }
-  const r = await fetch(url.replace(/\/$/, "") + "/api/internal/accounts", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Internal-Secret": secret },
-    body: JSON.stringify({
-      full_name: input.full_name, phone: input.phone, email: input.email, username: input.username, password: input.password,
-      dob: input.dob, country: input.country ?? "GH", currency: "GHS",
-    }),
-  }).catch(() => null);
-  if (!r) throw new PartnerError("accounts_unavailable", "The accounts service didn't answer. Try again in a minute.", 503);
-  const body = (await r.json().catch(() => ({}))) as { user?: { id: string | number; phone: string; username: string; full_name?: string; email?: string | null; country?: string }; error?: string; field?: string };
-  if (!r.ok || !body.user) {
-    /* a number that already has an account: the admin can make that player a partner instead; a taken username or
-       email is just a detail to change */
-    const code = r.status === 409 ? (body.field === "phone" ? "already_registered" : (body.field || "account") + "_taken") : "invalid_" + (body.field || "account");
-    throw new PartnerError(code, body.error || "Couldn't create the account", r.status === 409 ? 409 : 400);
-  }
-  const u = body.user;
-  const userId = await ensureWalletAccount(db, String(u.id), u.username, u.phone, u.country);
-  await db.query(`UPDATE users SET phone = $2, full_name = $3, contact_email = $4 WHERE id = $1`, [userId, u.phone, u.full_name ?? null, u.email ?? null]);
+  /* a number that already has an account: the admin can make that player a partner instead */
+  const { userId, user: u } = await openSignInAccount(db, input, env);
   await updatePartner(db, admin, userId, {
     status, ...(input.revshare_pct !== undefined && input.revshare_pct !== "" ? { revshare_pct: input.revshare_pct } : {}),
     ...(String(input.promo_code ?? "").trim() ? { promo_code: input.promo_code } : {}), note: input.note ?? "Created by an admin",

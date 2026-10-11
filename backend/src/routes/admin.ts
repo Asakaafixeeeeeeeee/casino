@@ -27,6 +27,7 @@ import {
   permissionsOf, saveGlobalPermissions, savePartnerPermissions, saveTemplate, updateCampaign, uploadAsset,
 } from "../services/partnerPlatform.js";
 import { partnerOf } from "../services/affiliates.js";
+import { cancelInvite, createInvite, listInvites, renewInvite } from "../services/partnerInvites.js";
 
 const STATUSES = ["REQUESTED", "PAYING", "PAID", "DECLINED"];
 
@@ -112,6 +113,11 @@ export function adminRouter(db: Pool): Router {
   r.get("/partner-lookup", send((req) => lookupPlayer(db, query(req))));
   /* a partner who has never registered: their sign-in account, wallet and partner account in one go */
   r.post("/partners/create", send((req) => createPartnerAccount(db, adminOf(req), req.body ?? {})));
+  /* partner setup links: the admin enters a number, commission and switches; the partner registers through the link */
+  r.get("/partner-invites", send(() => listInvites(db)));
+  r.post("/partner-invites", send((req) => createInvite(db, adminOf(req), req.body ?? {})));
+  r.post("/partner-invites/:id/renew", send((req) => renewInvite(db, adminOf(req), req.params.id)));
+  r.post("/partner-invites/:id/cancel", send((req) => cancelInvite(db, adminOf(req), req.params.id)));
   /* feature switches: for every partner, and for one */
   r.get("/partner-permissions", send(async () => ({ permissions: await globalPermissions(db), list: PERMISSIONS.map(([key, label]) => ({ key, label })) })));
   r.post("/partner-permissions", send((req) => saveGlobalPermissions(db, adminOf(req), req.body?.permissions)));

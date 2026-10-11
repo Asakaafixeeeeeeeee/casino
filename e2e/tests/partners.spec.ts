@@ -108,7 +108,7 @@ test("revenue share: link + promo code sign-up, commission from real bets, partn
   await page.goto("/partners.html");
   await settle(page);
   await expect(kpi(page, "Total referrals")).toHaveText("1");
-  await expect.poll(async () => signed(await kpi(page, "Lifetime").textContent()), { timeout: 20_000 }).toBe(expected);
+  await expect.poll(async () => signed(await kpi(page, "Lifetime earnings").textContent()), { timeout: 20_000 }).toBe(expected);
   await expect(page.locator("body")).toContainText("40%");
   await page.locator('[data-tab="referrals"]').click();
   await expect(page.locator("table")).toContainText("P-");
@@ -133,7 +133,7 @@ test("revenue share: link + promo code sign-up, commission from real bets, partn
   await a.goto(`/partners.html?preview=${row.user_id}`);
   await settle(a);
   await expect(a.locator(".prt-preview")).toContainText("Admin preview");
-  await expect.poll(async () => signed(await kpi(a, "Lifetime").textContent()), { timeout: 20_000 }).toBe(expected);
+  await expect.poll(async () => signed(await kpi(a, "Lifetime earnings").textContent()), { timeout: 20_000 }).toBe(expected);
 
   /* wallet: a verified correction, a payout held at once, a rejection returns it, a payment needs its reference */
   expect((await request.post(`${API}/api/admin/partners/${row.user_id}/correction`, { headers: auth(admin.token),
@@ -242,7 +242,7 @@ test("the whole flow on screen: apply, admin approves, dashboard opens, link tra
   await expect(page.locator("#prtSignups tbody tr")).toHaveCount(1);
   await expect(page.locator("#prtSignups")).toContainText("Referral link");
   await expect(page.locator("#prtCommissions tbody tr")).toHaveCount(3);
-  await expect.poll(async () => signed(await kpi(page, "Lifetime").textContent())).toBe(expected);
+  await expect.poll(async () => signed(await kpi(page, "Lifetime earnings").textContent())).toBe(expected);
   expect(amountIn(await kpi(page, "Total commission earned").textContent() || "")).toBe(earned);
   await expect(page.locator("body")).toContainText("No payout requests yet");
   await expect(page.locator("body")).not.toContainText(player.fullName);

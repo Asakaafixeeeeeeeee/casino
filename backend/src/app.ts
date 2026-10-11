@@ -44,7 +44,7 @@ export function createApp(db: Pool): express.Express {
   app.use(["/api/support", "/api/admin/support"], express.json({ limit: "8kb" }));
   // promotional images an admin uploads (as data: URLs, up to 2 MB of image), and the partner forms and campaigns
   app.use("/api/admin/flyer-assets", express.json({ limit: "3mb" }));
-  app.use(["/api/admin/partners", "/api/admin/partner-permissions", "/api/admin/flyer-templates", "/api/admin/flyer-campaigns",
+  app.use(["/api/admin/partners", "/api/admin/partner-permissions", "/api/admin/partner-invites", "/api/partners/invite", "/api/admin/flyer-templates", "/api/admin/flyer-campaigns",
     "/api/partners/flyers"], express.json({ limit: "8kb" }));
   app.use(express.json({ limit: "1kb" })); // we never take bulk bodies here
   // helmet sets X-Content-Type-Options, frame-ancestors, HSTS, etc.

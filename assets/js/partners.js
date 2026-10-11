@@ -105,8 +105,8 @@
   }
 
   /* ---------------- the portal shell ---------------- */
-  const ALL_TABS = [["dashboard", "Dashboard"], ["referrals", "My Referrals"], ["statistics", "Statistics"], ["wallet", "Wallet"],
-    ["promo", "Promo materials"], ["tools", "Game tools"], ["settings", "Settings"], ["support", "Support"]];
+  const ALL_TABS = [["dashboard", "Dashboard", "home"], ["referrals", "My Referrals", "users"], ["statistics", "Statistics", "chart"], ["wallet", "Wallet", "wallet"],
+    ["promo", "Promo materials", "megaphone"], ["tools", "Game tools", "tools"], ["settings", "Settings", "settings"], ["support", "Support", "help"]];
   /* which tabs this partner sees: with the dashboard switched off, only Settings and Support */
   function tabOn(id) {
     if (!can("dashboard")) return id === "settings" || id === "support";
@@ -118,17 +118,40 @@
   const homeTab = () => (can("dashboard") ? "dashboard" : "settings");
   const link = () => location.origin + "/?ref=" + encodeURIComponent(state.partner.code);
 
+  /* the portal's header: who's signed in, their Partner ID, status and rate (filled in as the dashboard loads) */
+  function headHtml() {
+    const p = state.partner;
+    const name = state.name || (!PREVIEW && U.session.get() && U.session.get().name) || "Partner";
+    const [stCls, stTxt] = STATUS_WORD[p.status] || ["", p.status];
+    return '<div class="prt-ava" aria-hidden="true">' + esc(name.trim().charAt(0).toUpperCase() || "P") + "</div>" +
+      '<div class="prt-head-main"><span class="prt-head-hi">' + (PREVIEW ? "Partner dashboard" : "Welcome back") + "</span>" +
+        '<strong id="prtHello">' + esc(name) + "</strong>" +
+        '<span class="prt-head-tags"><span class="prt-tag">ID <b>' + esc(p.code) + '</b></span><span class="adm-pill ' + stCls + '">' + esc(stTxt) + "</span>" +
+        (state.ratePct !== undefined ? '<span class="prt-tag prt-tag-gold"><b>' + pct(state.ratePct) + "</b> revenue share</span>" : "") + "</span></div>";
+  }
+  const redrawHead = () => { if ($("prtHead")) $("prtHead").innerHTML = headHtml(); };
+  /* the header's full name and rate, whichever tab the portal opens on */
+  async function headDetails() {
+    if (state.ratePct !== undefined) return;
+    const r = await get("settings");
+    if (!r.ok || state.ratePct !== undefined) return;
+    state.name = (r.data.account && r.data.account.full_name) || state.name;
+    state.ratePct = r.data.rate.pct;
+    redrawHead();
+  }
+
   function drawPortal() {
     const p = state.partner;
     view.innerHTML =
       (PREVIEW ? '<div class="prt-preview">' + U.icon("shield") + "<span><b>Admin preview — read only</b> (partner " + esc(p.code) + ", " + esc(p.status) + ")</span></div>" : "") +
+      '<header class="prt-head" id="prtHead">' + headHtml() + "</header>" +
       (!PREVIEW && p.status === "SUSPENDED"
         ? '<div class="alert alert-info prt-notice">Your partner account is suspended: your link isn\'t counting new players, and payouts and changes are on hold. You can still see your figures. Contact support through the chat to find out more.</div>' : "") +
       (can("dashboard") ? ""
         : offBox("Your partner dashboard is switched off for your account at the moment, so your figures, wallet and promo materials aren't shown here. " +
             "You can still update your settings and reach our team from Support.", "Partner dashboard unavailable")) +
-      '<nav class="adm-tabs prt-tabs" role="tablist" aria-label="Partner portal">' +
-        tabs().map(([id, label]) => '<button type="button" role="tab" data-tab="' + id + '" aria-selected="false">' + label + "</button>").join("") +
+      '<nav class="prt-tabs" role="tablist" aria-label="Partner portal">' +
+        tabs().map(([id, label, ic]) => '<button type="button" role="tab" data-tab="' + id + '" aria-selected="false">' + U.icon(ic) + "<span>" + label + "</span></button>").join("") +
       '</nav><div id="prtTab" role="tabpanel"></div>';
     const h = location.hash.slice(1);
     show(tabOn(h) ? h : homeTab());
@@ -141,6 +164,8 @@
     if (!tabOn(tab)) tab = homeTab();
     state.tab = tab;
     view.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
+    const on = view.querySelector('[data-tab][aria-selected="true"]');
+    if (on && on.scrollIntoView) on.scrollIntoView({ block: "nearest", inline: "center" });
     if (location.hash.slice(1) !== tab) history.replaceState(null, "", "#" + tab);
     const ranged = tab === "referrals" || tab === "statistics";
     $("prtTab").innerHTML = (ranged ? '<div id="rangeBox">' + rangeBar(tab) + "</div>" : "") + '<div id="tabBody">' + LOADING + "</div>";
@@ -169,11 +194,43 @@
   /* ---------------- Dashboard ---------------- */
   const STATUS_WORD = { ACTIVE: ["ok", "Active"], SUSPENDED: ["bad", "Suspended"], PENDING: ["warn", "Pending"], REJECTED: ["bad", "Rejected"], DISABLED: ["bad", "Disabled"] };
   const VIA = { link: "Referral link", promo: "Promo code", "link+promo": "Link + promo code", admin: "Added by admin" };
+  /* a card: icon, title, optional action on the right, then its content */
+  const card = (ic, title, body, opts) => {
+    const o = opts || {};
+    return '<section class="prt-card' + (o.cls ? " " + o.cls : "") + '"' + (o.id ? ' id="' + o.id + '"' : "") + '><header class="prt-card-head"><span class="prt-card-ico">' + U.icon(ic) + "</span>" +
+      "<h2>" + title + "</h2>" + (o.action || "") + "</header>" + body + "</section>";
+  };
+  /* a stat tile with an icon (keeps .adm-kpi: label in span, value in strong) */
+  const tile = (ic, label, value, sub, cls) =>
+    '<div class="adm-kpi prt-tile' + (cls ? " " + cls : "") + '"><i class="prt-tile-ico">' + U.icon(ic) + "</i><span>" + label + "</span><strong>" + value + "</strong>" + (sub ? "<small>" + sub + "</small>" : "") + "</div>";
+  /* the referral link as a QR code (SVG), for printing or showing on a phone */
+  function qrSvg(text) {
+    if (typeof window.qrcode !== "function") return "";
+    try {
+      const q = window.qrcode(0, "M");
+      q.addData(text);
+      q.make();
+      const n = q.getModuleCount();
+      let d = "";
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) d += "M" + (c + 2) + " " + (r + 2) + "h1v1h-1z";
+      return '<svg class="prt-qr" viewBox="0 0 ' + (n + 4) + " " + (n + 4) + '" role="img" aria-label="QR code of your referral link" shape-rendering="crispEdges">' +
+        '<rect width="100%" height="100%" fill="#fff"/><path d="' + d + '" fill="#111"/></svg>';
+    } catch (e) {
+      return "";
+    }
+  }
+  const pill = (status) => {
+    const [cls, txt] = PAY_STATUS[status] || ["", status];
+    return '<span class="adm-pill ' + cls + '">' + esc(txt) + "</span>";
+  };
+
   async function loadDashboard(seq, quiet) {
-    /* the referral list is its own feature (referral statistics): without it the dashboard still loads */
-    const [sum, set, wal, refs, com] = await Promise.all([
+    /* the referral list and the chart need referral statistics; without it the dashboard still loads */
+    const statsOn = can("referral_stats");
+    const [sum, set, wal, refs, com, chart] = await Promise.all([
       get("summary"), get("settings"), get("wallet"),
-      can("referral_stats") ? get("referrals", "range=all") : Promise.resolve(null), get("commissions", "limit=20"),
+      statsOn ? get("referrals", "range=all") : Promise.resolve(null), get("commissions", "limit=20"),
+      statsOn ? get("statistics", "range=30d") : Promise.resolve(null),
     ]);
     if (seq !== loadSeq || state.tab !== "dashboard") return;
     for (const r of [sum, set, wal, com]) if (!r.ok) return failed(r, "Couldn't load your dashboard.", quiet);
@@ -185,96 +242,138 @@
     const rs = s.revenueShare;
     const st = set.data;
     state.partner = Object.assign({}, state.partner, s.partner);
+    state.name = (st.account && (st.account.full_name || st.account.username)) || state.name;
+    state.ratePct = st.rate.pct;
+    redrawHead();
     const p = state.partner;
     const [stCls, stTxt] = STATUS_WORD[p.status] || ["", p.status];
     const canPay = !state.readOnly && payOn && w.available >= w.minPayout;
     const signups = refsOff ? [] : refs.data.referrals.slice(0, 10);
     const payouts = wal.data.payouts.slice(0, 5);
     const commissions = com.data.commissions;
+    const series = chart && chart.ok ? chart.data.series || [] : [];
+    const toGo = Math.max(0, w.minPayout - w.available);
+    const progress = w.minPayout > 0 ? Math.max(0, Math.min(100, (100 * w.available) / w.minPayout)) : 100;
+
     $("tabBody").innerHTML =
-      /* the partner's unique link first: it's what they share */
-      '<section class="panel prt-linkbox prt-mainlink">' +
-        (can("referral_links")
-          ? '<span class="prt-label">Your unique referral link</span>' + linkRow("lnk", link(), "Your referral link", true) +
-            (p.link_live ? "" : '<p class="alert alert-info">Your link is switched off at the moment — new visitors through it won\'t become your players.</p>')
-          : '<p class="alert alert-info">Your referral link is switched off. Contact support if you need it.</p>') +
-        '<div class="prt-idrow"><span>Partner ID <b>' + esc(p.code) + "</b></span>" +
-          "<span>Promo code <b>" + (p.promo_code ? esc(p.promo_code) : "—") + "</b>" + (p.promo_code && !can("promo_codes") ? " <small>(switched off)</small>" : "") + "</span>" +
-          '<span>Status <span class="adm-pill ' + stCls + '">' + esc(stTxt) + "</span></span>" +
-          "<span>Commission <b>" + pct(st.rate.pct) + "</b></span></div>" +
-        '<p class="prt-terms">' + terms(st) + "</p>" + scheduled(st.rate) +
-        '<p class="hint">Anyone who opens an account through this link (or with your promo code) becomes your player for good.</p>' +
+      /* 1. earnings, big and first */
+      '<section class="prt-earn">' +
+        '<div class="prt-earn-main">' +
+          '<div class="adm-kpi prt-earn-total"><span>Lifetime earnings</span><strong' + (rs.lifetime < 0 ? ' class="prt-neg"' : "") + ">" + smoney(rs.lifetime) + "</strong>" +
+            "<small>" + (rs.month > 0 ? '<b class="prt-up">' + U.icon("trend") + "+" + money(rs.month) + "</b> this month" : "your net commission so far") + "</small></div>" +
+          '<div class="prt-periods">' +
+            kpi("Today", smoney(rs.today), "", tone(rs.today)) + kpi("Yesterday", smoney(rs.yesterday), "", tone(rs.yesterday)) +
+            kpi("This week", smoney(rs.week), "", tone(rs.week)) + kpi("This month", smoney(rs.month), "", tone(rs.month)) +
+          "</div>" +
+          (series.length > 1
+            ? '<figure class="prt-earn-chart"><figcaption>Daily earnings · last 30 days</figcaption>' + bars(series, "earnings", chart.data.unit, plainMoney, "gain") + "</figure>"
+            : "") +
+        "</div>" +
+        '<aside class="prt-earn-side">' +
+          '<span class="prt-label">Available to withdraw</span>' +
+          '<b class="prt-earn-avail' + (w.available < 0 ? " prt-neg" : "") + '">' + smoney(w.available) + "</b>" +
+          (payOn && !state.readOnly
+            ? (canPay ? "<small>Ready — request it any time.</small>"
+              : '<div class="prt-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(progress) + '"><i style="width:' + progress.toFixed(1) + '%"></i></div>' +
+                "<small>" + money(toGo) + " more to reach the " + money(w.minPayout) + " minimum</small>")
+            : "") +
+          (state.readOnly || !payOn ? "" : '<button class="btn btn-primary btn-block" type="button" data-go="wallet"' + (canPay ? "" : " disabled") + ">" + U.icon("withdraw") + "Request withdrawal</button>") +
+          (!state.readOnly && !payOn ? "<small>Commission withdrawals are switched off for your account.</small>" : "") +
+          '<dl class="prt-earn-list">' +
+            "<div><dt>Pending</dt><dd>" + smoney(w.pending) + "</dd></div>" +
+            "<div><dt>Withdrawn</dt><dd>" + money(w.withdrawn) + "</dd></div>" +
+            (w.pendingWithdrawals ? "<div><dt>Withdrawal in progress</dt><dd>" + money(w.pendingWithdrawals) + "</dd></div>" : "") +
+          "</dl>" +
+          "<small>Pending commission moves to available when the " + periodWord(w.settlementPeriod) + " period closes.</small>" +
+        "</aside>" +
       "</section>" +
 
-      '<section class="prt-top">' +
-        '<div><span class="prt-label">Total commission earned</span><b class="prt-codeval">' + money(w.totalEarned) + "</b>" +
-        "<small>lifetime, before deductions</small></div>" +
-        '<div class="prt-avail"><span class="prt-label">Available</span><b' + (w.available < 0 ? ' class="prt-neg"' : "") + ">" + smoney(w.available) + "</b>" +
-        (state.readOnly || !payOn ? "" : '<button class="btn btn-primary btn-sm" type="button" data-go="wallet"' + (canPay ? "" : " disabled") + ">Request withdrawal</button>") +
-        (!state.readOnly && payOn && !canPay ? "<small>Withdrawals from " + money(w.minPayout) + "</small>" : "") +
-        (!state.readOnly && !payOn ? "<small>Commission withdrawals are switched off for your account</small>" : "") + "</div></section>" +
+      /* 2. the link and codes they share */
+      card("link", "Share and earn",
+        '<div class="prt-share">' +
+          '<div class="prt-share-main">' +
+            (can("referral_links")
+              ? '<span class="prt-label">Your referral link</span>' + linkRow("lnk", link(), "Your referral link", true) +
+                (p.link_live ? "" : '<p class="alert alert-info">Your link is switched off at the moment — new visitors through it won\'t become your players.</p>')
+              : '<p class="alert alert-info">Your referral link is switched off. Contact support if you need it.</p>') +
+            '<div class="prt-idrow">' +
+              '<span class="prt-id"><small>Partner ID</small><b>' + esc(p.code) + "</b></span>" +
+              '<span class="prt-id"><small>Promo code</small><b>' + (p.promo_code ? esc(p.promo_code) : "—") + "</b>" +
+                (p.promo_code ? '<button class="prt-mini-btn" type="button" data-copytext="' + esc(p.promo_code) + '" data-what="Promo code" aria-label="Copy promo code">' + U.icon("copy") + "</button>" : "") +
+                (p.promo_code && !can("promo_codes") ? "<small>(switched off)</small>" : "") + "</span>" +
+              '<span class="prt-id"><small>Status</small><span class="adm-pill ' + stCls + '">' + esc(stTxt) + "</span></span>" +
+              '<span class="prt-id"><small>Commission</small><b>' + pct(st.rate.pct) + "</b></span>" +
+            "</div>" +
+            (!p.promo_code && !state.readOnly && can("promo_codes") ? '<p class="hint"><a href="#settings" data-go="settings">Choose your promo code in Settings →</a></p>' : "") +
+          "</div>" +
+          (can("referral_links") ? '<div class="prt-share-qr">' + qrSvg(link()) + "<small>Scan to join</small></div>" : "") +
+        "</div>" +
+        '<p class="prt-terms">' + terms(st) + "</p>" + scheduled(st.rate),
+        { cls: "prt-mainlink" }) +
 
-      '<div class="adm-feed-head"><h3 class="adm-h">Players</h3>' +
-        '<button class="btn btn-ghost btn-sm" type="button" data-refresh>' + U.icon("refresh") + "Refresh</button></div>" +
-      '<div class="adm-kpis">' +
-        kpi("Total referrals", count(s.totalReferrals), count(s.referrals30) + " in the last 30 days") +
-        kpi("Active referrals", count(s.activePlayers), "played in the last 30 days") +
-        kpi("Link clicks", count(s.clicks), "all time") +
-        kpi("Deposits by your players", money(s.deposits.total), count(s.deposits.players) + " depositing players") +
-        kpi("Eligible deposit losses", money(w.eligibleLosses), "losses of deposited money only") +
+      /* 3. players */
+      card("users", "Your players",
+        '<div class="prt-tiles">' +
+          tile("users", "Total referrals", count(s.totalReferrals), count(s.referrals30) + " in the last 30 days") +
+          tile("bolt", "Active referrals", count(s.activePlayers), "played in the last 30 days") +
+          tile("link", "Link clicks", count(s.clicks), "all time") +
+          tile("plus", "Deposits by your players", money(s.deposits.total), count(s.deposits.players) + " depositing player" + (s.deposits.players === 1 ? "" : "s")) +
+          tile("chart", "Eligible deposit losses", money(w.eligibleLosses), "losses of deposited money only") +
+        "</div>",
+        { action: '<button class="btn btn-ghost btn-sm" type="button" data-refresh>' + U.icon("refresh") + "Refresh</button>" }) +
+
+      /* 4. the commission wallet in detail */
+      card("wallet", "Commission wallet",
+        '<div class="prt-tiles">' +
+          tile("star", "Total commission earned", money(w.totalEarned), "lifetime, before deductions", "in") +
+          tile("wallet", "Available balance", smoney(w.available), "ready to withdraw", w.available < 0 ? "bad" : "in") +
+          tile("history", "Pending commission", smoney(w.pending), "until the " + periodWord(w.settlementPeriod) + " period closes", tone(w.pending)) +
+          tile("minus", "Deductions from player wins", smoney(w.negativeAdjustments), "net winnings × the win deduction", w.negativeAdjustments < 0 ? "bad" : "") +
+          tile("withdraw", "Total withdrawn", money(w.withdrawn)) +
+          tile("receipt", "Pending withdrawals", money(w.pendingWithdrawals), "", w.pendingWithdrawals ? "warn" : "") +
+          (w.carriedNegative ? tile("minus", "Carried negative", smoney(w.carriedNegative), "set against your next earnings", "bad") : "") +
+        "</div>",
+        { action: tabOn("wallet") ? '<a class="prt-card-link" href="#wallet" data-go="wallet">Wallet ' + U.icon("chevronRight") + "</a>" : "" }) +
+
+      /* 5. recent activity */
+      '<div class="prt-cols">' +
+        card("receipt", "Commission history",
+          (commissions.length
+            ? '<div class="adm-table-wrap prt-dtable"><table class="adm-table prt-table" id="prtCommissions"><thead><tr><th>Date</th><th>Player</th><th>Game</th><th>Stake</th>' +
+              "<th>From deposit</th><th>Payout</th><th>Eligible loss</th><th>Rate</th><th>Commission</th><th>Status</th></tr></thead><tbody>" +
+              commissions.map((c) => "<tr><td>" + whenTime(c.settled_at) + "</td><td>" + esc(c.id) + "</td><td>" + esc(c.game) + "</td><td>" + money(c.stake) +
+                "</td><td>" + (c.depositStake === null ? "—" : money(c.depositStake)) + "</td><td>" + money(c.payout) + "</td><td>" + money(c.eligibleLoss) +
+                "</td><td>" + pct(c.pct) + (c.kind === "deduction" ? " <small>deduction</small>" : "") + "</td><td><b>" + smoney(c.amount) + "</b>" +
+                (c.kind === "not_eligible" ? " <small>lost winnings</small>" : "") + "</td><td>" +
+                '<span class="adm-pill ' + (c.status === "settled" ? "ok" : "warn") + '">' + (c.status === "settled" ? "Settled" : "Pending") + "</span></td></tr>").join("") +
+              "</tbody></table></div>" +
+              '<ul class="prt-list prt-mlist">' + commissions.slice(0, 10).map((c) => "<li><div><b>" + esc(c.game) + " · " + esc(c.id) + "</b><small>" + whenTime(c.settled_at) + " · stake " + money(c.stake) +
+                (c.kind === "deduction" ? " · win deduction" : c.kind === "not_eligible" ? " · lost winnings" : "") + "</small></div>" +
+                '<div class="prt-mlist-end"><b>' + smoney(c.amount) + "</b>" + '<span class="adm-pill ' + (c.status === "settled" ? "ok" : "warn") + '">' + (c.status === "settled" ? "Settled" : "Pending") + "</span></div></li>").join("") + "</ul>" +
+              '<p class="hint">Eligible loss = the part of a lost stake that was your player\'s own deposited money. Stakes use deposited money first; every payout counts as winnings, so losing it later earns nothing.</p>'
+            : '<div class="prt-empty-box">' + U.icon("receipt") + "<p>No commission yet — it appears here as soon as your players' bets settle.</p></div>"),
+          { cls: "prt-wide" }) +
+        card("users", "Referral registrations",
+          (refsOff ? '<p class="me-sheet-note">Referral statistics are switched off for your account.</p>'
+          : signups.length
+            ? '<div class="adm-table-wrap prt-dtable"><table class="adm-table prt-table" id="prtSignups"><thead><tr><th>Registered</th><th>User ID</th><th>Joined through</th><th>Last activity</th></tr></thead><tbody>' +
+              signups.map((r) => "<tr><td>" + whenTime(r.joined) + "</td><td>" + esc(r.id) + "</td><td>" + esc(VIA[r.via] || r.via || "—") +
+                (r.sub_id ? " <small>" + esc(r.sub_id) + "</small>" : "") + "</td><td>" + (r.last_activity ? ago(r.last_activity) : "—") + "</td></tr>").join("") +
+              "</tbody></table></div>" +
+              '<ul class="prt-list prt-mlist">' + signups.map((r) => "<li><div><b>" + esc(r.id) + "</b><small>" + whenTime(r.joined) + " · " + esc(VIA[r.via] || r.via || "—") + "</small></div><small>" +
+                (r.last_activity ? "active " + ago(r.last_activity) : "no bets yet") + "</small></li>").join("") + "</ul>"
+            : '<div class="prt-empty-box">' + U.icon("users") + "<p>No one has registered through your link yet. Share it to get started.</p></div>"),
+          { action: !refsOff && s.totalReferrals > signups.length ? '<a class="prt-card-link" href="#referrals" data-go="referrals">See all ' + count(s.totalReferrals) + " " + U.icon("chevronRight") + "</a>" : "" }) +
+        card("withdraw", "Payout requests",
+          (payouts.length
+            ? '<ul class="prt-list" id="prtPayouts">' + payouts.map((x) => "<li><div><b>" + money(x.amount) + "</b><small>" + whenTime(x.created_at) +
+                (x.reference ? " · ref " + esc(x.reference) : "") + (x.note ? " · " + esc(x.note) : "") + "</small></div>" + pill(x.status) + "</li>").join("") + "</ul>"
+            : '<div class="prt-empty-box">' + U.icon("withdraw") + "<p>No payout requests yet.</p></div>"),
+          { action: payouts.length && tabOn("wallet") ? '<a class="prt-card-link" href="#wallet" data-go="wallet">Wallet ' + U.icon("chevronRight") + "</a>" : "" }) +
       "</div>" +
-      '<h3 class="adm-h">Commission wallet</h3><div class="adm-kpis">' +
-        kpi("Total commission earned", money(w.totalEarned), "lifetime", "in") +
-        kpi("Available balance", smoney(w.available), "ready to withdraw", w.available < 0 ? "bad" : "in") +
-        kpi("Pending commission", smoney(w.pending), "until the " + periodWord(w.settlementPeriod) + " period closes", tone(w.pending)) +
-        kpi("Total withdrawn", money(w.withdrawn)) +
-        kpi("Deductions from player wins", smoney(w.negativeAdjustments), "net winnings × the win deduction", w.negativeAdjustments < 0 ? "bad" : "") +
-        kpi("Pending withdrawals", money(w.pendingWithdrawals), "", w.pendingWithdrawals ? "warn" : "") +
-        (w.carriedNegative ? kpi("Carried negative", smoney(w.carriedNegative), "set against your next earnings", "bad") : "") +
-      "</div>" +
-      '<h3 class="adm-h">Earnings</h3><div class="adm-kpis">' +
-        kpi("Today", smoney(rs.today), "", tone(rs.today)) +
-        kpi("Yesterday", smoney(rs.yesterday), "", tone(rs.yesterday)) +
-        kpi("This week", smoney(rs.week), "since Monday", tone(rs.week)) +
-        kpi("This month", smoney(rs.month), "", tone(rs.month)) +
-        kpi("Lifetime", smoney(rs.lifetime), "", tone(rs.lifetime) || (rs.lifetime > 0 ? "in" : "")) +
-      "</div>" +
 
-      '<h3 class="adm-h">Commission history</h3>' +
-      (commissions.length
-        ? '<div class="adm-table-wrap"><table class="adm-table prt-table" id="prtCommissions"><thead><tr><th>Date</th><th>Player</th><th>Game</th><th>Stake</th>' +
-          "<th>From deposit</th><th>Payout</th><th>Eligible loss</th><th>Rate</th><th>Commission</th><th>Status</th></tr></thead><tbody>" +
-          commissions.map((c) => "<tr><td>" + whenTime(c.settled_at) + "</td><td>" + esc(c.id) + "</td><td>" + esc(c.game) + "</td><td>" + money(c.stake) +
-            "</td><td>" + (c.depositStake === null ? "—" : money(c.depositStake)) + "</td><td>" + money(c.payout) + "</td><td>" + money(c.eligibleLoss) +
-            "</td><td>" + pct(c.pct) + (c.kind === "deduction" ? " <small>deduction</small>" : "") + "</td><td>" + smoney(c.amount) +
-            (c.kind === "not_eligible" ? " <small>lost winnings</small>" : "") + "</td><td>" +
-            '<span class="adm-pill ' + (c.status === "settled" ? "ok" : "warn") + '">' + (c.status === "settled" ? "Settled" : "Pending") + "</span></td></tr>").join("") +
-          "</tbody></table></div>"
-        : '<p class="me-sheet-note">No commission yet — it appears here as soon as your players\' bets settle.</p>') +
-      '<p class="hint">Eligible loss = the part of a lost stake that was your player\'s own deposited money. Stakes use deposited money first; every payout counts as winnings, so losing it later earns nothing.</p>' +
-
-      '<div class="adm-feed-head"><h3 class="adm-h">Referral registrations</h3>' +
-        (!refsOff && s.totalReferrals > signups.length ? '<a href="#referrals" data-go="referrals">See all ' + count(s.totalReferrals) + "</a>" : "") + "</div>" +
-      (refsOff ? '<p class="me-sheet-note">Referral statistics are switched off for your account.</p>'
-      : signups.length
-        ? '<div class="adm-table-wrap"><table class="adm-table prt-table" id="prtSignups"><thead><tr><th>Registered</th><th>User ID</th><th>Joined through</th><th>Last activity</th></tr></thead><tbody>' +
-          signups.map((r) => "<tr><td>" + whenTime(r.joined) + "</td><td>" + esc(r.id) + "</td><td>" + esc(VIA[r.via] || r.via || "—") +
-            (r.sub_id ? " <small>" + esc(r.sub_id) + "</small>" : "") + "</td><td>" + (r.last_activity ? ago(r.last_activity) : "—") + "</td></tr>").join("") +
-          "</tbody></table></div>"
-        : '<p class="me-sheet-note">No one has registered through your link yet. Share it to get started.</p>') +
-
-      '<div class="adm-feed-head"><h3 class="adm-h">Payout requests</h3>' + (payouts.length ? '<a href="#wallet" data-go="wallet">Wallet</a>' : "") + "</div>" +
-      (payouts.length
-        ? '<div class="adm-table-wrap"><table class="adm-table" id="prtPayouts"><thead><tr><th>Date</th><th>Amount</th><th>Status</th><th>Reference / note</th></tr></thead><tbody>' +
-          payouts.map((x) => {
-            const [cls, txt] = PAY_STATUS[x.status] || ["", x.status];
-            return "<tr><td>" + whenTime(x.created_at) + "</td><td>" + money(x.amount) + '</td><td><span class="adm-pill ' + cls + '">' + esc(txt) + "</span></td><td>" +
-              (x.reference ? "<b>" + esc(x.reference) + "</b> " : "") + (x.note ? "<small>" + esc(x.note) + "</small>" : "") + (x.reference || x.note ? "" : "—") + "</td></tr>";
-          }).join("") + "</tbody></table></div>"
-        : '<p class="me-sheet-note">No payout requests yet.</p>') +
-
-      '<p class="hint prt-dimnote">Figures in GHS, from our records, counted by UTC day. This page updates itself every minute.</p>' +
-      '<p class="hint"><a href="#promo" data-go="promo">Banners, flyers and marketing rules → Promo materials</a></p>';
+      '<p class="hint prt-dimnote">Figures in GHS, from our records, counted by UTC day. This page updates itself every minute. ' +
+        (tabOn("promo") ? '<a href="#promo" data-go="promo">Banners, flyers and marketing rules →</a>' : "") + "</p>";
   }
   const periodWord = (p) => ({ DAILY: "daily", WEEKLY: "weekly", MONTHLY: "monthly" })[p] || "settlement";
 
@@ -878,6 +977,8 @@
     }
     const cp = t.closest("[data-copy]");
     if (cp) return copy($(cp.dataset.copy).value, cp.dataset.what);
+    const ct = t.closest("[data-copytext]");
+    if (ct) return copy(ct.dataset.copytext, ct.dataset.what || "Code");
     const sh = t.closest("[data-share]");
     if (sh) {
       const url = $(sh.dataset.share).value;
@@ -1039,11 +1140,23 @@
     }
     state.partner = me.data.partner;
     state.perms = me.data.permissions && typeof me.data.permissions === "object" ? me.data.permissions : null;
-    if (PREVIEW) return drawPortal();
+    if (PREVIEW) {
+      drawPortal();
+      return headDetails();
+    }
     if (!state.partner) return drawApply();
     state.readOnly = state.partner.status !== "ACTIVE";
     if (state.partner.status !== "ACTIVE" && state.partner.status !== "SUSPENDED") return drawWaiting();
     drawPortal();
+    headDetails();
+    /* a note left by the partner setup page (e.g. the promo code chosen there couldn't be saved) */
+    try {
+      const note = sessionStorage.getItem("vb.partnerNote");
+      if (note) {
+        sessionStorage.removeItem("vb.partnerNote");
+        flash("info", esc(note) + " You can choose your promo code in Settings.");
+      }
+    } catch (e) { /* storage unavailable */ }
   }
 
   /* the dashboard keeps itself current: every minute, and on coming back to the browser tab */

@@ -1,5 +1,6 @@
-/* The partner platform, end to end through the real screens: an admin creates a partner who never registered, the
-   partner logs in (with their username) and lands on their dashboard, their link brings in a player, they deposit
+/* The partner platform, end to end through the real screens: an admin adds a partner with only a number, a
+   commission and feature switches, the partner registers through the secure setup link, logs in later (with their
+   username) and lands on their dashboard, their link brings in a player, they deposit
    into their own wallet, the admin's feature switches are enforced by the server, game tools show real odds only,
    the flyer generator prints the partner's own promo code and a QR code of their own link, and a suspended
    partner loses the restricted features. */
@@ -10,43 +11,59 @@ import { adminSession, adminTab, API, deposit, newPhone, register, settle, track
 const require = createRequire(import.meta.url);
 const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 
-test("admin creates a partner from scratch → login → dashboard, referrals, wallet, permissions, tools, flyers, suspension", async ({ browser, request }) => {
+test("admin makes a setup link → partner registers → login → dashboard, referrals, wallet, permissions, tools, flyers, suspension", async ({ browser, request }) => {
   test.setTimeout(360_000);
   const adminCtx = await browser.newContext({ baseURL: "http://localhost:8808" });
   const a = await adminCtx.newPage();
   const adminToken = await adminSession(request, a);
   const stamp = String(Date.now()).slice(-6);
-  const code = "JN" + stamp;
   const promo = "JOHN" + stamp;
   const username = "John" + stamp;
   const phone = newPhone();
   const password = "Partner-pass-" + stamp;
 
-  /* 1. the admin creates the partner: no player account exists for this number */
+  /* 1. the admin adds the partner with only a number, a commission and a switch: they get a secure setup link */
   await a.goto("/admin.html");
   await settle(a);
   await adminTab(a, "partners");
-  await a.locator("[data-add-partner]").click();
-  const form = a.locator('form[data-form="pcreate"]');
-  await form.locator("#pcName").fill("John Mensah");
-  await form.locator("#pcPhone").fill(phone);
-  await form.locator("#pcDob").fill("1990-04-12");
-  await form.locator("#pcEmail").fill(`john${stamp}@example.com`);
-  await form.locator("#pcUser").fill(username);
-  await form.locator("#pcPass").fill(password);
-  await form.locator("#pcPct").fill("30");
-  await form.locator("#pcCode").fill(code);
-  await form.locator("#pcPromo").fill(promo);
+  await a.locator("#admActions [data-add-partner]").click();
+  const form = a.locator('form[data-form="pinvite"]');
+  await form.locator("#piPhone").fill(phone);
+  await form.locator("#piPct").fill("30");
+  await expect(form.locator('input[data-piperm="tools_aviator"]')).not.toBeChecked();
   await form.locator("button[type=submit]").click();
-  const summary = a.locator("[data-pc-summary]");
-  await expect(summary).toContainText(`/?ref=${code}`);
-  await expect(summary).toContainText(promo);
-  await expect(summary.locator(".adm-pc-pass")).toContainText(password);
+  const setupUrl = await a.locator("#piLink").inputValue();
+  expect(setupUrl).toMatch(/^http:\/\/localhost:8808\/partner-setup\.html#[A-Za-z0-9_-]{32}$/);
+  await expect(a.locator("[data-pi-result]")).toBeVisible();
 
-  /* 2. the partner logs in on the normal page with their username, and lands on their partner dashboard */
+  /* 2. the partner opens the link, registers their own account and lands on their dashboard */
   const pCtx = await browser.newContext({ baseURL: "http://localhost:8808" });
   const p = await pCtx.newPage();
   const errors = trackErrors(p);
+  await p.goto(setupUrl.replace("http://localhost:8808", ""));
+  await settle(p);
+  await expect(p.locator("#psView")).toContainText("30%");
+  await expect(p.locator("#psPhone")).toHaveValue(phone);
+  await p.locator("#psName").fill("John Mensah");
+  await p.locator("#psUser").fill(username);
+  await p.locator("#psPw").fill(password);
+  await p.locator("#psPw2").fill(password);
+  await p.locator("#psDob").fill("1990-04-12");
+  await p.locator("#psEmail").fill(`john${stamp}@example.com`);
+  await p.locator("#psPromo").fill(promo);
+  await p.locator("#psTerms").check();
+  await p.locator("#psBtn").click();
+  await p.waitForURL(/partners\.html/, { timeout: 30_000 });
+  await settle(p);
+  await expect(p.locator("#prtHello")).toHaveText("John Mensah");
+  /* the link works once */
+  const again = await browser.newPage();
+  await again.goto(setupUrl);
+  await expect(again.locator("#psView")).toContainText("This link has been used");
+  await again.close();
+
+  /* ...and later they log in on the normal page with their username: straight to the partner dashboard */
+  await p.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
   await p.goto("/register.html#login");
   await p.locator("#lphone").fill(username);
   await p.locator("#lpw").fill(password);
@@ -54,16 +71,21 @@ test("admin creates a partner from scratch → login → dashboard, referrals, w
   await p.waitForURL(/partners\.html/, { timeout: 30_000 });
   await settle(p);
   await expect(p.locator('[data-tab="dashboard"]')).toBeVisible();
+  const token = await p.evaluate(() => JSON.parse(localStorage.getItem("voltabet.session") || sessionStorage.getItem("voltabet.session") || "{}").token);
+  const code = (await (await request.get(`${API}/api/partners/me`, { headers: auth(token) })).json()).partner.code as string;
   await expect(p.locator("#lnk")).toHaveValue(new RegExp(`/\\?ref=${code}$`));
   await expect(p.locator(".prt-idrow")).toContainText(promo);
   await expect(p.locator(".prt-idrow")).toContainText("30%");
-  const token = await p.evaluate(() => JSON.parse(localStorage.getItem("voltabet.session") || sessionStorage.getItem("voltabet.session") || "{}").token);
 
   /* 3. a visitor through the link registers: they're this partner's */
   const vCtx = await browser.newContext({ baseURL: "http://localhost:8808" });
   const v = await vCtx.newPage();
   await v.goto(`/?ref=${code}`);
+  /* a partner link opens the sign-up form straight away, with the partner noted */
+  await v.waitForURL(/register\.html\?ref=/);
   await settle(v);
+  await expect(v.locator("#regForm")).toBeVisible();
+  await expect(v.locator("#promoHint")).toContainText("partner's link");
   await register(v);
   await expect.poll(async () => (await (await request.get(`${API}/api/partners/referrals?range=all`, { headers: auth(token) })).json()).referrals.length,
     { timeout: 20_000 }).toBe(1);

@@ -451,7 +451,17 @@
     user: '<circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c.6-3.8 3.8-5.8 7.5-5.8s6.9 2 7.5 5.8"/>',
     info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>',
     sound: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
-    star: '<path d="m12 3.8 2.5 5.2 5.7.7-4.2 3.9 1.1 5.6L12 16.4l-5.1 2.8L8 13.6 3.8 9.7l5.7-.7z"/>'
+    star: '<path d="m12 3.8 2.5 5.2 5.7.7-4.2 3.9 1.1 5.6L12 16.4l-5.1 2.8L8 13.6 3.8 9.7l5.7-.7z"/>',
+    chart: '<path d="M4 20h16"/><path d="M7 16.5v-5M12 16.5V7M17 16.5v-8"/>',
+    trend: '<path d="m4 16.5 5.5-5.5 4 4L20 8.5"/><path d="M15 8.5h5v5"/>',
+    users: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5c.6-3.3 2.8-5.2 5.5-5.2s4.9 1.9 5.5 5.2"/>' +
+      '<path d="M15.5 5.6a3 3 0 0 1 0 5.8M17.4 14.6c1.6.7 2.7 2.3 3.1 4.9"/>',
+    link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.1 1.1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.1-1.1"/>',
+    copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>',
+    download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 15.5V19a1 1 0 0 0 1 1h13a1 1 0 0 0 1-1v-3.5"/>',
+    megaphone: '<path d="M4 10v4a1 1 0 0 0 1 1h2.5l7 4V5l-7 4H5a1 1 0 0 0-1 1z"/><path d="M8 15l1.2 4.5M18 9.5a3.5 3.5 0 0 1 0 5"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M6 18l1.6-1.6M16.4 7.6 18 6"/>',
+    tools: '<path d="M14.5 6.5a3.5 3.5 0 0 0 4.4 4.4l-7.7 7.7a2 2 0 0 1-2.8-2.8l7.7-7.7a3.5 3.5 0 0 0-1.6-1.6z"/><path d="m16 5 1.5-1.5 3 3L19 8"/>'
   };
 
   function icon(name, cls) {
@@ -1283,6 +1293,12 @@
   (function partnerLink() {
     const p = new URLSearchParams(location.search);
     const code = (p.get("ref") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
+    /* a partner's link is an invitation to join: a visitor who isn't signed in goes straight to the sign-up form, with
+       the link (and its promo code) carried along and counted there */
+    if (code.length >= 4 && !session.get() && /^\/(?:index\.html)?$/.test(location.pathname)) {
+      location.replace("register.html" + location.search + "#register");
+      return;
+    }
     if (code.length >= 4) {
       const sub = (p.get("sub") || p.get("utm_campaign") || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
       const prev = read(REF, null);

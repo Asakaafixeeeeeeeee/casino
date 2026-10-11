@@ -535,9 +535,9 @@
      player they brought in, less the win deduction % of the net winnings of every winning bet. Commission is recorded per
      settled bet, credited to the partner's commission wallet when its settlement period closes, and paid out by hand on
      request. Everything here comes from the server; this page only draws it. */
-  const pt = { view: "PENDING", q: "", pay: "OPEN", range: "30d", from: "", to: "", timer: 0, seq: 0, settings: null, perms: null, flyers: null };
-  const PVIEWS = [["PENDING", "Applications"], ["ACTIVE", "Active"], ["SUSPENDED", "Suspended"], ["DISABLED", "Disabled"], ["", "All"],
-    ["payouts", "Payout requests"], ["stats", "Statistics"], ["settings", "Commission settings"], ["permissions", "Permissions"], ["flyers", "Flyers"]];
+  const pt = { view: null, status: "ACTIVE", setView: "settings", over: null, q: "", pay: "OPEN", range: "30d", from: "", to: "", timer: 0, seq: 0, settings: null, perms: null, flyers: null };
+  const PSTATUS = [["ACTIVE", "Active"], ["PENDING", "Applications"], ["SUSPENDED", "Suspended"], ["DISABLED", "Disabled"], ["", "All"]];
+  const PSET_VIEWS = [["settings", "Commission"], ["permissions", "Permissions"], ["flyers", "Flyers"]];
   const LIST_VIEWS = ["PENDING", "ACTIVE", "SUSPENDED", "DISABLED", ""];
   const PAY_VIEWS = [["OPEN", "Open"], ["REQUESTED", "Requested"], ["APPROVED", "Approved"], ["PAID", "Paid"], ["REJECTED", "Rejected"]];
   const PRANGES = [["today", "Today"], ["yesterday", "Yesterday"], ["7d", "7 days"], ["30d", "30 days"], ["this_month", "This month"],
@@ -599,52 +599,120 @@
   }
   const STATUS_DONE = { ACTIVE: "Partner is active.", REJECTED: "Application rejected.", SUSPENDED: "Partner suspended.", DISABLED: "Partner disabled." };
 
-  /* ---- the section: the views share one panel, each draws into #ptBody ---- */
+  /* ---- the section: an overview strip, five areas (partners, invitations, payouts, statistics, settings), each
+     drawing into #ptBody ---- */
   const ptHere = (view) => state.tab === "partners" && pt.view === view && $("ptBody");
+  const PSECTIONS = [["partners", "Partners", "users"], ["invites", "Invitations", "link"], ["payouts", "Payouts", "wallet"],
+    ["stats", "Statistics", "chart"], ["settings", "Settings", "settings"]];
+  const secOf = (view) => (LIST_VIEWS.includes(view) ? "partners" : PSET_VIEWS.some((x) => x[0] === view) ? "settings" : view);
+  const pnum = (n) => (n === null || n === undefined ? "…" : count(n));
+
+  /* the numbers along the top: each one opens its area */
+  function overviewHtml(o) {
+    const card = (sec, view, ic, label, value, sub, tone) =>
+      '<button type="button" class="apt-ov' + (tone ? " " + tone : "") + '" data-psec="' + sec + '"' + (view !== null ? ' data-pv="' + esc(view) + '"' : "") + ">" +
+        '<i class="apt-ov-ico">' + U.icon(ic) + "</i><span>" + label + "</span><strong>" + value + "</strong>" + (sub ? "<small>" + sub + "</small>" : "") + "</button>";
+    const p = o && o.stats ? o.stats.partners : null;
+    const t = o && o.stats ? o.stats.totals : null;
+    return card("partners", "ACTIVE", "users", "Active partners", pnum(p && p.active), p && p.paused ? count(p.paused) + " suspended or disabled" : "") +
+      card("partners", "PENDING", "star", "Applications", pnum(p && p.pending), p && p.pending ? "waiting for you" : "none waiting", p && p.pending ? "warn" : "") +
+      card("invites", null, "link", "Open invitations", pnum(o && o.openInvites), "setup links not used yet") +
+      card("payouts", null, "withdraw", "Payout requests", pnum(o && o.payouts && o.payouts.length),
+        o && o.payouts && o.payouts.length ? money(o.payouts.reduce((s, x) => s + Number(x.amount), 0)) + " to pay" : "nothing waiting", o && o.payouts && o.payouts.length ? "warn" : "") +
+      card("stats", null, "trend", "Net commission · 30 days", t ? money(t.net) : "…", t ? count(t.signups) + " new referrals" : "", t && t.net < 0 ? "bad" : "in") +
+      card("stats", null, "wallet", "Owed to partners", p ? money(p.owed) : "…", p ? money(p.paid) + " paid all time" : "");
+  }
+  async function loadPtOverview() {
+    const [st, inv, pay] = await Promise.all([api("/partner-stats?range=30d"), api("/partner-invites"), api("/partner-payouts?status=OPEN")]);
+    pt.over = {
+      stats: st.ok ? st.data : null,
+      openInvites: inv.ok ? inv.data.invites.filter((i) => i.state === "open").length : null,
+      payouts: pay.ok ? pay.data.payouts : null,
+    };
+    if (state.tab === "partners" && $("ptOver")) {
+      $("ptOver").innerHTML = overviewHtml(pt.over);
+      const pend = pt.over.stats ? pt.over.stats.partners.pending : 0;
+      const b = document.querySelector('[data-chips="pview"] [data-v="PENDING"] .apt-badge');
+      if (b) b.textContent = pend ? count(pend) : "";
+    }
+    return pt.over;
+  }
+
   async function loadPartners() {
     const panel = panelOf("partners");
-    panel.innerHTML = chips("pview", PVIEWS, pt.view) + '<div id="ptBody"></div>';
+    /* first visit: applications first when some are waiting, otherwise the active partners */
+    if (pt.view === null) {
+      panel.innerHTML = loading;
+      const o = await loadPtOverview();
+      if (state.tab !== "partners") return;
+      if (pt.view === null) pt.view = o.stats && o.stats.partners.pending ? "PENDING" : "ACTIVE";
+    } else loadPtOverview();
+    const sec = secOf(pt.view);
+    const pend = pt.over && pt.over.stats ? pt.over.stats.partners.pending : 0;
+    panel.innerHTML =
+      '<div class="apt-overview" id="ptOver">' + overviewHtml(pt.over) + "</div>" +
+      '<nav class="apt-nav" aria-label="Partner areas">' +
+        PSECTIONS.map(([id, label, ic]) => '<button type="button" data-psec="' + id + '" aria-current="' + (id === sec ? "page" : "false") + '">' + U.icon(ic) + "<span>" + label + "</span></button>").join("") +
+      "</nav>" +
+      (sec === "partners"
+        ? '<div class="apt-toolbar">' +
+            '<div class="chip-list adm-chips" data-chips="pview">' + PSTATUS.map(([v, label]) => '<button type="button" class="chip' + (v === pt.view ? " on" : "") + '" data-v="' + v + '" aria-pressed="' + (v === pt.view) + '">' + label +
+              (v === "PENDING" ? '<span class="apt-badge">' + (pend ? count(pend) : "") + "</span>" : "") + "</button>").join("") + "</div>" +
+            '<label class="searchbar adm-search apt-search">' + U.icon("search") +
+              '<input id="ptQ" type="search" placeholder="Search name, phone, email, Partner ID or promo code" autocomplete="off" aria-label="Search partners" value="' + esc(pt.q) + '"></label>' +
+          "</div>"
+        : sec === "settings" ? chips("pset", PSET_VIEWS, pt.view) : "") +
+      '<div id="ptBody"></div>';
     if (pt.view === "payouts") return loadPartnerPayouts();
     if (pt.view === "stats") return loadPartnerStats();
     if (pt.view === "settings") return loadPartnerSettings();
     if (pt.view === "permissions") return loadPartnerPermissions();
     if (pt.view === "flyers") return loadPartnerFlyers();
-    $("ptBody").innerHTML = '<div class="adm-toolbar"><label class="searchbar adm-search">' + U.icon("search") +
-      '<input id="ptQ" type="search" placeholder="Name, phone, email, Partner ID or promo code" autocomplete="off" aria-label="Search partners" value="' + esc(pt.q) + '"></label></div>' +
-      '<p class="txr-count" id="ptCount"></p><div id="ptList"></div>';
+    if (pt.view === "invites") return loadPartnerInvites();
+    $("ptBody").innerHTML = '<p class="txr-count" id="ptCount"></p><div id="ptList"></div>';
     $("ptQ").addEventListener("input", () => {
       clearTimeout(pt.timer);
       pt.timer = setTimeout(() => { pt.q = $("ptQ").value.trim(); loadPartnerList(); }, 300);
     });
     loadPartnerList();
   }
+  /* an area of the section: Partners goes back to the status last shown, Settings to its last page */
+  function showPtSection(sec, view) {
+    pt.view = view !== undefined && view !== null ? view
+      : sec === "partners" ? (LIST_VIEWS.includes(pt.status) ? pt.status : "ACTIVE")
+      : sec === "settings" ? pt.setView || "settings" : sec;
+    if (sec === "payouts" && view === undefined) pt.pay = "OPEN";
+    return loadPartners();
+  }
 
+  /* one partner as a card: who they are, their numbers, their codes, and what to do */
   function partnerRow(p) {
     const name = p.full_name || p.username || "Player";
-    const fig = (label, v, cls) => "<span>" + label + " <b" + (cls ? ' class="' + cls + '"' : "") + ">" + v + "</b></span>";
+    const stat = (label, v, cls) => '<div class="apt-stat"><span>' + label + "</span><b" + (cls ? ' class="' + cls + '"' : "") + ">" + v + "</b></div>";
     const actions = (p.status === "PENDING" || p.status === "REJECTED"
       ? '<button class="btn btn-success btn-sm" type="button" data-pact="ACTIVE" data-id="' + esc(p.user_id) + '" data-from="' + esc(p.status) + '" data-name="' + esc(name) + '">Approve</button>'
       : "") +
       (p.status === "PENDING"
         ? '<button class="btn btn-ghost btn-sm" type="button" data-pact="REJECTED" data-id="' + esc(p.user_id) + '" data-from="PENDING" data-name="' + esc(name) + '">Reject</button>'
         : "") +
-      '<button class="btn btn-ghost btn-sm" type="button" data-partner="' + esc(p.user_id) + '">Open profile</button>';
-    return '<div class="txr-row adm-item adm-prow">' + avatar(name) +
-      '<span class="txr-main"><strong>' + esc(name) + "</strong>" +
-        "<small>" + [p.full_name && p.username ? esc(p.username) : "", tx(p.phone), tx(p.email)].filter(Boolean).join(" · ") + "</small>" +
-        "<small>Partner ID <b>" + tx(p.partner_id || p.code) + "</b> · registered " + when(p.created_at) +
-          " · promo code " + (p.promo_code ? "<b>" + esc(p.promo_code) + "</b>" : "none") + "</small>" +
-        '<span class="adm-pills">' + statusPill(p.status) + pill(rateOf(p.revshare_pct) + " revenue share", "brand") +
-          (p.link_live ? "" : pill(p.link_enabled ? "Link not live" : "Link off", "bad")) +
-          (p.promo_request ? pill("Asks for promo " + p.promo_request, "warn") : "") +
-          (p.payoutWaiting ? pill("Payout waiting", "warn") : "") + "</span>" +
-        '<span class="adm-plink"><span class="adm-addr">' + esc(refLink(p.code)) + "</span>" +
-          '<button class="btn btn-ghost btn-sm adm-copy" type="button" data-copy="' + esc(refLink(p.code)) + '" aria-label="Copy referral link">Copy</button></span>' +
-        (p.status === "PENDING" && p.channel ? '<small class="txr-detail">Where they promote: “' + esc(p.channel) + "”</small>" : "") +
-        '<span class="adm-pfig">' + fig("Referrals", count(p.referrals)) + fig("Total earnings", money(p.totalEarnings), tone(p.totalEarnings)) +
-          fig("Available", money(p.available)) + fig("Pending", money(p.pending), p.pending ? "warn" : "") + fig("Withdrawn", money(p.withdrawn)) + "</span>" +
-      "</span>" +
-      '<span class="adm-item-actions">' + actions + "</span></div>";
+      '<button class="btn btn-ghost btn-sm" type="button" data-copy="' + esc(refLink(p.code)) + '" aria-label="Copy referral link">' + U.icon("copy") + "Copy link</button>" +
+      '<button class="btn btn-primary btn-sm" type="button" data-partner="' + esc(p.user_id) + '">Open profile</button>';
+    const flags = (p.link_live ? "" : pill(p.link_enabled ? "Link not live" : "Link off", "bad")) +
+      (p.promo_request ? pill("Asks for promo " + p.promo_request, "warn") : "") +
+      (p.payoutWaiting ? pill("Payout waiting", "warn") : "");
+    return '<article class="adm-prow apt-card">' +
+      '<div class="apt-card-top">' + avatar(name) +
+        '<div class="apt-card-who"><strong>' + esc(name) + "</strong>" +
+          "<small>" + [p.full_name && p.username ? esc(p.username) : "", tx(p.phone), tx(p.email)].filter(Boolean).join(" · ") + "</small></div>" +
+        '<div class="apt-card-pills">' + statusPill(p.status) + pill(rateOf(p.revshare_pct), "brand") + "</div></div>" +
+      '<div class="apt-stats">' + stat("Referrals", count(p.referrals)) + stat("Earnings", money(p.totalEarnings), tone(p.totalEarnings)) +
+        stat("Available", money(p.available)) + stat("Pending", money(p.pending), p.pending ? "warn" : "") + "</div>" +
+      '<div class="apt-codes"><span class="apt-code">Partner ID <b>' + tx(p.partner_id || p.code) + "</b></span>" +
+        '<span class="apt-code">Promo <b>' + (p.promo_code ? esc(p.promo_code) : "—") + "</b></span>" +
+        '<span class="apt-code">Since <b>' + dayOf(p.created_at) + "</b></span></div>" +
+      (flags ? '<div class="adm-pills">' + flags + "</div>" : "") +
+      (p.status === "PENDING" && p.channel ? '<p class="apt-channel">Where they promote: “' + esc(p.channel) + "”</p>" : "") +
+      '<div class="adm-item-actions apt-actions">' + actions + "</div></article>";
   }
   async function loadPartnerList() {
     const view = pt.view;
@@ -660,8 +728,67 @@
     const list = r.data.partners;
     $("ptCount").textContent = count(list.length) + " partner" + (list.length === 1 ? "" : "s") + (list.length >= 300 ? " (the first 300 — search to narrow it down)" : "");
     $("ptList").innerHTML = list.length
-      ? '<div class="txr-group">' + list.map(partnerRow).join("") + "</div>"
-      : empty(pt.q ? "No partners match." : view === "PENDING" ? "No applications waiting." : "No partners here yet.", "star");
+      ? '<div class="apt-grid">' + list.map(partnerRow).join("") + "</div>"
+      : empty(pt.q ? "No partners match." : view === "PENDING" ? "No applications waiting." : "No partners here yet.", "star") +
+        (view === "ACTIVE" && !pt.q ? '<div class="apt-empty-cta"><button class="btn btn-primary" type="button" data-add-partner>' + U.icon("plus") + "Add your first partner</button></div>" : "");
+  }
+
+  /* ---- invitations: the setup links admins made, used or not ---- */
+  const INV_STATE = { open: ["ok", "Open"], used: ["brand", "Used"], expired: ["bad", "Expired"], cancelled: ["bad", "Cancelled"], busy: ["warn", "Being used"] };
+  const setupLink = (token) => location.origin + "/partner-setup.html#" + token;
+  function inviteRow(i) {
+    const [cls, txt] = INV_STATE[i.state] || ["", i.state];
+    const perms = Object.entries(i.permissions || {}).map(([k, v]) => (PERM_LABEL[k] || k) + (v ? " on" : " off"));
+    const actions = i.state === "used"
+      ? (i.used_by ? '<button class="btn btn-primary btn-sm" type="button" data-partner="' + esc(i.used_by) + '">Open partner</button>' : "")
+      : '<button class="btn btn-ghost btn-sm" type="button" data-inv-renew="' + esc(i.id) + '" data-phone="' + esc(i.phone) + '">' + U.icon("refresh") + "New link</button>" +
+        (i.state === "open" ? '<button class="btn btn-ghost btn-sm" type="button" data-inv-cancel="' + esc(i.id) + '" data-phone="' + esc(i.phone) + '">Cancel</button>' : "");
+    return '<article class="apt-card apt-inv">' +
+      '<div class="apt-card-top"><span class="adm-ava apt-inv-ava" aria-hidden="true">' + U.icon("link") + "</span>" +
+        '<div class="apt-card-who"><strong>' + tx(i.phone) + "</strong><small>" +
+          (i.state === "used" ? "Registered as <b>" + tx(i.used_name || i.used_username || "a partner") + "</b>" + (i.partner_code ? " · " + tx(i.partner_code) : "") + " · " + when(i.used_at)
+            : i.state === "open" ? "Valid until " + when(i.expires_at) : "Made " + when(i.created_at)) + "</small></div>" +
+        '<div class="apt-card-pills"><span class="adm-pill ' + cls + '">' + txt + "</span>" + pill(rateOf(i.revshare_pct), "brand") + "</div></div>" +
+      '<p class="apt-inv-meta">Made by ' + tx(i.created_by) + " · " + when(i.created_at) + (perms.length ? " · " + esc(perms.join(", ")) : " · default features") + "</p>" +
+      (actions ? '<div class="adm-item-actions apt-actions">' + actions + "</div>" : "") + "</article>";
+  }
+  async function loadPartnerInvites() {
+    $("ptBody").innerHTML = loading;
+    const r = await api("/partner-invites");
+    if (!ptHere("invites")) return;
+    if (!r.ok) {
+      $("ptBody").innerHTML = "";
+      return flash("error", errText(r, "Couldn't load the invitations."));
+    }
+    const list = r.data.invites;
+    const open = list.filter((i) => i.state === "open" || i.state === "busy");
+    const rest = list.filter((i) => !(i.state === "open" || i.state === "busy"));
+    $("ptBody").innerHTML =
+      '<div class="apt-howto"><div><strong>Partner setup links</strong><p>Enter a partner\'s number, commission and features; send them the link. ' +
+        "They open it and register their own account. Each link works once, for that number only, for " + count(r.data.days) + " days.</p></div>" +
+        '<button class="btn btn-primary" type="button" data-add-partner>' + U.icon("plus") + "New setup link</button></div>" +
+      '<h3 class="adm-h">Waiting to be used <small>(' + count(open.length) + ")</small></h3>" +
+      (open.length ? '<div class="apt-grid">' + open.map(inviteRow).join("") + "</div>" : '<p class="me-sheet-note">No open invitations.</p>') +
+      (rest.length ? '<h3 class="adm-h">Used, expired and cancelled</h3><div class="apt-grid">' + rest.slice(0, 60).map(inviteRow).join("") + "</div>" : "");
+  }
+  async function inviteAction(b) {
+    if (b.dataset.invCancel) {
+      const ok = await ask({ title: "Cancel the setup link for " + esc(b.dataset.phone) + "?", text: "The link stops working at once. You can make a new one later.", yes: "Cancel link", danger: true });
+      if (ok === null) return;
+      b.disabled = true;
+      const r = await api("/partner-invites/" + encodeURIComponent(b.dataset.invCancel) + "/cancel", {});
+      b.disabled = false;
+      flash(r.ok ? "ok" : "error", r.ok ? "Setup link cancelled." : errText(r, "Couldn't cancel it."));
+    } else {
+      const ok = await ask({ title: "Make a new setup link for " + esc(b.dataset.phone) + "?", text: "The old link stops working at once; the new one is valid for 7 days.", yes: "Make new link" });
+      if (ok === null) return;
+      b.disabled = true;
+      const r = await api("/partner-invites/" + encodeURIComponent(b.dataset.invRenew) + "/renew", {});
+      b.disabled = false;
+      if (!r.ok) return flash("error", errText(r, "Couldn't make a new link."));
+      showInviteLink(r.data, false);
+    }
+    if (state.tab === "partners") loadPartners();
   }
   /* Approve / Reject straight from the Applications list */
   /* a new partner's unique referral link, to copy and send them */
@@ -1347,141 +1474,114 @@
   const OPT = ' <span class="opt">(optional)</span>';
   const pad2 = (n) => String(n).padStart(2, "0");
   /* the latest date of birth that is 18 or older today, as YYYY-MM-DD */
-  const adultBy = () => {
-    const d = new Date();
-    return d.getFullYear() - 18 + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
-  };
-  /* a first password the admin sends privately: 12 letters and numbers, with no look-alikes (0/O, 1/l/I) */
-  function newPassword() {
-    const sets = ["ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghijkmnopqrstuvwxyz", "23456789"];
-    const all = sets.join("");
-    const r = new Uint32Array(12);
-    for (;;) {
-      crypto.getRandomValues(r);
-      const pw = Array.from(r, (x) => all.charAt(x % all.length)).join("");
-      if (sets.every((s) => Array.from(pw).some((c) => s.includes(c)))) return pw;
-    }
+  /* the link to send a new partner, with what it gives them; used after making a link and after "New link" */
+  function inviteLinkHtml(d) {
+    const i = d.invite;
+    const link = setupLink(d.token);
+    const msg = "Hello! You're invited to become a WIN B casino partner (" + rateOf(i.revshare_pct) + " revenue share). " +
+      "Open this link to set up your partner account: " + link + "\nIt works once, for your number " + i.phone + ", until " + dayOf(i.expires_at) + ".";
+    return '<div class="alert alert-ok">Setup link ready for <b>' + tx(i.phone) + "</b>. Send it to the partner privately.</div>" +
+      '<div class="apt-linkbox" data-pi-result>' +
+        '<span class="prt-label">Partner setup link</span>' +
+        '<div class="apt-linkrow"><input id="piLink" readonly value="' + esc(link) + '" aria-label="Partner setup link">' +
+          '<button class="btn btn-primary btn-sm" type="button" data-copy="' + esc(link) + '">' + U.icon("copy") + "Copy link</button></div>" +
+        '<div class="apt-linkacts">' +
+          '<a class="btn btn-ghost btn-sm" href="https://wa.me/?text=' + encodeURIComponent(msg) + '" target="_blank" rel="noopener">' + U.icon("chat") + "Send on WhatsApp</a>" +
+          '<button class="btn btn-ghost btn-sm" type="button" data-copy="' + esc(msg) + '">' + U.icon("copy") + "Copy message</button></div>" +
+      "</div>" +
+      '<dl class="apt-facts">' +
+        "<div><dt>Number</dt><dd>" + tx(i.phone) + "</dd></div>" +
+        "<div><dt>Commission</dt><dd>" + rateOf(i.revshare_pct) + " revenue share</dd></div>" +
+        "<div><dt>Valid until</dt><dd>" + dayOf(i.expires_at) + " · works once</dd></div>" +
+      "</dl>" +
+      (d.existingAccount ? '<p class="adm-credit-note">This number already has a player account: when they open the link, they log in to it and accept — their account becomes a partner account.</p>'
+        : '<p class="adm-credit-note">They open the link, enter their name, username, password and date of birth, and land on their partner dashboard. They choose their promo code there.</p>') +
+      '<p class="adm-credit-note adm-credit-warn">The link is shown only now. If it\'s lost, make a new one under Partners → Invitations.</p>';
+  }
+  function showInviteLink(d) {
+    const s = sheet("Partner setup link");
+    s.set(inviteLinkHtml(d) + '<div class="adm-actions-box"><button class="btn btn-ghost btn-sm" type="button" data-close-sheet>Done</button></div>');
+    s.body.addEventListener("click", (e) => {
+      const cp = e.target.closest("[data-copy]");
+      if (cp) return copyText(cp.dataset.copy, cp.dataset.copy.startsWith("http") ? "Setup link copied." : "Message copied.");
+      if (e.target.closest("[data-close-sheet]")) s.close();
+    });
   }
 
+  const PERM_LABEL = { dashboard: "Partner dashboard", referral_links: "Referral links", promo_codes: "Promo codes", referral_stats: "Referral statistics",
+    commission_withdrawals: "Commission withdrawals", wallet_deposits: "Wallet deposits", flyers: "Flyer generator", campaigns: "Promotional campaigns",
+    tools_mines: "Mines tools", tools_aviator: "Aviator tools", tools_crash: "Crash tools", tools_other: "Other game tools" };
   function openAddPartner() {
     const s = sheet("Add a partner");
     const settings = api("/partner-settings");
-    let details = ""; /* the created partner's details for "Copy details"; only while this sheet is open */
+    const perms = api("/partner-permissions");
     const msg = '<div class="adm-sheet-msg" aria-live="polite"></div>';
     const say = (html, kind) => {
       const box = s.body.querySelector(".adm-sheet-msg");
       if (box) box.innerHTML = html ? "<div class='alert alert-" + (kind || "err") + "'>" + html + "</div>" : "";
     };
+    let global = null;
 
-    /* the usual way: a new account for someone who hasn't registered */
-    function showCreate() {
-      details = "";
-      s.set('<p class="adm-credit-note adm-padd-lead">Opens a new WIN B casino account for someone who hasn\'t registered: their sign-in, a wallet and a partner account with a referral link, Partner ID and promo code. They sign in on the normal login page with their number, username or email.</p>' +
-        '<form class="adm-pcreate" data-form="pcreate" autocomplete="off" novalidate>' +
-          fld("pcName", "Full name", '<input id="pcName" type="text" maxlength="80" autocomplete="off" placeholder="First and last name" required>', "", true) +
-          fld("pcPhone", "Mobile number", '<input id="pcPhone" type="tel" inputmode="tel" maxlength="20" autocomplete="off" placeholder="024 123 4567" required>') +
-          fld("pcDob", "Date of birth", '<input id="pcDob" type="date" max="' + adultBy() + '" required>', "Partners must be 18 or older.") +
-          fld("pcEmail", "Email" + OPT, '<input id="pcEmail" type="email" maxlength="120" autocomplete="off" placeholder="name@example.com">') +
-          fld("pcUser", "Username" + OPT, '<input id="pcUser" type="text" maxlength="30" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Made up if empty">') +
-          '<div class="field adm-wide"><label for="pcPass">Initial password</label><div class="adm-pass">' +
-            '<input id="pcPass" type="text" minlength="8" maxlength="128" spellcheck="false" autocapitalize="off" autocomplete="off" required>' +
-            '<button class="btn btn-ghost btn-sm" type="button" data-pc-gen>Generate</button></div>' +
-            '<small class="hint">At least 8 characters, not only digits. It\'s shown once more after creating — send it to the partner privately; they can change it in Settings.</small></div>' +
-          fld("pcPct", "Commission (revenue share %)", '<input id="pcPct" type="number" inputmode="decimal" min="0" max="90" step="0.01" placeholder="Default">', "0% to 90% of the net gaming revenue from their players.") +
-          fld("pcStatus", "Status", '<select id="pcStatus"><option value="ACTIVE">Active — can start now</option><option value="SUSPENDED">Suspended — not live yet</option></select>') +
-          fld("pcCode", "Partner ID" + OPT, '<input id="pcCode" type="text" maxlength="16" class="adm-upper" spellcheck="false" autocapitalize="characters" autocomplete="off" placeholder="Made up if empty">', "4 to 16 letters and numbers; it's in their referral link.") +
-          fld("pcPromo", "Promo code" + OPT, '<input id="pcPromo" type="text" maxlength="16" class="adm-upper" spellcheck="false" autocapitalize="characters" autocomplete="off" placeholder="None">', "4 to 16 letters and numbers.") +
-          fld("pcNote", "Admin note" + OPT, '<input id="pcNote" type="text" maxlength="300" autocomplete="off" placeholder="Admins only">', "", true) +
-          '<button class="btn btn-primary adm-wide" type="submit">Create partner account</button>' +
+    /* the usual way: a number, a commission and the features; the partner registers through the link */
+    async function showInvite() {
+      s.set('<p class="adm-credit-note adm-padd-lead">Enter the partner\'s number, their commission and what they can use. You get a secure link to send them; they open it and set up their own account.</p>' +
+        '<form class="apt-addform" data-form="pinvite" autocomplete="off" novalidate>' +
+          '<div class="apt-add-row">' +
+            fld("piPhone", "Partner's mobile number", '<input id="piPhone" type="tel" inputmode="tel" maxlength="20" autocomplete="off" placeholder="024 123 4567" required>') +
+            fld("piPct", "Commission (%)", '<input id="piPct" type="number" inputmode="decimal" min="0" max="90" step="0.01" required>', "Revenue share, 0–90%.") +
+          "</div>" +
+          '<div class="apt-perms" id="piPerms">' + loading + "</div>" +
+          '<button class="btn btn-primary btn-block" type="submit">' + U.icon("link") + "Create partner</button>" +
         "</form>" + msg +
-        '<p class="adm-padd-alt"><button class="link-btn" type="button" data-padd-mode="existing">Already a player? Make an existing account a partner</button></p>');
-      settings.then((st) => {
-        const i = s.body.querySelector("#pcPct");
-        if (i && st.ok && i.value === "") i.value = st.data.settings.default_revshare_pct;
-      });
-      s.body.querySelector("#pcName").focus();
+        '<p class="adm-padd-alt"><button class="link-btn" type="button" data-padd-mode="existing">Already a player? Make an existing account a partner directly</button></p>');
+      s.body.querySelector("#piPhone").focus();
+      const [st, pr] = await Promise.all([settings, perms]);
+      const pctIn = s.body.querySelector("#piPct");
+      if (pctIn && st.ok && pctIn.value === "") pctIn.value = st.data.settings.default_revshare_pct;
+      const box = s.body.querySelector("#piPerms");
+      if (!box) return;
+      if (!pr.ok) return (box.innerHTML = '<p class="me-sheet-note">' + errText(pr, "Couldn't load the features — the partner gets the defaults.") + "</p>");
+      global = pr.data.permissions;
+      const sw = ({ key, label }) => {
+        return '<label class="apt-perm"><span><b>' + esc(label) + "</b><small>" + esc(PERM_HINT[key] || "") + "</small></span>" +
+          '<span class="adm-switch"><input type="checkbox" data-piperm="' + esc(key) + '"' + (global[key] ? " checked" : "") + '><span aria-hidden="true"></span></span></label>';
+      };
+      box.innerHTML = '<span class="prt-label">Features</span><div class="apt-perm-grid">' + pr.data.list.filter((x) => !x.key.startsWith("tools_")).map(sw).join("") + "</div>" +
+        '<span class="prt-label">Game tools <small>(real odds and finished rounds only)</small></span><div class="apt-perm-grid">' + pr.data.list.filter((x) => x.key.startsWith("tools_")).map(sw).join("") + "</div>" +
+        '<p class="hint">Switched on now as for every partner. Change any for this partner; you can change them later on their profile.</p>';
     }
 
-    async function submitCreate(form) {
+    async function submitInvite(form) {
       say("");
-      const v = (id) => form.querySelector("#" + id).value.trim();
-      const body = { full_name: v("pcName").replace(/\s+/g, " "), phone: v("pcPhone"), dob: v("pcDob"), password: form.querySelector("#pcPass").value,
-        status: v("pcStatus"), country: "GH" };
-      if (body.full_name.split(" ").length < 2) return say("Enter their full name: first and last name.");
-      if (body.phone.replace(/\D/g, "").length < 9) return say("Enter their mobile number.");
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(body.dob)) return say("Enter their date of birth.");
-      if (body.dob > adultBy()) return say("Partners must be 18 or older — check the date of birth.");
-      if (body.password.length < 8 || /^\d+$/.test(body.password)) return say("The password needs at least 8 characters and not only digits. Press <b>Generate</b> for one.");
-      if (v("pcEmail")) body.email = v("pcEmail");
-      if (v("pcUser")) body.username = v("pcUser");
-      const pctv = v("pcPct");
-      if (pctv !== "") {
-        if (!(Number(pctv) >= 0 && Number(pctv) <= 90)) return say("Enter a commission from 0% to 90%.");
-        body.revshare_pct = pctv;
+      const phone = form.querySelector("#piPhone").value.trim();
+      const pctv = form.querySelector("#piPct").value.trim();
+      if (phone.replace(/\D/g, "").length < 9) return say("Enter the partner's mobile number.");
+      if (pctv === "" || !(Number(pctv) >= 0 && Number(pctv) <= 90)) return say("Enter a commission from 0% to 90%.");
+      const body = { phone, revshare_pct: pctv };
+      if (global) {
+        const own = {};
+        form.querySelectorAll("input[data-piperm]").forEach((i) => { if (i.checked !== Boolean(global[i.dataset.piperm])) own[i.dataset.piperm] = i.checked; });
+        if (Object.keys(own).length) body.permissions = own;
       }
-      const code = v("pcCode").toUpperCase();
-      const promo = v("pcPromo").toUpperCase();
-      if (code && !/^[A-Z0-9]{4,16}$/.test(code)) return say("The Partner ID must be 4 to 16 letters and numbers, no spaces or symbols.");
-      if (promo && !/^[A-Z0-9]{4,16}$/.test(promo)) return say("The promo code must be 4 to 16 letters and numbers, no spaces or symbols.");
-      if (code && code === promo) return say("Use a different Partner ID and promo code.");
-      if (code) body.code = code;
-      if (promo) body.promo_code = promo;
-      if (v("pcNote")) body.note = v("pcNote");
       const btn = form.querySelector("button[type=submit]");
       btn.disabled = true;
-      const r = await api("/partners/create", body);
+      const r = await api("/partner-invites", body);
       btn.disabled = false;
-      if (!r.ok) {
-        if (r.data && r.data.error === "already_registered") {
-          return say(errText(r, "That number already has an account.") +
-            ' <button class="btn btn-ghost btn-sm" type="button" data-padd-mode="existing" data-q="' + esc(body.phone) + '">Make that existing player a partner instead</button>', "info");
-        }
-        return say(errText(r, "Couldn't create the partner."));
-      }
-      showCreated(r.data, body.password);
-      refreshBadges();
+      if (!r.ok) return say(errText(r, "Couldn't create the setup link."));
+      s.set(inviteLinkHtml(r.data) +
+        '<div class="adm-actions-box"><button class="btn btn-ghost btn-sm" type="button" data-padd-mode="invite">Add another partner</button>' +
+          '<button class="btn btn-ghost btn-sm" type="button" data-close-sheet>Done</button></div>');
       if (state.tab === "partners") loadPartners();
-    }
-
-    /* everything the new partner needs, once: the password isn't kept anywhere after this sheet closes */
-    function showCreated(d, password) {
-      const link = refLink(d.code);
-      const page = location.origin + "/partners.html";
-      const signIn = location.origin + "/register.html#login";
-      const logins = [d.phone, d.username, d.email].filter(Boolean);
-      details = ["Your WIN B casino partner account", "Name: " + (d.full_name || ""), "Sign in with: " + logins.join(" or "), "Password: " + password,
-        "Sign in at: " + signIn, "Partner dashboard: " + page, "Partner ID: " + d.code, "Referral link: " + link, "Promo code: " + (d.promo_code || "none"),
-        "Please change your password in Settings after you first sign in."].join("\n");
-      const row = (label, value, cls) => '<div class="adm-pcreated-row"><span>' + label + "</span><b" + (cls ? ' class="' + cls + '"' : "") + ">" + value + "</b></div>";
-      s.set('<div class="alert alert-ok">Partner account created' + (d.status === "SUSPENDED" ? " — suspended: reactivate it on their profile when they should start" : "") + ".</div>" +
-        '<div class="adm-pcreated" data-pc-summary>' +
-          row("Name", tx(d.full_name)) +
-          row("Sign in with", logins.map(esc).join(" · ")) +
-          row("Initial password", esc(password), "adm-addr adm-pc-pass") +
-          row("Sign in at", esc(signIn), "adm-addr") +
-          row("Partner ID", tx(d.code), "adm-addr") +
-          row("Referral link", esc(link), "adm-addr") +
-          row("Promo code", d.promo_code ? esc(d.promo_code) : "none") +
-          row("Partner page", esc(page), "adm-addr") +
-          row("Status", statusPill(d.status)) +
-        "</div>" +
-        '<p class="adm-credit-note adm-credit-warn"><b>The password is shown only now.</b> Send these details to the partner privately (a direct message, not a group), and ask them to change the password in Settings after they first sign in.</p>' +
-        '<div class="adm-actions-box"><button class="btn btn-primary btn-sm" type="button" data-pc-copy>Copy details</button>' +
-          '<button class="btn btn-ghost btn-sm" type="button" data-copy="' + esc(link) + '">Copy link</button>' +
-          '<button class="btn btn-ghost btn-sm" type="button" data-open-partner="' + esc(d.user_id) + '">Open partner profile</button>' +
-          '<button class="btn btn-ghost btn-sm" type="button" data-padd-mode="create">Add another</button></div>');
-      s.body.querySelector("[data-pc-copy]").focus();
     }
 
     /* the second way: find a registered player and make them a partner */
     function showExisting(q) {
-      details = "";
       s.set('<form class="adm-padd" data-form="plookup" autocomplete="off">' +
           '<div class="field"><label for="paQ">Find a registered player</label><input id="paQ" type="search" maxlength="120" placeholder="Phone number, username or email" required></div>' +
           '<button class="btn btn-primary" type="submit">Find</button></form>' +
         msg + '<div id="paFound"></div>' +
         '<p class="adm-credit-note">The player becomes an active partner straight away, with a referral link and a Partner ID. They earn the revenue share you set of the net gaming revenue from players they bring in, less the win deduction on those players\' net winnings.</p>' +
-        '<p class="adm-padd-alt"><button class="link-btn" type="button" data-padd-mode="create">Not registered yet? Create a new partner account</button></p>');
+        '<p class="adm-padd-alt"><button class="link-btn" type="button" data-padd-mode="invite">Back: make a partner setup link</button></p>');
       const input = s.body.querySelector("#paQ");
       input.focus();
       if (q) {
@@ -1539,26 +1639,15 @@
     }
 
     s.body.addEventListener("submit", (e) => {
-      if (e.target.matches('form[data-form="pcreate"]')) { e.preventDefault(); return submitCreate(e.target); }
+      if (e.target.matches('form[data-form="pinvite"]')) { e.preventDefault(); return submitInvite(e.target); }
       if (e.target.matches('form[data-form="plookup"]')) { e.preventDefault(); return lookup(); }
     });
     s.body.addEventListener("click", async (e) => {
-      if (e.target.closest("[data-pc-gen]")) {
-        const i = s.body.querySelector("#pcPass");
-        i.value = newPassword();
-        i.focus();
-        return i.select();
-      }
       const mode = e.target.closest("[data-padd-mode]");
-      if (mode) return mode.dataset.paddMode === "existing" ? showExisting(mode.dataset.q || "") : showCreate();
-      const all = e.target.closest("[data-pc-copy]");
-      if (all) {
-        await copyText(details, "Partner details copied. Send them to the partner privately.");
-        all.textContent = "Copied";
-        return setTimeout(() => { if (all.isConnected) all.textContent = "Copy details"; }, 2000);
-      }
+      if (mode) return mode.dataset.paddMode === "existing" ? showExisting(mode.dataset.q || "") : showInvite();
+      if (e.target.closest("[data-close-sheet]")) return s.close();
       const cp = e.target.closest("[data-copy]");
-      if (cp) return copyText(cp.dataset.copy);
+      if (cp) return copyText(cp.dataset.copy, cp.dataset.copy.startsWith("http") ? "Setup link copied." : "Copied.");
       const open = e.target.closest("[data-open-partner]");
       if (open) {
         s.close();
@@ -1567,7 +1656,7 @@
       const b = e.target.closest("[data-make]");
       if (b) return make(b);
     });
-    showCreate();
+    showInvite();
   }
 
   /* ---- one partner's profile: account, link and promo code, totals, statistics, money, history, and every action ---- */
@@ -2276,7 +2365,7 @@
     games: { title: "Games", lead: "Switching a game off takes it out of the lobby and stops new real-money bets on it; rounds already in play can still finish. A studio's switch does the same for all its games." },
     mines: { title: "Mines Signal", lead: "Admin only: where the hidden mines are in the rounds being played." },
     aviator: { title: "Aviator", lead: "Watch rounds and bets live, pause the game, and set its published RTP and bet limits." },
-    partners: { title: "Partners", lead: "Partners earn a share of the net gaming revenue (players' losses) from the players they bring in, less a deduction on those players' net winnings. Approve applications, set rates, pay commission and change the programme's settings.", actions: '<button class="btn btn-primary btn-sm" type="button" data-add-partner>' + U.icon("plus") + "Add partner</button>" },
+    partners: { title: "Partners", lead: "Add partners with a secure setup link, approve applications, pay commission and choose what partners can use.", actions: '<button class="btn btn-primary btn-sm" type="button" data-add-partner>' + U.icon("plus") + "Add partner</button>" },
     support: { title: "Support", lead: "Players write from the chat button on every page; your replies show in their chat as “WIN B casino Support”. Unread conversations come first." },
   };
   const panelOf = (tab) => document.querySelector('[data-panel="' + tab + '"]');
@@ -2354,6 +2443,11 @@
     if (e.target.closest("[data-av-toggle]")) return aviatorToggle();
     const copy = e.target.closest("[data-copy]");
     if (copy) return copyText(copy.dataset.copy);
+    const psec = e.target.closest("[data-psec]");
+    if (psec) return showPtSection(psec.dataset.psec, psec.dataset.pv);
+    const inv = e.target.closest("[data-inv-renew], [data-inv-cancel]");
+    if (inv) return inviteAction(inv);
+    if (e.target.closest(".adm-panel [data-add-partner]")) return openAddPartner();
     const pact = e.target.closest("[data-pact]");
     if (pact) return partnerQuick(pact);
     const settle = e.target.closest("[data-psettle]");
@@ -2367,7 +2461,8 @@
       if (group === "range") { ov.range = v; return loadOverview(); }
       if (group === "feed") { mf.type = v; return loadMoney(); }
       if (group === "grange") { gm.range = v; return loadGames(); }
-      if (group === "pview") { pt.view = v; return loadPartners(); }
+      if (group === "pview") { pt.view = v; pt.status = v; return loadPartners(); }
+      if (group === "pset") { pt.view = v; pt.setView = v; return loadPartners(); }
       if (group === "ppay") { pt.pay = v; return loadPartners(); }
       if (group === "prange") { pt.range = v; return loadPartners(); }
       if (group === "wstatus") { wd.status = v; return loadWithdrawals(); }

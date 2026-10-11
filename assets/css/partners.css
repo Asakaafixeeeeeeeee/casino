@@ -7,7 +7,7 @@
 .prt-preview .ic { width: 20px; height: 20px; flex: none; }
 .prt-notice { margin-bottom: 12px; }
 
-.prt-tabs { margin: 0 calc(-1 * var(--gutter)) 14px; }
+
 #prtTab { min-height: 240px; }
 
 .prt-top {
@@ -173,3 +173,149 @@
 }
 /* the flyer generator (flyers.js) lives in this box: whatever it draws, it never widens the page */
 #flyerBox { min-width: 0; max-width: 100%; overflow-x: auto; margin-bottom: 14px; }
+
+/* ================= the redesigned portal (October 2026): header, icon tabs, earnings first, cards ================= */
+.prt-wrap { max-width: 1120px; }
+
+/* who is signed in */
+.prt-head { display: flex; align-items: center; gap: 14px; margin: 4px 0 14px; }
+.prt-ava {
+  width: 52px; height: 52px; flex: none; display: grid; place-items: center; border-radius: 16px;
+  background: linear-gradient(135deg, var(--yellow), var(--orange)); color: #111; font-size: 1.4rem; font-weight: 900;
+  box-shadow: 0 8px 22px rgba(255, 160, 40, .25);
+}
+.prt-head-main { display: grid; gap: 3px; min-width: 0; }
+.prt-head-hi { font-size: .78rem; color: var(--dim); }
+.prt-head-main strong { font-size: 1.25rem; line-height: 1.2; overflow-wrap: anywhere; }
+.prt-head-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.prt-tag { padding: 3px 9px; border-radius: var(--r-full); background: var(--surface-2); border: 1px solid var(--line-soft); font-size: .74rem; color: var(--muted); }
+.prt-tag b { color: var(--text); font-family: ui-monospace, Menlo, monospace; letter-spacing: .04em; }
+.prt-tag-gold { border-color: rgba(255, 200, 61, .4); background: rgba(255, 200, 61, .1); }
+.prt-tag-gold b { color: var(--yellow); font-family: inherit; }
+
+/* tabs: icon pills that scroll sideways on a phone and stay in reach */
+.prt-tabs {
+  position: sticky; top: 0; z-index: 5; display: flex; gap: 6px; margin: 0 calc(-1 * var(--gutter)) 16px; padding: 8px var(--gutter);
+  background: rgba(13, 14, 16, .92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line-soft); scrollbar-width: none;
+}
+.prt-tabs::-webkit-scrollbar { display: none; }
+.prt-tabs button {
+  display: inline-flex; align-items: center; gap: 7px; flex: none; min-height: 40px; padding: 8px 14px; border-radius: var(--r-full);
+  border: 1px solid var(--line-soft); background: var(--surface); color: var(--muted); font: inherit; font-size: .86rem; font-weight: 700; cursor: pointer;
+}
+.prt-tabs button .ic { width: 17px; height: 17px; }
+.prt-tabs button:hover { color: var(--text); border-color: var(--line); }
+.prt-tabs button[aria-selected="true"] { background: var(--yellow); border-color: var(--yellow); color: #111; }
+
+/* cards */
+.prt-card { margin: 0 0 16px; padding: 18px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line-soft); min-width: 0; }
+.prt-card-head { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
+.prt-card-head h2 { margin: 0; font-size: 1.02rem; letter-spacing: -.01em; }
+.prt-card-ico { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 10px; background: rgba(255, 200, 61, .12); color: var(--yellow); }
+.prt-card-ico .ic { width: 18px; height: 18px; }
+.prt-card-head > .btn, .prt-card-link { margin-left: auto; }
+.prt-card-link { display: inline-flex; align-items: center; gap: 2px; font-size: .84rem; font-weight: 700; color: var(--yellow); text-decoration: none; }
+.prt-card-link .ic { width: 15px; height: 15px; }
+.prt-card .adm-table-wrap { margin: 0; }
+.prt-card .hint { margin: 10px 0 0; }
+.prt-card > .alert { margin: 0; }
+
+/* earnings: the first thing a partner sees */
+.prt-earn {
+  display: grid; gap: 16px; margin: 0 0 16px; padding: 20px; border-radius: 22px; position: relative; overflow: hidden;
+  background: radial-gradient(120% 140% at 0% 0%, rgba(255, 200, 61, .22), rgba(255, 106, 42, .08) 45%, rgba(24, 26, 31, 1) 75%), var(--surface);
+  border: 1px solid rgba(255, 200, 61, .35);
+}
+.prt-earn-main { display: grid; gap: 14px; min-width: 0; }
+.prt-earn .adm-kpi { background: transparent; border: 0; padding: 0; }
+.prt-earn-total strong { font-size: clamp(2.1rem, 7vw, 3rem); line-height: 1.05; color: var(--yellow); letter-spacing: -.03em; }
+.prt-earn-total strong.prt-neg { color: var(--err); }
+.prt-earn-total small { display: flex; align-items: center; gap: 6px; font-size: .85rem; }
+.prt-up { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--r-full); background: rgba(52, 215, 122, .15); color: var(--green); }
+.prt-up .ic { width: 14px; height: 14px; }
+.prt-periods { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.prt-earn .prt-periods .adm-kpi { padding: 10px 12px; border-radius: 12px; background: rgba(0, 0, 0, .25); border: 1px solid rgba(255, 255, 255, .06); }
+.prt-periods .adm-kpi strong { font-size: 1.05rem; }
+.prt-periods .adm-kpi span { font-size: .66rem; }
+.prt-earn-chart { margin: 0; display: grid; gap: 6px; }
+.prt-earn-chart figcaption { font-size: .74rem; color: var(--dim); }
+.prt-earn-chart .prt-plot { height: 90px; }
+.prt-earn-side {
+  display: grid; gap: 8px; align-content: start; padding: 16px; border-radius: 16px; background: rgba(0, 0, 0, .3); border: 1px solid rgba(255, 255, 255, .07);
+}
+.prt-earn-avail { font-size: 2rem; line-height: 1.1; color: var(--green); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.prt-earn-side small { font-size: .78rem; color: var(--dim); line-height: 1.45; }
+.prt-earn-side .btn .ic { width: 17px; height: 17px; }
+.prt-progress { height: 8px; border-radius: var(--r-full); background: rgba(255, 255, 255, .08); overflow: hidden; }
+.prt-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--yellow), var(--green)); }
+.prt-earn-list { margin: 4px 0 0; display: grid; gap: 6px; }
+.prt-earn-list > div { display: flex; justify-content: space-between; gap: 10px; font-size: .86rem; }
+.prt-earn-list dt { color: var(--dim); }
+.prt-earn-list dd { margin: 0; font-weight: 800; font-variant-numeric: tabular-nums; }
+@media (min-width: 860px) {
+  .prt-earn { grid-template-columns: minmax(0, 1fr) 300px; padding: 24px; }
+}
+@media (max-width: 520px) {
+  .prt-periods { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .prt-earn { padding: 16px; border-radius: 18px; }
+}
+
+/* share: link, codes and a QR code */
+.prt-share { display: grid; gap: 16px; align-items: start; }
+.prt-share-main { display: grid; gap: 10px; min-width: 0; }
+.prt-share-qr { display: grid; justify-items: center; gap: 6px; }
+.prt-qr { width: 132px; height: 132px; border-radius: 12px; background: #fff; padding: 6px; }
+.prt-share-qr small { font-size: .74rem; color: var(--dim); }
+@media (min-width: 640px) { .prt-share { grid-template-columns: minmax(0, 1fr) auto; } }
+.prt-mainlink .prt-idrow { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; font-size: inherit; }
+.prt-id { position: relative; display: grid; gap: 3px; align-content: start; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line-soft); min-width: 0; }
+.prt-id > small { font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+.prt-id b { font-size: .98rem; overflow-wrap: anywhere; }
+.prt-id .adm-pill { justify-self: start; }
+.prt-mini-btn { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 8px; background: rgba(255, 200, 61, .12); color: var(--yellow); cursor: pointer; }
+.prt-mini-btn .ic { width: 15px; height: 15px; }
+.prt-mainlink .prt-terms { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.prt-linkrow input { font-family: ui-monospace, Menlo, monospace; font-size: .84rem; color: var(--yellow); }
+
+/* stat tiles */
+.prt-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.prt-tile { position: relative; padding: 14px 14px 14px 60px; min-height: 84px; align-content: center; background: var(--surface-2); }
+.prt-tile-ico {
+  position: absolute; left: 14px; top: 16px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px;
+  background: rgba(255, 255, 255, .06); color: var(--muted); font-style: normal;
+}
+.prt-tile-ico .ic { width: 17px; height: 17px; }
+.prt-tile.in .prt-tile-ico { background: rgba(52, 215, 122, .14); color: var(--green); }
+.prt-tile.bad .prt-tile-ico { background: rgba(255, 108, 99, .14); color: var(--err); }
+.prt-tile.warn .prt-tile-ico { background: rgba(255, 200, 61, .14); color: var(--yellow); }
+.prt-tile strong { font-size: 1.25rem; }
+@media (max-width: 460px) {
+  .prt-tiles { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .prt-tile { padding: 54px 12px 12px; min-height: 0; align-content: start; }
+  .prt-tile-ico { left: 12px; top: 12px; }
+  .prt-card { padding: 14px; border-radius: 16px; }
+}
+
+/* recent activity: commission history full width, then sign-ups and payouts side by side */
+.prt-cols { display: grid; gap: 0 16px; }
+@media (min-width: 900px) { .prt-cols { grid-template-columns: 1fr 1fr; } .prt-cols .prt-wide { grid-column: 1 / -1; } }
+.prt-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.prt-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.prt-list li > div { display: grid; gap: 2px; min-width: 0; }
+.prt-list small { font-size: .76rem; color: var(--dim); overflow-wrap: anywhere; }
+.prt-empty-box { display: grid; justify-items: center; gap: 8px; padding: 18px 10px; text-align: center; color: var(--dim); }
+.prt-empty-box .ic { width: 28px; height: 28px; opacity: .6; }
+.prt-empty-box p { margin: 0; font-size: .88rem; max-width: 380px; }
+
+/* the other tabs: section headings and panels get the same card look */
+#tabBody > .adm-h { margin: 20px 0 10px; font-size: .78rem; }
+#tabBody > .adm-h:first-child { margin-top: 0; }
+#tabBody > .panel, #tabBody > .adm-kpis, #tabBody > .adm-table-wrap { border-radius: 16px; }
+#tabBody > .adm-kpis .adm-kpi { background: var(--surface); border-radius: 14px; }
+
+/* phones: compact lists instead of wide tables on the dashboard */
+.prt-mlist { display: none; }
+.prt-mlist-end { display: grid; justify-items: end; gap: 4px; flex: none; }
+.prt-mlist-end b { font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .prt-card .prt-dtable { display: none; } .prt-mlist { display: grid; } }

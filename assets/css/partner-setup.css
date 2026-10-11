@@ -1,0 +1,23 @@
+/* WIN B casino partner setup page (partner-setup.html): the invitation's terms, then the partner's own sign-up. */
+.ps-page { max-width: 480px; }
+.ps-card .auth-lead { margin-bottom: 16px; }
+.ps-card .alert { margin: 0 0 14px; }
+
+.ps-offer {
+  display: grid; gap: 14px; margin: 0 0 18px; padding: 16px; border-radius: var(--r-lg);
+  background: linear-gradient(135deg, rgba(255, 200, 61, .16), rgba(255, 106, 42, .07) 60%, rgba(255, 200, 61, .03));
+  border: 1px solid rgba(255, 200, 61, .35);
+}
+.ps-offer-rate { display: flex; align-items: baseline; gap: 10px; }
+.ps-offer-rate b { font-size: 2.3rem; line-height: 1; letter-spacing: -.03em; color: var(--yellow); font-variant-numeric: tabular-nums; }
+.ps-offer-rate span { font-size: .8rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.ps-offer-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.ps-offer-list li { display: flex; gap: 10px; align-items: flex-start; font-size: .88rem; line-height: 1.45; color: var(--muted); }
+.ps-offer-list li b { color: var(--text); }
+.ps-offer-list .ic { width: 18px; height: 18px; flex: none; margin-top: 1px; color: var(--yellow); }
+
+.ps-card input[readonly] { color: var(--muted); background: var(--surface-2); cursor: default; }
+.ps-card #psTermsErr { display: block; min-height: 1.1em; margin: 4px 0 12px; font-size: .78rem; color: var(--err); }
+.ps-card .btn-block + .btn-block { margin-top: 10px; }
+.ps-small { margin: 14px 0 0; font-size: .82rem; line-height: 1.5; text-align: center; color: var(--dim); }
+.ps-small a { color: var(--yellow); }
