@@ -2,9 +2,9 @@ import type { Pool } from "pg";
 import { logAction } from "./admin.js";
 
 /*
- * Live support chat. Each player has one conversation with the RendoWin team; a player's message (re)opens it, an
+ * Live support chat. Each player has one conversation with the WIN B casino team; a player's message (re)opens it, an
  * admin replies from the dashboard, and either side's read position is the id of the last message they've seen.
- * Players see replies as "RendoWin Support" — which admin wrote is kept for the dashboard only.
+ * Players see replies as "WIN B casino Support" — which admin wrote is kept for the dashboard only.
  */
 
 export class SupportError extends Error {

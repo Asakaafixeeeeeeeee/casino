@@ -1,7 +1,7 @@
 /* Rendo Mines Live — a shared-board Mines game. Every connected player plays the SAME 5×5 board (6 mines) in a
    3-minute round, and NOTHING is revealed until the round ends.
 
-   Rounds follow the clock (round n runs from n × 3 min to (n + 1) × 3 min after the epoch) and come from the RendoWin
+   Rounds follow the clock (round n runs from n × 3 min to (n + 1) × 3 min after the epoch) and come from the WIN B casino
    balance service, which draws each round's seed, keeps it secret until 0:00 and settles real-money bets
    (backend/src/games/minesLive.ts). This server shows the board, the timer, the live bets and the history, runs the
    simulated DEMO players and the fun-credit balances, and passes real-money players' bets on with their own sign-in.
@@ -137,7 +137,7 @@ async function newRound(now) {
 }
 
 /* ---------------- players ---------------- */
-/* fun-credit players are kept per browser id; real-money players per RendoWin sign-in (so every tab is the same
+/* fun-credit players are kept per browser id; real-money players per WIN B casino sign-in (so every tab is the same
    player). The browser's id and the sign-in are never shown to anyone: other players see a public id derived from
    it (a one-way hash) and a display name. */
 const players = new Map();   /* key → { pub, name, real, token, balance, bet, mine:[past bets], sockets:Set, busy } */
@@ -385,11 +385,11 @@ io.on("connection", async (socket) => {
   const auth = socket.handshake.auth || {};
   let p;
   if (auth.mode === "real") {
-    /* a RendoWin sign-in: the balance service says whose it is and what's in the wallet */
+    /* a WIN B casino sign-in: the balance service says whose it is and what's in the wallet */
     const token = String(auth.token || "");
     const r = /^[A-Za-z0-9_-]{16,200}$/.test(token) ? await api(BALANCE_API + "/api/user/balances", { token }) : { ok: false, status: 401 };
     if (!r.ok || !r.data.primary) {
-      socket.emit("fatal", r.status === 401 ? "Your RendoWin session has ended — sign in again to play for real money."
+      socket.emit("fatal", r.status === 401 ? "Your WIN B casino session has ended — sign in again to play for real money."
         : "Couldn't reach your wallet — try again in a moment.");
       return socket.disconnect(true);
     }

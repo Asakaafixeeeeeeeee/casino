@@ -1,4 +1,4 @@
-/* Log in, register and reset a password against the RendoWin accounts server (accounts-api/).
+/* Log in, register and reset a password against the WIN B casino accounts server (accounts-api/).
    Sign-up asks for the player's full name, a mobile number, a password and a date of birth (the 18+ check, also used
    to reset a forgotten password); the server picks a username. Sessions are kept until the player logs out. */
 (function () {
@@ -283,7 +283,7 @@
     U.session.set({ phone: r.data.user.phone, name: r.data.user.username, token: r.data.token, currency: r.data.user.currency }, { remember: true });
     forms.register.reset();
     $("phoneNet").hidden = true;
-    say("ok", "Welcome to RendoWin! Your account is ready.");
+    say("ok", "Welcome to WIN B casino! Your account is ready.");
     leave();
   });
 

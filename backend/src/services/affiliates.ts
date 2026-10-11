@@ -643,6 +643,23 @@ export async function partnerStatistics(db: Pool, a: Affiliate, input: { range?:
   };
 }
 
+/** The partner's commission history: each settled bet of their players that earned (or cost) commission, newest first.
+ *  Players are shown masked, as everywhere a partner looks. */
+export async function partnerCommissions(db: Pool, a: Affiliate, input: { limit?: unknown } = {}) {
+  await accrueCommissions(db, a.user_id);
+  const limit = Math.min(500, Math.max(1, Math.floor(Number(input.limit)) || 50));
+  const { rows } = await db.query(
+    `SELECT c.player_id, u.username, c.game, c.stake, c.payout, c.ngr, c.pct, c.amount, c.settled_at, c.settlement_id IS NOT NULL AS settled
+       FROM partner_commissions c JOIN users u ON u.id = c.player_id
+      WHERE c.affiliate_id = $1 ORDER BY c.settled_at DESC, c.id DESC LIMIT $2`, [a.user_id, limit]);
+  return {
+    commissions: rows.map((c) => ({
+      player: mask(c.username), id: publicId(c.player_id), game: c.game, stake: round2(num(c.stake)), payout: round2(num(c.payout)),
+      ngr: round2(num(c.ngr)), pct: num(c.pct), amount: round2(num(c.amount)), settled_at: c.settled_at, status: c.settled ? "settled" : "pending",
+    })),
+  };
+}
+
 export async function partnerPayouts(db: Db, affiliateId: string) {
   const { rows } = await db.query(
     `SELECT id, amount, method, details, status, note, reference, created_at, approved_at, decided_at FROM affiliate_payouts
@@ -696,7 +713,7 @@ async function claimPromo(db: Db, affiliateId: string, raw: unknown): Promise<st
   if (!/^[A-Z0-9]{4,16}$/.test(code) || String(raw ?? "").replace(/[\s]/g, "").length > 16) {
     throw new PartnerError("invalid_promo", "Use 4 to 16 letters and numbers, no spaces or symbols");
   }
-  if (/^(ADMIN|SUPPORT|RENDOWIN|WINB|WINBCASINO|TEST|DEMO|FREE|BONUS)$/.test(code)) {
+  if (/^(ADMIN|SUPPORT|RENDOWIN|WINB|WINBWIN|WINBCASINO|TEST|DEMO|FREE|BONUS)$/.test(code)) {
     throw new PartnerError("promo_taken", "That promo code isn't available — choose another");
   }
   await db.query(`SELECT pg_advisory_xact_lock(hashtext('partner-codes'))`);
@@ -916,6 +933,7 @@ export async function partnerPreview(db: Pool, userId: unknown, view: string, in
   if (view === "statistics") return partnerStatistics(db, a, input);
   if (view === "wallet") return partnerWallet(db, a);
   if (view === "settings") return partnerSettings(db, a);
+  if (view === "commissions") return partnerCommissions(db, a, input);
   if (view === "me") return { partner: partnerView(a) };
   throw new PartnerError("not_found", "Unknown view", 404);
 }

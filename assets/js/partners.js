@@ -1,4 +1,4 @@
-/* RendoWin Partners: apply, then (once an admin approves you) a revenue-share portal: dashboard, referrals,
+/* WIN B casino Partners: apply, then (once an admin approves you) a revenue-share portal: dashboard, referrals,
    statistics, wallet and settings. Access is enforced by the balance service: partner data only comes back for an
    approved partner's own account. With ?preview=<user id> an admin sees that partner's portal, read only. */
 (function () {
@@ -49,7 +49,7 @@
     '<ul class="prt-rules">' +
     "<li>Promote to adults only (18+). Never aim at children or students, or post where they gather.</li>" +
     "<li>Be honest: no promises of winning, “easy money” or guaranteed profits, and no fake wins or screenshots.</li>" +
-    "<li>No spam, and no bidding on the RendoWin name in search ads.</li>" +
+    "<li>No spam, and no bidding on the WIN B casino name in search ads.</li>" +
     "<li>Always show <b>18+ · Play responsibly</b> with your link (our banners already do).</li>" +
     "<li>Your own accounts, fake accounts and accounts shared between people don't count, and commission from them is withheld.</li></ul>";
   const PITCH = "Share your link with your audience. You earn a share of the net gaming revenue the players you bring generate — what they stake minus what they win.";
@@ -60,9 +60,9 @@
   const step = (n, title, text) => '<div class="prt-step"><b>' + n + "</b><div><strong>" + title + "</strong><p>" + text + "</p></div></div>";
 
   function drawSignedOut() {
-    view.innerHTML = hero("RendoWin Partners", PITCH) +
+    view.innerHTML = hero("WIN B casino Partners", PITCH) +
       '<div class="prt-steps">' +
-        step(1, "Apply", "Tell us where you'll promote RendoWin — your page, channel, group or website.") +
+        step(1, "Apply", "Tell us where you'll promote WIN B casino — your page, channel, group or website.") +
         step(2, "Get approved", "We review every partner and set your revenue share.") +
         step(3, "Share and earn", "Use your link and promo code; follow your players, revenue and commission here.") +
       "</div>" +
@@ -70,13 +70,13 @@
   }
 
   function drawApply() {
-    view.innerHTML = hero("Become a RendoWin partner", PITCH + " Your revenue share is set when we approve you.") +
+    view.innerHTML = hero("Become a WIN B casino partner", PITCH + " Your revenue share is set when we approve you.") +
       '<form class="panel prt-apply" id="applyForm">' +
-        '<div class="field"><label for="apChannel">Where will you promote RendoWin?</label>' +
+        '<div class="field"><label for="apChannel">Where will you promote WIN B casino?</label>' +
         '<textarea id="apChannel" class="me-textarea" rows="3" maxlength="300" required placeholder="e.g. My football page on Facebook (12k followers) and a WhatsApp sports group"></textarea>' +
         '<span class="hint">Links help us review faster.</span></div>' +
         '<h3 class="me-sheet-sub">Marketing rules</h3>' + RULES +
-        '<label class="checkbox"><input type="checkbox" id="apAgree" required> I agree to promote RendoWin by these rules.</label>' +
+        '<label class="checkbox"><input type="checkbox" id="apAgree" required> I agree to promote WIN B casino by these rules.</label>' +
         '<button class="btn btn-primary btn-block" type="submit">Send application</button></form>';
   }
 
@@ -138,22 +138,41 @@
     '<button class="btn btn-primary btn-sm" type="button" data-copy="' + id + '" data-what="' + what + '">Copy</button></div>';
 
   /* ---------------- Dashboard ---------------- */
+  const STATUS_WORD = { ACTIVE: ["ok", "Active"], SUSPENDED: ["bad", "Suspended"], PENDING: ["warn", "Pending"], REJECTED: ["bad", "Rejected"], DISABLED: ["bad", "Disabled"] };
+  const VIA = { link: "Referral link", promo: "Promo code", "link+promo": "Link + promo code", admin: "Added by admin" };
   async function loadDashboard(seq, quiet) {
-    const [sum, set] = await Promise.all([get("summary"), get("settings")]);
+    const [sum, set, wal, refs, com] = await Promise.all([
+      get("summary"), get("settings"), get("wallet"), get("referrals", "range=all"), get("commissions", "limit=20"),
+    ]);
     if (seq !== loadSeq || state.tab !== "dashboard") return;
-    if (!sum.ok) return failed(sum, "Couldn't load your dashboard.", quiet);
-    if (!set.ok) return failed(set, "Couldn't load your dashboard.", quiet);
+    for (const r of [sum, set, wal, refs, com]) if (!r.ok) return failed(r, "Couldn't load your dashboard.", quiet);
     const s = sum.data;
     const w = s.wallet;
     const rs = s.revenueShare;
     const st = set.data;
     state.partner = Object.assign({}, state.partner, s.partner);
     const p = state.partner;
+    const [stCls, stTxt] = STATUS_WORD[p.status] || ["", p.status];
     const canPay = !state.readOnly && w.available >= w.minPayout;
+    const signups = refs.data.referrals.slice(0, 10);
+    const payouts = wal.data.payouts.slice(0, 5);
+    const commissions = com.data.commissions;
     $("tabBody").innerHTML =
+      /* the partner's unique link first: it's what they share */
+      '<section class="panel prt-linkbox prt-mainlink">' +
+        '<span class="prt-label">Your unique referral link</span>' + linkRow("lnk", link(), "Your referral link") +
+        (p.link_live ? "" : '<p class="alert alert-info">Your link is switched off at the moment — new visitors through it won\'t become your players.</p>') +
+        '<div class="prt-idrow"><span>Partner ID <b>' + esc(p.code) + "</b></span>" +
+          "<span>Promo code <b>" + (p.promo_code ? esc(p.promo_code) : "—") + "</b></span>" +
+          '<span>Status <span class="adm-pill ' + stCls + '">' + esc(stTxt) + "</span></span>" +
+          "<span>Commission <b>" + pct(st.rate.pct) + "</b></span></div>" +
+        '<p class="prt-terms">' + terms(st) + "</p>" + scheduled(st.rate) +
+        '<p class="hint">Anyone who opens an account through this link (or with your promo code) becomes your player for good.</p>' +
+      "</section>" +
+
       '<section class="prt-top">' +
-        '<div><span class="prt-label">Your partner code</span><b class="prt-codeval">' + esc(p.code) + "</b>" +
-        '<p class="prt-terms">' + terms(st) + "</p>" + scheduled(st.rate) + "</div>" +
+        '<div><span class="prt-label">Total commission earned</span><b class="prt-codeval">' + money(w.totalEarned) + "</b>" +
+        "<small>lifetime, before deductions</small></div>" +
         '<div class="prt-avail"><span class="prt-label">Available</span><b' + (w.available < 0 ? ' class="prt-neg"' : "") + ">" + smoney(w.available) + "</b>" +
         (state.readOnly ? "" : '<button class="btn btn-primary btn-sm" type="button" data-go="wallet"' + (canPay ? "" : " disabled") + ">Request withdrawal</button>") +
         (!state.readOnly && !canPay ? "<small>Withdrawals from " + money(w.minPayout) + "</small>" : "") + "</div></section>" +
@@ -162,8 +181,17 @@
         '<button class="btn btn-ghost btn-sm" type="button" data-refresh>' + U.icon("refresh") + "Refresh</button></div>" +
       '<div class="adm-kpis">' +
         kpi("Total referrals", count(s.totalReferrals), count(s.referrals30) + " in the last 30 days") +
-        kpi("Active players", count(s.activePlayers), "played in the last 30 days") +
+        kpi("Active referrals", count(s.activePlayers), "played in the last 30 days") +
         kpi("Link clicks", count(s.clicks), "all time") +
+      "</div>" +
+      '<h3 class="adm-h">Commission wallet</h3><div class="adm-kpis">' +
+        kpi("Total commission earned", money(w.totalEarned), "lifetime", "in") +
+        kpi("Available balance", smoney(w.available), "ready to withdraw", w.available < 0 ? "bad" : "in") +
+        kpi("Pending commission", smoney(w.pending), "until the " + periodWord(w.settlementPeriod) + " period closes", tone(w.pending)) +
+        kpi("Total withdrawn", money(w.withdrawn)) +
+        kpi("Negative adjustments", smoney(w.negativeAdjustments), "from player wins", w.negativeAdjustments < 0 ? "bad" : "") +
+        kpi("Pending withdrawals", money(w.pendingWithdrawals), "", w.pendingWithdrawals ? "warn" : "") +
+        (w.carriedNegative ? kpi("Carried negative", smoney(w.carriedNegative), "set against your next earnings", "bad") : "") +
       "</div>" +
       '<h3 class="adm-h">Revenue share</h3><div class="adm-kpis">' +
         kpi("Today", smoney(rs.today), "", tone(rs.today)) +
@@ -172,39 +200,53 @@
         kpi("This month", smoney(rs.month), "", tone(rs.month)) +
         kpi("Lifetime", smoney(rs.lifetime), "", tone(rs.lifetime) || (rs.lifetime > 0 ? "in" : "")) +
       "</div>" +
-      '<h3 class="adm-h">Commission wallet</h3><div class="adm-kpis">' +
-        kpi("Available balance", smoney(w.available), "ready to withdraw", w.available < 0 ? "bad" : "in") +
-        kpi("Pending commission", smoney(w.pending), "until the " + periodWord(w.settlementPeriod) + " period closes", tone(w.pending)) +
-        kpi("Negative adjustments", smoney(w.negativeAdjustments), "from player wins", w.negativeAdjustments < 0 ? "bad" : "") +
-        kpi("Total withdrawn", money(w.withdrawn)) +
-        kpi("Pending withdrawals", money(w.pendingWithdrawals), "", w.pendingWithdrawals ? "warn" : "") +
-        (w.carriedNegative ? kpi("Carried negative", smoney(w.carriedNegative), "set against your next earnings", "bad") : "") +
-      "</div>" +
-      '<p class="hint prt-dimnote">Figures in GHS, counted by UTC day. This page updates itself every minute.</p>' +
 
-      '<h3 class="adm-h">Your referral link</h3><div class="panel prt-linkbox">' +
-        linkRow("lnk", link(), "Your link") +
-        (p.link_live ? "" : '<p class="alert alert-info">Your link is switched off at the moment — new visitors through it won\'t become your players.</p>') +
-        '<span class="prt-label">Promo code</span>' +
-        (p.promo_code ? linkRow("promo", p.promo_code, "Your promo code")
-          : '<p class="me-sheet-note">No promo code yet' + (state.readOnly ? "." : ' — <a href="#settings" data-go="settings">set one in Settings</a>.') + "</p>") +
-        '<p class="hint">New players who open an account through your link, or enter your promo code when they register, become your players.</p></div>' +
+      '<h3 class="adm-h">Commission history</h3>' +
+      (commissions.length
+        ? '<div class="adm-table-wrap"><table class="adm-table prt-table" id="prtCommissions"><thead><tr><th>Date</th><th>Player</th><th>Game</th><th>Stake</th><th>Payout</th>' +
+          "<th>Rate</th><th>Commission</th><th>Status</th></tr></thead><tbody>" +
+          commissions.map((c) => "<tr><td>" + whenTime(c.settled_at) + "</td><td>" + esc(c.id) + "</td><td>" + esc(c.game) + "</td><td>" + money(c.stake) +
+            "</td><td>" + money(c.payout) + "</td><td>" + pct(c.pct) + "</td><td>" + smoney(c.amount) + "</td><td>" +
+            '<span class="adm-pill ' + (c.status === "settled" ? "ok" : "warn") + '">' + (c.status === "settled" ? "Settled" : "Pending") + "</span></td></tr>").join("") +
+          "</tbody></table></div>"
+        : '<p class="me-sheet-note">No commission yet — it appears here as soon as your players\' bets settle.</p>') +
+
+      '<div class="adm-feed-head"><h3 class="adm-h">Referral registrations</h3>' +
+        (s.totalReferrals > signups.length ? '<a href="#referrals" data-go="referrals">See all ' + count(s.totalReferrals) + "</a>" : "") + "</div>" +
+      (signups.length
+        ? '<div class="adm-table-wrap"><table class="adm-table prt-table" id="prtSignups"><thead><tr><th>Registered</th><th>User ID</th><th>Joined through</th><th>Last activity</th></tr></thead><tbody>' +
+          signups.map((r) => "<tr><td>" + whenTime(r.joined) + "</td><td>" + esc(r.id) + "</td><td>" + esc(VIA[r.via] || r.via || "—") +
+            (r.sub_id ? " <small>" + esc(r.sub_id) + "</small>" : "") + "</td><td>" + (r.last_activity ? ago(r.last_activity) : "—") + "</td></tr>").join("") +
+          "</tbody></table></div>"
+        : '<p class="me-sheet-note">No one has registered through your link yet. Share it to get started.</p>') +
+
+      '<div class="adm-feed-head"><h3 class="adm-h">Payout requests</h3>' + (payouts.length ? '<a href="#wallet" data-go="wallet">Wallet</a>' : "") + "</div>" +
+      (payouts.length
+        ? '<div class="adm-table-wrap"><table class="adm-table" id="prtPayouts"><thead><tr><th>Date</th><th>Amount</th><th>Status</th><th>Reference / note</th></tr></thead><tbody>' +
+          payouts.map((x) => {
+            const [cls, txt] = PAY_STATUS[x.status] || ["", x.status];
+            return "<tr><td>" + whenTime(x.created_at) + "</td><td>" + money(x.amount) + '</td><td><span class="adm-pill ' + cls + '">' + esc(txt) + "</span></td><td>" +
+              (x.reference ? "<b>" + esc(x.reference) + "</b> " : "") + (x.note ? "<small>" + esc(x.note) + "</small>" : "") + (x.reference || x.note ? "" : "—") + "</td></tr>";
+          }).join("") + "</tbody></table></div>"
+        : '<p class="me-sheet-note">No payout requests yet.</p>') +
+
+      '<p class="hint prt-dimnote">Figures in GHS, from our records, counted by UTC day. This page updates itself every minute.</p>' +
       banners();
   }
   const periodWord = (p) => ({ DAILY: "daily", WEEKLY: "weekly", MONTHLY: "monthly" })[p] || "settlement";
 
   /* ready-made banners, each linked to the partner (tagged with its size) */
   const BANNERS = [
-    { file: "rendowin-728x90.png", w: 728, h: 90, label: "Leaderboard · 728 × 90", web: true },
-    { file: "rendowin-300x250.png", w: 300, h: 250, label: "Rectangle · 300 × 250", web: true },
-    { file: "rendowin-320x100.png", w: 320, h: 100, label: "Mobile · 320 × 100", web: true },
-    { file: "rendowin-1080x1080.jpg", w: 1080, h: 1080, label: "Social post · 1080 × 1080" },
-    { file: "rendowin-1080x1920.jpg", w: 1080, h: 1920, label: "Story / Status · 1080 × 1920" },
+    { file: "winb-728x90.png", w: 728, h: 90, label: "Leaderboard · 728 × 90", web: true },
+    { file: "winb-300x250.png", w: 300, h: 250, label: "Rectangle · 300 × 250", web: true },
+    { file: "winb-320x100.png", w: 320, h: 100, label: "Mobile · 320 × 100", web: true },
+    { file: "winb-1080x1080.jpg", w: 1080, h: 1080, label: "Social post · 1080 × 1080" },
+    { file: "winb-1080x1920.jpg", w: 1080, h: 1920, label: "Story / Status · 1080 × 1920" },
   ];
   const bannerLink = (b) => link() + "&sub=banner_" + b.w + "x" + b.h;
   const embed = (b) => '<a href="' + bannerLink(b) + '" target="_blank" rel="sponsored noopener"><img src="' + location.origin + "/assets/img/partners/" + b.file +
-    '" width="' + b.w + '" height="' + b.h + '" alt="RendoWin — Olympus, Mines and more. 18+ Play responsibly."></a>';
-  const caption = (b) => "Play Olympus, Mines, Roulette & more on RendoWin — deposit and withdraw with mobile money. 18+ · Play responsibly. " + bannerLink(b);
+    '" width="' + b.w + '" height="' + b.h + '" alt="WIN B casino — Olympus, Mines and more. 18+ Play responsibly."></a>';
+  const caption = (b) => "Play Olympus, Mines, Roulette & more on WIN B casino — deposit and withdraw with mobile money. 18+ · Play responsibly. " + bannerLink(b);
   const banners = () =>
     '<h3 class="adm-h">Banners</h3><div class="prt-banners">' +
       BANNERS.map((b, i) => '<figure class="prt-banner"><div class="prt-banner-img"><img src="assets/img/partners/' + b.file + '" alt="' + esc(b.label) + ' banner" loading="lazy"></div>' +
@@ -477,7 +519,7 @@
         '<input id="emailIn" type="email" maxlength="120" value="' + esc(a.email || "") + '"></div><button class="btn btn-primary btn-sm" type="submit">Save email</button>' +
         '<button class="btn btn-ghost btn-sm" type="button" data-edit-email>Cancel</button></form>') +
       scheduled(s.rate) +
-      '<p class="hint">Your commission percentage is set by the RendoWin team and can only be changed by an admin. Settlement: ' + periodWord(s.settlementPeriod) + ".</p></div>" +
+      '<p class="hint">Your commission percentage is set by the WIN B casino team and can only be changed by an admin. Settlement: ' + periodWord(s.settlementPeriod) + ".</p></div>" +
 
       '<h3 class="adm-h">Referral settings</h3><div class="panel prt-linkbox">' +
         '<span class="prt-label">Referral link</span>' + linkRow("lnk", link(), "Your link") +
@@ -617,7 +659,7 @@
     const btn = f.querySelector("button[type=submit]");
     if (f.id === "applyForm") {
       const channel = $("apChannel").value.trim();
-      if (channel.length < 10) return flash("error", "Tell us where you'll promote RendoWin (at least 10 characters).");
+      if (channel.length < 10) return flash("error", "Tell us where you'll promote WIN B casino (at least 10 characters).");
       if (!$("apAgree").checked) return flash("error", "Please agree to the marketing rules.");
       const r = await busy(btn, () => post("/apply", { channel }));
       if (!r.ok) return flash("error", errText(r, "Couldn't send your application."));

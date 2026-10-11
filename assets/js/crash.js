@@ -24,7 +24,7 @@
   const game = games.find((g) => g.id === params.get("game") && g.category === "Live Casino") ||
     games.find((g) => g.id === "crash");
   U.recent.add(game.id);
-  document.title = game.name + " — RendoWin";
+  document.title = game.name + " — WIN B WIN";
   $("cgTitle").textContent = game.name;
   /* Rendo Crash has its own wordmark; other crash titles show the plane tile and their name */
   if (game.id !== "volta-crash") {

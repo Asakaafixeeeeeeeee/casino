@@ -1,4 +1,4 @@
-/* RendoWin — Customer care page: live chat, the numbers to call and the email (from data.js → VB.contact). */
+/* WIN B casino — Customer care page: live chat, the numbers to call and the email (from data.js → VB.contact). */
 (function () {
   "use strict";
   const { contact, telHref, icon, esc } = window.VBUtil;

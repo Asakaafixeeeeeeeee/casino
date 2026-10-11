@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 173 25" width="346" height="50">
+  <!-- WIN B casino wordmark: WIN B in silver, CASINO in the brand gold. Letters are drawn as strokes and shapes (not
+       font text), so it renders the same everywhere; same letterforms and depth as the old wordmark. -->
+  <defs>
+    <linearGradient id="silver" x1="0" y1="0" x2="0" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c3c8d3"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffe866"/>
+      <stop offset=".55" stop-color="#ffcc00"/>
+      <stop offset="1" stop-color="#ff9a00"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-40%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="0" stdDeviation="1.2" flood-color="#ffb300" flood-opacity=".6"/>
+    </filter>
+    <!-- heavy geometric letters on a 20-unit cap height, stroke 5; diagonals are filled shapes -->
+    <!-- W I N B -->
+    <path id="winb" d="M27.4 0V20 M34.9 0V20 M43.9 0V20
+      M55.5 0V20 M55.5 2.5H62Q64 2.5 64 4.5V8Q64 10 62 10H55.5 M55.5 10H63Q65 10 65 12V15.5Q65 17.5 63 17.5H55.5"/>
+    <path id="winbFill" d="M0 0H5L7 11L9 0H14L9.4 20H4.6Z M8.4 0H13.4L15.4 11L17.4 0H22.4L17.8 20H13Z
+      M32.4 0H37.6L46.4 20H41.2Z"/>
+    <!-- C A S I N O -->
+    <path id="casino" d="M86 2.5H79.5Q77.5 2.5 77.5 4.5V15.5Q77.5 17.5 79.5 17.5H86
+      M94.6 14H101
+      M122 2.5H113.5Q111.5 2.5 111.5 4.5V8Q111.5 10 113.5 10H118Q120 10 120 12V15.5Q120 17.5 118 17.5H109.5
+      M127.5 0V20 M135.5 0V20 M144.5 0V20
+      M155 2.5H160Q162 2.5 162 4.5V15.5Q162 17.5 160 17.5H155Q153 17.5 153 15.5V4.5Q153 2.5 155 2.5Z"/>
+    <path id="casinoFill" d="M89.6 20L95.2 0H100.4L106 20H100.6L97.8 8.5L95 20Z M133 0H138.2L147 20H141.8Z"/>
+  </defs>
+  <g transform="translate(5 2) skewX(-12)" stroke-width="5" stroke-linejoin="miter" stroke-miterlimit="2" fill="none">
+    <g transform="translate(1.1 1.4)">
+      <use href="#winb" stroke="#3a3f4b"/>
+      <use href="#winbFill" fill="#3a3f4b" stroke="none"/>
+      <use href="#casino" stroke="#5c3a00"/>
+      <use href="#casinoFill" fill="#5c3a00" stroke="none"/>
+    </g>
+    <use href="#winb" stroke="url(#silver)"/>
+    <use href="#winbFill" fill="url(#silver)" stroke="none"/>
+    <g filter="url(#glow)">
+      <use href="#casino" stroke="url(#gold)"/>
+      <use href="#casinoFill" fill="url(#gold)" stroke="none"/>
+    </g>
+  </g>
+</svg>

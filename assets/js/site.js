@@ -1,4 +1,4 @@
-/* RendoWin shared code: storage, wallet, session, favourites, phone numbers, icons, game cards, toasts,
+/* WIN B casino shared code: storage, wallet, session, favourites, phone numbers, icons, game cards, toasts,
    and the app shell every page uses — header, category bar, bottom nav, live chat and footer. */
 (function (global) {
   "use strict";
@@ -103,7 +103,7 @@
   }
 
   /* ---------------- the accounts behind the header chip ---------------- */
-  /* the full balances view (the primary account, the US dollar account and RendoWin Points) as the server last gave it, and
+  /* the full balances view (the primary account, the US dollar account and WIN B Points) as the server last gave it, and
      which of them the player has chosen to see in the header. Games always bet from the primary account; the choice
      only changes what the chip shows. */
   const ACCOUNTS = "vb.accounts";
@@ -159,7 +159,7 @@
         symbol: o.symbol || o.code }));
       out.push({ code: "primary", label: a.primary ? a.primary.name : "Ghanaian Cedi", sub: (a.primary ? a.primary.code : "GHS") + " · deposits & games",
         short: format(wallet.balance()), symbol: a.primary ? a.primary.symbol : "₵" });
-      out.push({ code: "points", label: "RendoWin Points", sub: "Loyalty rewards", short: amount(a.points, 0) + " pts", symbol: "★" });
+      out.push({ code: "points", label: "WIN B Points", sub: "Loyalty rewards", short: amount(a.points, 0) + " pts", symbol: "★" });
       return out;
     },
     current() {
@@ -173,7 +173,7 @@
   };
 
   /* ---------------- session (who is signed in; decides what the header shows) ---------------- */
-  /* accounts live on the RendoWin accounts server (accounts-api/), so they work on any device; the session holds the
+  /* accounts live on the WIN B casino accounts server (accounts-api/), so they work on any device; the session holds the
      player's phone, username and sign-in token. Balances are not on the server — the wallet stays in this browser. */
   /* "Keep me signed in" keeps the session in localStorage (it survives closing the browser); otherwise it lives in
      sessionStorage and ends when the browser closes */
@@ -308,7 +308,7 @@
   }
 
   /* ---------------- daily streak ---------------- */
-  /* consecutive days a signed-in player has opened RendoWin on this device */
+  /* consecutive days a signed-in player has opened WIN B casino on this device */
   const STREAK = "vb.streak";
   const dayKey = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   const streak = {
@@ -588,11 +588,11 @@
       a: "Set a budget before you play and stop when you reach it. Gambling is entertainment, not income — if it stops being fun, take a break and contact a support service in your country." }
   ];
 
-  /* the logo: the R emblem plus the RENDOWIN wordmark (both SVG, in assets/img) */
+  /* the logo: the R emblem plus the WIN B CASINO wordmark (both SVG, in assets/img) */
   const brand = () =>
-    '<a class="brand" href="index.html" aria-label="RendoWin home">' +
-    '<img class="brand-mark" src="assets/img/rendowin-mark.svg" alt="" width="32" height="32">' +
-    '<img class="brand-word" src="assets/img/rendowin-wordmark.svg" alt="" width="97" height="18"></a>';
+    '<a class="brand" href="index.html" aria-label="WIN B casino home">' +
+    '<img class="brand-mark" src="assets/img/winb-mark.svg" alt="" width="32" height="32">' +
+    '<img class="brand-word" src="assets/img/winb-wordmark.svg" alt="" width="125" height="18"></a>';
 
   /* Shows the wallet chip + Deposit CTA for signed-in users. */
   function headerActions() {
@@ -860,15 +860,15 @@
       '<li><button class="link-btn" type="button" data-open-chat="3">Responsible play</button></li>' +
       '<li><a href="terms.html">Terms of use</a></li><li><a href="privacy.html">Privacy policy</a></li></ul></div>' +
       "</div>" +
-      '<p class="disclaimer">RendoWin is for adults 18 and over. Gambling involves risk — if you ' +
+      '<p class="disclaimer">WIN B casino is for adults 18 and over. Gambling involves risk — if you ' +
       "or someone you know is affected, contact a support service in your country.</p>" +
-      '<div class="footer-bottom"><span>© ' + new Date().getFullYear() + " RendoWin. Play responsibly, 18+.</span>" +
+      '<div class="footer-bottom"><span>© ' + new Date().getFullYear() + " WIN B casino. Play responsibly, 18+.</span>" +
       '<span class="footer-legal"><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a></span>' +
       (s ? "<span>Signed in as " + esc(s.name || s.phone) + "</span>" : "") + "</div>" +
       "</div>";
   }
 
-  /* live chat: a floating button above the bottom nav. A signed-in player's messages go to the RendoWin team (admin
+  /* live chat: a floating button above the bottom nav. A signed-in player's messages go to the WIN B casino team (admin
      dashboard → Support) and the team's replies come back here; the quick-answer topics stay instant. Signed out,
      it's an automated assistant. Full-screen games skip the floating button and open the chat from their own header. */
   const chat = { open() {} };
@@ -930,7 +930,7 @@
       [/deposit|top ?up|fund|add money|momo|mobile money|pay in/i,
         'Go to <a href="wallet.html">Deposit</a>, enter ₵ 5 or more and tap Top Up Now. A payment prompt is sent to your registered number — approve it with your MoMo PIN. MTN users without a prompt can dial *170#, then 6 and 3.'],
       [/\bpin\b|otp|password|hack|scam|someone (called|asked)/i,
-        'Never share your MoMo PIN, an OTP or your password with anyone — RendoWin will never ask for them. To change a forgotten password, use “Forgot password” on the <a href="register.html#login">log-in page</a>.'],
+        'Never share your MoMo PIN, an OTP or your password with anyone — WIN B casino will never ask for them. To change a forgotten password, use “Forgot password” on the <a href="register.html#login">log-in page</a>.'],
       [/bonus|promo|cashback|cash back|reward|free spin|offer/i,
         'Cashback, VIP perks and a welcome bonus are coming soon but aren\'t live yet, so no bonus is paid on deposits for now. See what\'s planned on the <a href="promotions.html">Promotions</a> page.'],
       [/limit|minimum|maximum|\bmin\b|\bmax\b|how much/i,
@@ -950,7 +950,7 @@
     const input = sheet.querySelector(".chat-input");
     const text2html = (t) => esc(t).replace(/\n/g, "<br>");
 
-    /* ---------- live support (signed in): messages to and from the RendoWin team ---------- */
+    /* ---------- live support (signed in): messages to and from the WIN B casino team ---------- */
     const live = { loaded: false, lastId: 0, timer: 0, noted: false, shown: new Set() };
     const note = (text) => {
       log.insertAdjacentHTML("beforeend", '<p class="chat-note">' + text + "</p>");
@@ -961,7 +961,7 @@
       live.shown.add(m.id);
       live.lastId = Math.max(live.lastId, m.id);
       if (m.from === "you") say("me", text2html(m.body));
-      else say("agent", '<b class="bubble-who">RendoWin Support</b>' + text2html(m.body));
+      else say("agent", '<b class="bubble-who">WIN B casino Support</b>' + text2html(m.body));
     }
     function setUnread(n) {
       if (!fab) return;
@@ -1032,7 +1032,7 @@
       if (open && !log.childElementCount) {
         say("bot", signedIn
           ? "Hi 👋 Write to us here and a member of our team will reply in this chat. For instant answers, pick a topic below. " + contactLine()
-          : 'Hi 👋 I\'m RendoWin\'s automated assistant. Type a question or pick a topic below. To message our team, <a href="register.html#login">log in</a>. ' + contactLine());
+          : 'Hi 👋 I\'m WIN B casino\'s automated assistant. Type a question or pick a topic below. To message our team, <a href="register.html#login">log in</a>. ' + contactLine());
       }
       clearInterval(live.timer);
       if (open && signedIn) {

@@ -2,7 +2,7 @@
    a bet, and the board is only revealed — to everyone at once — when the 3-minute clock runs out.
    The server holds the board and decides everything; this page shows the round, sends the bet, and follows the clock.
    With fun credits each browser keeps a random player id (localStorage) so a refresh or a second tab is the same
-   player. With real money the player is their RendoWin sign-in, handed over by the lobby. */
+   player. With real money the player is their WIN B casino sign-in, handed over by the lobby. */
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -24,7 +24,7 @@
     } catch (e) { /* storage unavailable */ }
   }
 
-  /* real money: the RendoWin lobby passes the player's sign-in in the address's #fragment (which never leaves the
+  /* real money: the WIN B casino lobby passes the player's sign-in in the address's #fragment (which never leaves the
      browser); it's kept in this tab's session storage and taken out of the address at once */
   const params = new URLSearchParams(location.search);
   let token = null;
@@ -172,7 +172,7 @@
     if (!S) return;
     $("balance").textContent = money(S.balance);
     $("balLabel").textContent = S.real ? "Wallet" : "Fun credits";
-    $("modeNote").textContent = S.real ? "Real money · bets come from your RendoWin wallet · 18+ · play responsibly · " : "Fun credits · no real money · ";
+    $("modeNote").textContent = S.real ? "Real money · bets come from your WIN B casino wallet · 18+ · play responsibly · " : "Fun credits · no real money · ";
     $("roundId").textContent = S.round.id;
     $("hash").textContent = S.round.hash.slice(0, 20) + "…";
     $("minesSelect").options[0].textContent = "Mines: " + S.round.mines;
@@ -438,7 +438,7 @@
   socket.on("fatal", (m) => {
     toast(m, "err", 8000);
     $("statusTitle").textContent = m;
-    $("statusSub").textContent = realMode ? "Open Live Mines again from the RendoWin lobby, or play with fun credits." : "";
+    $("statusSub").textContent = realMode ? "Open Live Mines again from the WIN B casino lobby, or play with fun credits." : "";
   });
 
   /* the menu: the hamburger slides it in; it closes on the X, the dimmed page, Esc, or after a shortcut is used */

@@ -9,7 +9,7 @@
 
   /* unknown or missing ?game= — say so instead of silently showing another title */
   if (!game) {
-    document.title = "Game not found — RendoWin";
+    document.title = "Game not found — WIN B WIN";
     document.querySelector("main").innerHTML =
       '<div class="empty" style="margin:40px 0">' +
       "<div style='font-size:2rem;margin-bottom:8px'>🎰</div>" +
@@ -18,7 +18,7 @@
       '<a class="btn btn-primary btn-sm" href="games.html">Browse all games</a></div>';
     return;
   }
-  document.title = game.name + " — RendoWin";
+  document.title = game.name + " — WIN B WIN";
   /* switched off by an admin: say so plainly rather than offering a game that won't take bets */
   if (window.VB.isHidden && window.VB.isHidden(game)) {
     document.querySelector("main").innerHTML =
@@ -63,9 +63,9 @@
   document.getElementById("rtpBar").style.width = Math.min(100, game.rtp) + "%";
 
   document.getElementById("about").textContent =
-    game.name + " is an original RendoWin game in our " +
+    game.name + " is an original WIN B casino game in our " +
     game.category.toLowerCase() + " range. It supports an adjustable bet size, autoplay and a " +
-    "round history you can reopen at any time. All titles in this lobby are original works created for RendoWin.";
+    "round history you can reopen at any time. All titles in this lobby are original works created for WIN B casino.";
 
   /* ---- related (the section is hidden when no other game is similar) ---- */
   const related = document.getElementById("related");

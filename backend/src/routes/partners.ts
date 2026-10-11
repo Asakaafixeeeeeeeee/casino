@@ -3,7 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import type { Pool } from "pg";
 import { authenticate, requireUser } from "../middleware/authenticate.js";
 import {
-  type Affiliate, applyPartner, attributeReferral, checkReferral, PartnerError, partnerOf, partnerPayouts, partnerReferrals,
+  type Affiliate, applyPartner, attributeReferral, checkReferral, PartnerError, partnerCommissions, partnerOf, partnerPayouts, partnerReferrals,
   partnerSettings, partnerStatistics, partnerSummary, partnerView, partnerWallet, recordClick, requestPayout, savePayoutDetails,
   setOwnPromo,
 } from "../services/affiliates.js";
@@ -14,7 +14,7 @@ import {
  *                    GET  /check                  is this link code / promo code valid (and the same partner)? before sign-up
  *   signed in        GET /me, POST /apply         where your partner application stands; apply
  *                    POST /attribute              link a newly opened account to the partner who sent it (link or promo code)
- *   partners         GET /summary, /referrals, /statistics, /wallet, /settings, /payouts   (ACTIVE or SUSPENDED: read only)
+ *   partners         GET /summary, /referrals, /statistics, /wallet, /settings, /commissions, /payouts   (ACTIVE or SUSPENDED: read only)
  *   ACTIVE partners  POST /payouts, /settings/promo, /settings/payout-details
  * Each partner only ever sees their own data. An admin runs the programme from the admin dashboard (routes/admin.ts).
  */
@@ -106,6 +106,7 @@ export function partnersRouter(db: Pool): Router {
   r.get("/statistics", ...look, send((req) => partnerStatistics(db, partner(req), q(req))));
   r.get("/wallet", ...look, send((req) => partnerWallet(db, partner(req))));
   r.get("/settings", ...look, send((req) => partnerSettings(db, partner(req))));
+  r.get("/commissions", ...look, send((req) => partnerCommissions(db, partner(req), q(req))));
   r.get("/payouts", ...look, send((req) => partnerPayouts(db, partner(req).user_id)));
 
   r.post("/payouts", ...act, send((req) => requestPayout(db, partner(req), req.body ?? {})));

@@ -42,14 +42,14 @@
     '<span class="me-partner"><i style="background:' + m.color + (m.ink ? ";color:" + m.ink : ";color:#fff") + '">' +
     m.initials + "</i>" + U.esc(m.name) + "</span>").join("");
 
-  /* ---------------- other accounts: the US dollar account and RendoWin Points ---------------- */
+  /* ---------------- other accounts: the US dollar account and WIN B Points ---------------- */
   function paintAccounts(data, points) {
     const others = Array.isArray(data.otherAccounts) ? data.otherAccounts : [];
     const fmt = (v, code) => Number(v || 0).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: code === "GHS" || code === "USD" ? 2 : 8 });
     const rows = others.map((a) =>
       '<div class="me-account"><span class="me-acc-sym">' + U.esc(a.symbol || a.currencyCode) + '</span><span class="me-acc-name">' + U.esc(a.name) +
       "<small>" + U.esc(a.currencyCode) + " account</small></span><b>" + U.esc(a.symbol || "") + " " + fmt(a.available, a.currencyCode) + "</b></div>")
-      .concat(['<div class="me-account"><span class="me-acc-sym">★</span><span class="me-acc-name">RendoWin Points<small>Loyalty rewards</small></span><b>' + points.toLocaleString("en-GB") + " pts</b></div>"]);
+      .concat(['<div class="me-account"><span class="me-acc-sym">★</span><span class="me-acc-name">WIN B Points<small>Loyalty rewards</small></span><b>' + points.toLocaleString("en-GB") + " pts</b></div>"]);
     $("meAccountsList").innerHTML = rows.join("") +
       '<p class="me-acc-note">Use Convert to move money between your cedi and dollar accounts. Deposits and withdrawals are in cedis.</p>';
     const usd = others.find((a) => a.currencyCode === "USD");
@@ -314,7 +314,7 @@
         '<div class="me-streak"><span class="me-streak-flame">' + U.icon("flame") + "</span>" +
         '<strong>' + days + (days === 1 ? " day" : " days") + "</strong><span>in a row</span></div>" +
         '<div class="me-week">' + week + "</div>" +
-        '<p class="me-sheet-note">Best streak: <b>' + best + (best === 1 ? " day" : " days") + "</b>. Open RendoWin every day to keep it going — " +
+        '<p class="me-sheet-note">Best streak: <b>' + best + (best === 1 ? " day" : " days") + "</b>. Open WIN B casino every day to keep it going — " +
         "days are counted on this device.</p>");
     },
 
@@ -333,8 +333,8 @@
     },
 
     rate() {
-      sheet("Rate RendoWin",
-        '<p class="me-sheet-note">How are you enjoying RendoWin?</p>' +
+      sheet("Rate WIN B casino",
+        '<p class="me-sheet-note">How are you enjoying WIN B casino?</p>' +
         '<div class="me-stars" role="radiogroup" aria-label="Rating">' +
         [1, 2, 3, 4, 5].map((n) => '<button type="button" role="radio" aria-checked="false" aria-label="' + n + " star" + (n > 1 ? "s" : "") +
           '" data-star="' + n + '">' + U.icon("star") + "</button>").join("") +
@@ -361,7 +361,7 @@
           e.currentTarget.disabled = true;
           const ok = await sendFeedback({ kind: "rating", rating, message: body.querySelector("#meRateText").value },
             body.querySelector(".me-sheet-status"));
-          if (ok) body.innerHTML = thanks("Your rating helps us make RendoWin better.");
+          if (ok) body.innerHTML = thanks("Your rating helps us make WIN B casino better.");
           else e.currentTarget.disabled = false;
         });
       });
@@ -385,7 +385,7 @@
         send.addEventListener("click", async () => {
           send.disabled = true;
           const ok = await sendFeedback({ kind: "idea", message: text.value }, body.querySelector(".me-sheet-status"));
-          if (ok) body.innerHTML = thanks("Thanks for the idea — it's been sent to the RendoWin team.");
+          if (ok) body.innerHTML = thanks("Thanks for the idea — it's been sent to the WIN B casino team.");
           else send.disabled = false;
         });
         text.focus();
@@ -397,7 +397,7 @@
       const version = script ? new URL(script.src, location.href).searchParams.get("v") : null;
       sheet("Update app",
         '<div class="me-done"><span class="me-done-ico">' + U.icon("refresh") + "</span><h3>You're up to date</h3>" +
-        "<p>RendoWin runs in your browser and updates itself" + (version ? " (version " + U.esc(version) + ")" : "") +
+        "<p>WIN B casino runs in your browser and updates itself" + (version ? " (version " + U.esc(version) + ")" : "") +
         ". If something looks out of date, reload to fetch the newest version.</p>" +
         '<button class="btn btn-primary btn-lg btn-block" type="button" id="meReload">Reload now</button></div>',
       (body) => body.querySelector("#meReload").addEventListener("click", () => location.reload()));
@@ -421,7 +421,7 @@
     dlg.setAttribute("aria-describedby", "meDlgText");
     dlg.innerHTML =
       '<div class="me-dialog-card"><span class="me-dialog-ico">' + U.icon("logout") + "</span>" +
-      '<h2 id="meDlgTitle">Log out?</h2><p id="meDlgText">Are you sure you want to log out of RendoWin?</p>' +
+      '<h2 id="meDlgTitle">Log out?</h2><p id="meDlgText">Are you sure you want to log out of WIN B casino?</p>' +
       '<div class="me-dialog-actions"><button class="btn btn-ghost btn-lg" type="button" data-no>Cancel</button>' +
       '<button class="btn btn-danger btn-lg" type="button" data-yes>Log out</button></div></div>';
     document.body.appendChild(dlg);

@@ -322,7 +322,7 @@ async function postAdjustment(db: Pool, admin: string, uid: string, amount: numb
     await postMovement(client, {
       idempotencyKey: `adjust:${key}`,
       entryType: "ADJUSTMENT",
-      description: amount > 0 ? "Balance credited by RendoWin" : "Balance debited by RendoWin",
+      description: amount > 0 ? "Balance credited by WIN B casino" : "Balance debited by WIN B casino",
       reason,
       createdBy: admin,
       legs: amount > 0

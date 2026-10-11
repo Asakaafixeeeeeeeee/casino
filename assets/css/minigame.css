@@ -1,4 +1,4 @@
-/* RendoWin mini-games: what the house games share. Header and menu, balance, bet slider and chips, result card,
+/* WIN B casino mini-games: what the house games share. Header and menu, balance, bet slider and chips, result card,
    the fixed action bar, dialogs and the bottom sheet. Each game colours it with the --mg-* tokens on its <body> class.
    Builds on styles.css (tokens, buttons, toasts, chat sheet). */
 .mg-page {

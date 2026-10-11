@@ -160,7 +160,7 @@
     const list = filtered();
     const [label, icon, tone] = heading();
     titleEl.innerHTML = U.icon(icon, tone) + label;
-    document.title = label + " — RendoWin";
+    document.title = label + " — WIN B WIN";
 
     const narrowed = state.volatility || state.q;
     countEl.textContent =

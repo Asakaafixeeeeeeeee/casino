@@ -662,13 +662,17 @@
       : empty(pt.q ? "No partners match." : view === "PENDING" ? "No applications waiting." : "No partners here yet.", "star");
   }
   /* Approve / Reject straight from the Applications list */
+  /* a new partner's unique referral link, to copy and send them */
+  const refLinkNote = (code) => "Their referral link: <b>" + esc(location.origin + "/?ref=" + code) + "</b> " +
+    '<button class="btn btn-ghost btn-sm" type="button" data-copy="' + esc(location.origin + "/?ref=" + code) + '">Copy link</button>';
   async function partnerQuick(btn) {
     const status = btn.dataset.pact;
     if (!(await confirmStatus(status, btn.dataset.from, btn.dataset.name))) return;
     btn.disabled = true;
     const r = await api("/partners/" + encodeURIComponent(btn.dataset.id), { status });
     btn.disabled = false;
-    flash(r.ok ? "ok" : "error", r.ok ? esc(btn.dataset.name) + ": " + STATUS_DONE[status] : errText(r, "Couldn't update the partner."));
+    flash(r.ok ? "ok" : "error", r.ok ? esc(btn.dataset.name) + ": " + STATUS_DONE[status] + (status === "ACTIVE" ? " " + refLinkNote(r.data.code) : "")
+      : errText(r, "Couldn't update the partner."));
     refreshBadges();
     if (state.tab === "partners") loadPartnerList();
   }
@@ -963,7 +967,7 @@
         return say(errText(r, "Couldn't make them a partner."));
       }
       s.close();
-      flash("ok", esc(b.dataset.name) + " is now a partner (Partner ID " + esc(r.data.code) + ").");
+      flash("ok", esc(b.dataset.name) + " is now a partner (Partner ID " + esc(r.data.code) + "). " + refLinkNote(r.data.code));
       refreshBadges();
       if (state.tab === "partners") loadPartners();
       openPartner(id);
@@ -1620,7 +1624,7 @@
     mines: { title: "Mines Signal", lead: "Admin only: where the hidden mines are in the rounds being played." },
     aviator: { title: "Aviator", lead: "Watch rounds and bets live, pause the game, and set its published RTP and bet limits." },
     partners: { title: "Partners", lead: "Partners earn a share of the net gaming revenue (players' losses) from the players they bring in, less a deduction on those players' net winnings. Approve applications, set rates, pay commission and change the programme's settings.", actions: '<button class="btn btn-primary btn-sm" type="button" data-add-partner>' + U.icon("plus") + "Add partner</button>" },
-    support: { title: "Support", lead: "Players write from the chat button on every page; your replies show in their chat as “RendoWin Support”. Unread conversations come first." },
+    support: { title: "Support", lead: "Players write from the chat button on every page; your replies show in their chat as “WIN B casino Support”. Unread conversations come first." },
   };
   const panelOf = (tab) => document.querySelector('[data-panel="' + tab + '"]');
   function showTab(tab, reload) {
@@ -1653,7 +1657,7 @@
     /* the overview's "needs your attention" cards follow the same counts */
     if (state.tab === "overview" && $("ovAttn")) $("ovAttn").innerHTML = attention();
     /* unread support messages show in the browser tab's title too, for an admin working in another tab */
-    document.title = (w.support ? "(" + w.support + ") " : "") + "Admin | RendoWin";
+    document.title = (w.support ? "(" + w.support + ") " : "") + "Admin | WIN B WIN";
   }
 
   /* the sections menu: beside the page on a computer; on a phone it slides in from the menu button */

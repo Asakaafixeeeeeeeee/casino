@@ -1,4 +1,4 @@
-/* RendoWin accounts server: register, log in, log out and reset a password, so an account works on any device.
+/* WIN B casino accounts server: register, log in, log out and reset a password, so an account works on any device.
    It stores sign-in details only — no balances or payments; the site's fun-credit wallet stays in each browser.
    No framework — Node's http module and Postgres (see db.js).
 
@@ -27,7 +27,7 @@ const REMEMBER_MS = 30 * 24 * 3600 * 1000;
 const SESSION_MS = 12 * 3600 * 1000;
 
 const USER_RE = /^[A-Za-z0-9]{4,16}$/;
-const RESERVED = ["admin", "support", "rendowin", "voltabet", "test", "demo", "root", "system", "moderator"];
+const RESERVED = ["admin", "support", "rendowin", "winb", "winbwin", "winbcasino", "voltabet", "test", "demo", "root", "system", "moderator"];
 const MOBILE_PREFIXES = ["020", "023", "024", "025", "026", "027", "050", "053", "054", "055", "056", "057", "059"];
 
 /* ---------------- passwords: scrypt ---------------- */
@@ -501,7 +501,7 @@ async function main() {
       send(res, 500, { error: "Something went wrong on our side. Try again in a moment." });
     }
   });
-  server.listen(PORT, () => console.log(`RendoWin accounts on http://localhost:${PORT} (${db.kind})`));
+  server.listen(PORT, () => console.log(`WIN B casino accounts on http://localhost:${PORT} (${db.kind})`));
 }
 
 main().catch((err) => {

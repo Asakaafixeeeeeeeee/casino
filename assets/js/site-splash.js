@@ -1,4 +1,4 @@
-/* The site's splash screen — shown the moment RendoWin opens: the R mark pulsing on a dark gold-lit backdrop, the
+/* The site's splash screen — shown the moment WIN B casino opens: the R mark pulsing on a dark gold-lit backdrop, the
    wordmark, a line about the lobby and a loading bar. It fades into the home page once the page has loaded (and at
    least SHOW_MS has passed, so it never just flickers); a tap skips it. Shown once per visit: moving between pages
    or coming back within the session doesn't repeat it.
@@ -63,12 +63,12 @@
   const root = document.createElement("div");
   root.className = "vb-site-splash";
   root.setAttribute("role", "status");
-  root.setAttribute("aria-label", "Loading RendoWin");
+  root.setAttribute("aria-label", "Loading WIN B casino");
   root.innerHTML =
     '<div class="vb-ss-age">18+ · PLAY RESPONSIBLY</div>' +
     '<div class="vb-ss-in">' +
-      '<div class="vb-ss-mark"><img src="assets/img/rendowin-mark.svg" alt=""></div>' +
-      '<div class="vb-ss-word"><img src="assets/img/rendowin-wordmark.svg" alt="RendoWin"></div>' +
+      '<div class="vb-ss-mark"><img src="assets/img/winb-mark.svg" alt=""></div>' +
+      '<div class="vb-ss-word"><img src="assets/img/winb-wordmark.svg" alt="WIN B casino"></div>' +
       '<p class="vb-ss-line">Instant games · Real money</p>' +
       '<div class="vb-ss-bar"><i></i></div>' +
       '<div class="vb-ss-row"><span class="vb-ss-msg">Loading…</span><span class="vb-ss-pct">0%</span></div>' +

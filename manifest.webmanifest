@@ -1,6 +1,6 @@
 {
-  "name": "WinB Casino",
-  "short_name": "WinB Casino",
+  "name": "WIN B casino",
+  "short_name": "WIN B casino",
   "id": "/",
   "start_url": "/index.html",
   "scope": "/",
@@ -8,9 +8,9 @@
   "background_color": "#000000",
   "theme_color": "#0d0e10",
   "icons": [
-    { "src": "assets/img/app/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "assets/img/app/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "assets/img/app/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "assets/img/app/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "assets/img/app/w-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/img/app/w-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/img/app/w-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "assets/img/app/w-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

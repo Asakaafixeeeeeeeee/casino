@@ -1,4 +1,4 @@
-/* RendoWin mini-games: what the house games share. The balance (fun credits or the demo wallet), the bet slider and
+/* WIN B casino mini-games: what the house games share. The balance (fun credits or the demo wallet), the bet slider and
    chips, the header menu (mode, top-up, sound, rules, chat), sounds, confetti and screen-reader announcements.
    Each game page uses the same markup with its own id prefix (sbBalance, rbBalance, …) and calls VBMini.create(). */
 (function (global) {

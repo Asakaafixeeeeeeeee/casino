@@ -1,5 +1,5 @@
 /* Game splash screen — shown the moment a game page opens: the game's picture (its tile art from data.js) on a
-   blurred copy of itself, the game's name, the RendoWin mark and a loading bar. It fades into the game once the page
+   blurred copy of itself, the game's name, the WIN B casino mark and a loading bar. It fades into the game once the page
    has loaded (and at least SHOW_MS has passed, so it never just flickers); a tap skips it.
    Loaded in <head> right after data.js, before the page body exists, so the game never shows through first. */
 (function () {
@@ -76,7 +76,7 @@
   root.innerHTML =
     '<div class="vb-splash-bg' + (game.thumb ? '" style="background-image:url(' + esc(game.thumb) + ')"' : ' hue"') + "></div>" +
     '<div class="vb-splash-in">' +
-      '<div class="vb-splash-mark"><img src="assets/img/rendowin-mark.svg" alt="">RENDOWIN</div>' +
+      '<div class="vb-splash-mark"><img src="assets/img/winb-mark.svg" alt="">WIN B CASINO</div>' +
       '<div class="vb-splash-art" style="--glow:hsl(' + game.hue + ' 90% 55% / .45)">' +
         (game.thumb ? '<img src="' + esc(game.thumb) + '" alt="">' : '<span class="emoji" aria-hidden="true">' + game.icon + "</span>") +
       "</div>" +

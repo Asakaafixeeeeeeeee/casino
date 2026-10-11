@@ -54,7 +54,7 @@
   const API = window.VB_PAYMENT_API ||
     (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? "http://localhost:8781" : "https://asakaa-balance.onrender.com");
   $("playTag").textContent = real ? "Real money" : "Free credits";
-  $("playTag").title = real ? "Bets come from your RendoWin wallet" : "Every session starts with GHS 3,000 of free credits";
+  $("playTag").title = real ? "Bets come from your WIN B casino wallet" : "Every session starts with GHS 3,000 of free credits";
   $("playTag").classList.toggle("is-real", real);
 
   /* ---------------- state ---------------- */

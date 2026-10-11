@@ -1,4 +1,4 @@
-/* RendoWin — mobile-first casino UI. Premium dark casino theme with amber and ember accents. */
+/* WIN B casino — mobile-first casino UI. Premium dark casino theme with amber and ember accents. */
 :root {
   --bg: #0d0e10;
   --bg-raised: #131519;
@@ -127,7 +127,7 @@ p { margin: 0 0 1rem; color: var(--muted); }
   box-shadow: 0 1px 0 rgba(255, 200, 61, .03);
 }
 .header-inner { height: 100%; display: flex; align-items: center; gap: 16px; }
-/* logo: R emblem + RENDOWIN wordmark, both SVG images */
+/* logo: R emblem + WIN B CASINO wordmark, both SVG images */
 .brand { display: inline-flex; align-items: center; gap: 8px; flex: none; }
 .brand-mark { display: block; width: 32px; height: 32px; filter: drop-shadow(0 4px 12px rgba(255, 200, 61, .3)); }
 .brand-word { display: block; width: auto; height: 18px; }

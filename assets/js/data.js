@@ -1,4 +1,4 @@
-/* RendoWin — invented catalogue data. No third-party game or provider names are used. */
+/* WIN B casino — invented catalogue data. No third-party game or provider names are used. */
 (function (global) {
   "use strict";
 
@@ -35,7 +35,7 @@
 
   const rand = seeded(20260419);
 
-  /* the lobby: RendoWin's own games, each played on its own full-screen page */
+  /* the lobby: WIN B casino's own games, each played on its own full-screen page */
   const games = [
     /* one live round for everybody (backend games/skyRush.ts, page aviator.html): P(crash ≥ m) = 97% ÷ m, each round's
        seed fingerprint is published before take-off and the seed after it */
