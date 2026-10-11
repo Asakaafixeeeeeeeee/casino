@@ -191,8 +191,7 @@
   const contact = {
     email: "",                      /* e.g. "support@rendowin.com" */
     phones: [                       /* { label, number } — more than one is fine */
-      { label: "Customer care", number: "+233 55 782 5665" },
-      { label: "Customer care", number: "+233 50 182 4426" }
+      { label: "Customer care", number: "+233 55 618 5004" }
     ],
     whatsapp: "",                   /* e.g. "+233240000000" (digits only, with the country code) */
     hours: "8:00 am – 10:00 pm GMT, every day"
