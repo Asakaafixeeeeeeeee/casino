@@ -73,7 +73,7 @@ export async function requestWithdrawal(
       [user.id, journalId, amountMajor, user.phone]
     );
     await client.query("COMMIT");
-    notifyPendingWithdrawal(amountMajor, user.phone); // emailed in the background; never blocks the request
+    notifyPendingWithdrawal(db, user.id, amountMajor, user.phone); // emailed in the background; never blocks the request
     return rows[0]!;
   } catch (e) {
     await client.query("ROLLBACK");
