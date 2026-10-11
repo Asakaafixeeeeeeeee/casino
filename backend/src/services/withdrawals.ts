@@ -4,11 +4,8 @@ import type { Pool, PoolClient } from "pg";
 import { completeWithdrawal, refundWithdrawal, withdraw } from "./balanceService.js";
 import {
   checkTellerStatus,
-  initiatePayout,
   networkForPhone,
-  newTxId,
   reasonText,
-  TellerRequestError,
   verdict,
   type TellerConfig,
 } from "./teller.js";
@@ -159,53 +156,23 @@ const samePhone = (a: string | null | undefined, b: string | null | undefined) =
 };
 
 /**
- * An admin approves: the row is claimed atomically (so two clicks can never pay twice), then TheTeller is asked
- * to pay. A clear refusal returns the money; a timeout or server error leaves it PAYING for a status check.
+ * An admin approves: withdrawals are paid by hand, so this only marks the request approved (PAID). Nothing is sent to
+ * TheTeller and no balance changes (the money left the player's balance when they asked). Only a REQUESTED row moves,
+ * atomically, so two clicks (or an approve racing a reject) decide it once.
  */
 export async function payWithdrawal(
   db: Pool,
-  config: TellerConfig,
   id: string,
   admin: string
-): Promise<{ status: "PAID" | "DECLINED" | "PAYING"; note: string | null }> {
+): Promise<{ status: "PAID"; note: string }> {
   const owner = (await db.query<{ phone: string }>(`SELECT phone FROM withdrawals WHERE id = $1`, [id])).rows[0];
-  if (owner && samePhone(owner.phone, admin)) throw new WithdrawalError("own_withdrawal", "Another admin has to approve your own withdrawal", 403);
-  const txId = newTxId();
-  const { rows } = await db.query<WithdrawalRow>(
-    `UPDATE withdrawals SET status = 'PAYING', transaction_id = $2, decided_by = $3, updated_at = now()
-      WHERE id = $1 AND status = 'REQUESTED' RETURNING *`,
-    [id, txId, admin]
-  );
-  const w = rows[0];
+  if (!owner) throw new WithdrawalError("not_found", "No such withdrawal", 404);
+  if (samePhone(owner.phone, admin)) throw new WithdrawalError("own_withdrawal", "Another admin has to approve your own withdrawal", 403);
+  const note = "Approved by an admin (paid manually)";
+  const w = await settleWithdrawal(db, id, "paid", note, admin, ["REQUESTED"]);
   if (!w) throw new WithdrawalError("already_decided", "This withdrawal isn't waiting for approval", 409);
-  await logAction(db, admin, "withdrawal.pay", w.user_id, { withdrawal: id, amount: Number(w.amount), transaction: txId });
-
-  const network = networkForPhone(w.phone);
-  if (!network) {
-    const note = `${w.phone || "No number"} is not a mobile money number`;
-    await settleWithdrawal(db, id, "declined", note);
-    return { status: "DECLINED", note };
-  }
-  try {
-    await initiatePayout(config, {
-      transactionId: txId,
-      amountMajor: Number(w.amount),
-      phone: w.phone,
-      network,
-      desc: `RendoWin withdrawal ${txId}`,
-    });
-    await settleWithdrawal(db, id, "paid", "Paid by TheTeller");
-    return { status: "PAID", note: null };
-  } catch (err) {
-    const note = (err as Error).message || "TheTeller payout failed";
-    if (err instanceof TellerRequestError && err.declined) {
-      await settleWithdrawal(db, id, "declined", note);
-      return { status: "DECLINED", note };
-    }
-    // may have been paid: keep it PAYING until TheTeller's status says otherwise
-    await db.query(`UPDATE withdrawals SET gateway_note = $2, updated_at = now() WHERE id = $1`, [id, note]);
-    return { status: "PAYING", note };
-  }
+  await logAction(db, admin, "withdrawal.approve", w.user_id, { withdrawal: id, amount: Number(w.amount) });
+  return { status: "PAID", note };
 }
 
 /** Asks TheTeller about a payout that didn't get a final answer, and settles it once it has one. */

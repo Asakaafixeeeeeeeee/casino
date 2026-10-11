@@ -666,10 +666,9 @@
     ["020", "050"].includes(p.slice(0, 3)) ? "Telecel" :
     ["026", "027", "056", "057"].includes(p.slice(0, 3)) ? "AirtelTigo" : "Not mobile money";
   function withdrawalRow(w) {
-    const payable = state.me && state.me.payoutsEnabled;
     const actions =
       w.status === "REQUESTED"
-        ? '<button class="btn btn-primary btn-sm" type="button" data-pay="' + w.id + '"' + (payable ? "" : " disabled") + ">Pay</button>" +
+        ? '<button class="btn btn-primary btn-sm" type="button" data-pay="' + w.id + '">Approve</button>' +
           '<button class="btn btn-ghost btn-sm" type="button" data-reject="' + w.id + '">Reject</button>'
         : w.status === "PAYING" ? '<button class="btn btn-ghost btn-sm" type="button" data-recheck="' + w.id + '">Recheck</button>' : "";
     return '<div class="txr-row adm-row adm-item">' +
@@ -685,10 +684,8 @@
   }
   async function loadWithdrawals() {
     const panel = panelOf("withdrawals");
-    const head = chips("wstatus", [["REQUESTED", "Waiting"], ["PAYING", "Sending"], ["PAID", "Paid"], ["DECLINED", "Returned"]], wd.status) +
-      (state.me && !state.me.payoutsEnabled
-        ? "<div class='alert alert-info'>Payouts are switched off: TheTeller's keys (<b>TELLER_MERCHANT_ID</b>, <b>TELLER_API_USERNAME</b>, <b>TELLER_API_KEY</b>) aren't set on the asakaa-balance service in Render. You can still reject requests, which returns the money to the player.</div>"
-        : "");
+    const head = chips("wstatus", [["REQUESTED", "Waiting"], ["PAID", "Approved"], ["DECLINED", "Rejected"]], wd.status) +
+      "<div class='alert alert-info'>Withdrawals are paid by hand: send the money to the player yourself, then press <b>Approve</b> (it only changes the status). <b>Reject</b> returns the money to the player's balance.</div>";
     panel.innerHTML = head + loading;
     const r = await api("/withdrawals?status=" + wd.status);
     if (state.tab !== "withdrawals") return;
@@ -708,15 +705,11 @@
     const who = card.querySelector("strong").textContent;
     const amount = card.querySelector(".txr-end b").textContent;
     if (btn.dataset.pay) {
-      const ok = await ask({ title: "Send " + esc(amount) + "?", text: "TheTeller will pay " + esc(who) + " from your float account. This can't be undone.", yes: "Pay now" });
+      const ok = await ask({ title: "Approve " + esc(amount) + " for " + esc(who) + "?", text: "This only marks it approved: no money is sent by the site. Pay the player yourself. It can't be undone.", yes: "Approve" });
       if (ok === null) return;
       btn.disabled = true;
       const r = await api("/withdrawals/" + btn.dataset.pay + "/pay", {});
-      if (!r.ok) flash("error", errText(r, "Payout failed"));
-      else flash(r.data.status === "PAID" ? "ok" : r.data.status === "DECLINED" ? "error" : "info",
-        r.data.status === "PAID" ? "Paid " + esc(amount) + " to " + esc(who) + "." :
-        r.data.status === "DECLINED" ? "TheTeller refused the payout, so the money went back to the player: " + esc(r.data.note || "") :
-        "No final answer from TheTeller yet — it's under Sending. Use Recheck in a few minutes. " + esc(r.data.note || ""));
+      flash(r.ok ? "ok" : "error", r.ok ? "Approved " + esc(amount) + " for " + esc(who) + "." : errText(r, "Couldn't approve it"));
     } else if (btn.dataset.reject) {
       const reason = await ask({ title: "Reject this withdrawal?", text: esc(amount) + " goes back to " + esc(who) + "'s balance.", yes: "Reject", danger: true, input: true, placeholder: "Reason shown to the player" });
       if (reason === null) return;

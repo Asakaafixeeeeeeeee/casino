@@ -74,53 +74,36 @@ test("Rejecting a request returns the money, and can't happen twice", async () =
   assert.equal(await balance(), 100);
 });
 
-test("Approving pays the registered number from the float, exactly as the guide specifies", async () => {
+test("Approving only marks it approved: nothing is sent to TheTeller and no balance changes", async () => {
   const { db, id, balance, row, userId } = await withRequest();
   let result: Awaited<ReturnType<typeof payWithdrawal>> | undefined;
-  const sent = await withTeller(json({ code: "000", status: "approved", reason: "Transaction successful" }), async () => {
-    result = await payWithdrawal(db, config, id, "0200000001");
+  const sent = await withTeller(json({ code: "000", status: "approved" }), async () => {
+    result = await payWithdrawal(db, id, "0200000001");
   });
   assert.equal(result?.status, "PAID");
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0]!.url, "https://test.theteller.net/v1.1/transaction/process");
-  assert.deepEqual(
-    { ...sent[0]!.body, transaction_id: "x", desc: "x" },
-    {
-      account_number: "+233241234194", merchant_id: "TTM-00012020", transaction_id: "x", processing_code: "404000",
-      amount: "000000004000", "r-switch": "FLT", desc: "x", account_issuer: "MTN", pass_code: "float-pass",
-    }
-  );
+  assert.equal(sent.length, 0, "withdrawals are paid by hand: no gateway call");
   assert.equal((await row()).status, "PAID");
-  assert.equal(await balance(), 60); // already debited at request time
+  assert.equal(await balance(), 60); // already debited at request time; approving adds nothing back
 
-  // a second approval click does nothing
-  await assert.rejects(() => payWithdrawal(db, config, id, "0200000001"), WithdrawalError);
+  // a second approval click does nothing, and a rejection can't refund it afterwards
+  await assert.rejects(() => payWithdrawal(db, id, "0200000001"), WithdrawalError);
+  await assert.rejects(() => rejectWithdrawal(db, id, "too late", "0200000001"), WithdrawalError);
+  assert.equal(await balance(), 60);
   const list = await listTransactions(db, userId);
   assert.equal(list.find((t) => t.kind === "withdrawal")?.status, "success");
 });
 
-test("A clear refusal from TheTeller returns the money with the reason", async () => {
-  const { db, id, balance, row, userId } = await withRequest();
-  await withTeller(json({ status: "declined", reason: "Insufficient float balance" }), async () => {
-    const r = await payWithdrawal(db, config, id, "0200000001");
-    assert.equal(r.status, "DECLINED");
-  });
+test("A rejected request can't be approved afterwards; the money stays returned to the player", async () => {
+  const { db, id, balance, row } = await withRequest();
+  await rejectWithdrawal(db, id, "Wrong number", "0200000001");
+  await assert.rejects(() => payWithdrawal(db, id, "0200000001"), WithdrawalError);
+  assert.equal((await row()).status, "DECLINED");
   assert.equal(await balance(), 100);
-  const w = await row();
-  assert.equal(w.status, "DECLINED");
-  assert.equal(w.gateway_note, "Insufficient float balance");
-  const t = (await listTransactions(db, userId)).find((x) => x.kind === "withdrawal");
-  assert.equal(t?.status, "failed");
-  assert.equal(t?.reason, "Insufficient float balance");
 });
 
-test("A timeout keeps the payout pending — never refunded — until a status check decides", async () => {
-  const { db, id, balance, row } = await withRequest();
-  await withTeller(async () => { throw new Error("The operation was aborted due to timeout"); }, async () => {
-    const r = await payWithdrawal(db, config, id, "0200000001");
-    assert.equal(r.status, "PAYING");
-  });
-  assert.equal((await row()).status, "PAYING");
+test("An older payout left PAYING is still settled by a status check, never refunded on a timeout", async () => {
+  const { db, id, balance } = await withRequest();
+  await db.query(`UPDATE withdrawals SET status = 'PAYING', transaction_id = '000000000077' WHERE id = $1`, [id]);
   assert.equal(await balance(), 60);
 
   await withTeller(json({ status: "pending" }), async () => {
@@ -130,17 +113,6 @@ test("A timeout keeps the payout pending — never refunded — until a status c
     assert.equal((await recheckWithdrawal(db, config, id)).status, "PAID");
   });
   assert.equal(await balance(), 60);
-});
-
-test("The float passcode is optional: without it a payout still goes, and no pass_code is sent", async () => {
-  const { db, id, row } = await withRequest();
-  const noPass = loadTellerConfig({ TELLER_BASE_URL: "https://test.theteller.net", TELLER_MERCHANT_ID: "m", TELLER_API_USERNAME: "u", TELLER_API_KEY: "k" });
-  const sent = await withTeller(json({ code: "000", status: "approved" }), async () => {
-    assert.equal((await payWithdrawal(db, noPass, id, "0200000001")).status, "PAID");
-  });
-  assert.equal(sent.length, 1);
-  assert.equal("pass_code" in sent[0]!.body, false);
-  assert.equal((await row()).status, "PAID");
 });
 
 test("Requests made before the withdrawals table existed are picked up by the migration", async () => {

@@ -48,13 +48,8 @@ export function adminRouter(db: Pool): Router {
     };
 
   r.get("/me", handle(async (_req, res) => {
-    let payouts = false;
-    try {
-      loadTellerConfig(process.env); /* payouts need TheTeller's keys; the float passcode is optional */
-      payouts = true;
-    } catch {
-      payouts = false;
-    }
+    /* withdrawals are paid by hand and approved here, so approving never depends on TheTeller */
+    const payouts = true;
     /* what's waiting for an admin, for the tab badges */
     const { rows } = await db.query(
       `SELECT (SELECT count(*) FROM withdrawals WHERE status = 'REQUESTED') AS withdrawals,
@@ -125,8 +120,8 @@ export function adminRouter(db: Pool): Router {
 
   r.post("/withdrawals/:id/pay", handle(async (req, res) => {
     const admin = requireUser(req);
-    const result = await payWithdrawal(db, loadTellerConfig(process.env), String(req.params.id), admin.phone);
-    console.log("[admin] %s paid withdrawal %s -> %s %s", admin.phone, req.params.id, result.status, result.note ?? "");
+    const result = await payWithdrawal(db, String(req.params.id), admin.phone);
+    console.log("[admin] %s approved withdrawal %s (paid manually)", admin.phone, req.params.id);
     res.json(result);
   }));
 

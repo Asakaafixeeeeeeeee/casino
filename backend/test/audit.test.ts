@@ -79,7 +79,7 @@ test("Nobody approves, rejects or credits their own money; withdrawal decisions 
   const gw = await gateway(200, { status: "approved", code: "000", reason: "ok" });
   try {
     /* the admin's number is the player's own, in another format */
-    await assert.rejects(payWithdrawal(db, gw.config, own.id, "+233 24 123 4567"), (e: unknown) => e instanceof WithdrawalError && e.code === "own_withdrawal");
+    await assert.rejects(payWithdrawal(db, own.id, "+233 24 123 4567"), (e: unknown) => e instanceof WithdrawalError && e.code === "own_withdrawal");
     await assert.rejects(rejectWithdrawal(db, own.id, "mine", "233241234567"), (e: unknown) => e instanceof WithdrawalError && e.code === "own_withdrawal");
     await assert.rejects(adjustBalance(db, "0241234567", userId, { amount: 500, reason: "my own goodwill", idempotency_key: key() }), /your own balance/);
     await assert.rejects(creditByPhone(db, "+233241234567", { phone: "0241234567", amount: 500, reason: "my own goodwill", idempotency_key: key() }), /your own balance/);
@@ -87,12 +87,13 @@ test("Nobody approves, rejects or credits their own money; withdrawal decisions 
     assert.equal(gw.seen.length, 0, "no payout was sent");
 
     /* another admin decides it, and the decision is logged */
-    const paid = await payWithdrawal(db, gw.config, own.id, "0209999001");
+    const paid = await payWithdrawal(db, own.id, "0209999001");
     assert.equal(paid.status, "PAID");
+    assert.equal(gw.seen.length, 0, "approving never calls the gateway");
     const other = await requestWithdrawal(db, { id: userId, phone: "0241234567" }, 10, key());
     await rejectWithdrawal(db, other.id, "Duplicate request", "0209999001");
     const log = (await db.query(`SELECT action FROM admin_actions WHERE admin = '0209999001' ORDER BY id`)).rows.map((r) => r.action);
-    assert.deepEqual(log, ["withdrawal.pay", "withdrawal.reject"]);
+    assert.deepEqual(log, ["withdrawal.approve", "withdrawal.reject"]);
   } finally {
     gw.close();
   }
