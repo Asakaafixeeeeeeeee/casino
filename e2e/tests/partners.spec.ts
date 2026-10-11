@@ -253,6 +253,7 @@ test("the whole flow on screen: apply, admin approves, dashboard opens, link tra
   const directPage = await directCtx.newPage();
   const direct = await register(directPage);
   await a.locator("[data-add-partner]").click();
+  await a.locator('[data-padd-mode="existing"]').click();
   await a.locator("#paQ").fill(direct.phone);
   await a.locator('form[data-form="plookup"] button[type=submit]').click();
   await a.locator("[data-make]").click();
@@ -298,4 +299,64 @@ test("the new name: WIN B WIN in the tab, WIN B casino on the pages, no RendoWin
   await expect(page.locator(".brand-mark").first()).toHaveAttribute("src", "assets/img/winb-mark.svg");
   await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "assets/img/winb-mark.svg");
   await expect(page.locator("footer")).toContainText("WIN B casino");
+});
+
+test("only lost deposited money earns: an admin credit never does, a real deposit does, and every record shows its working", async ({ browser, page, request }) => {
+  test.setTimeout(240_000);
+  const adminToken = await adminSession(request);
+  const partner = await register(page);
+  await request.post(`${API}/api/partners/apply`, { headers: auth(partner.token), data: { channel: "My football WhatsApp group (2,000 members)" } });
+  const row = (await (await request.get(`${API}/api/admin/partners?status=PENDING`, { headers: auth(adminToken) })).json()).partners
+    .find((p: { phone: string }) => p.phone === partner.phone);
+  await request.post(`${API}/api/admin/partners/${row.user_id}`, { headers: auth(adminToken), data: { status: "ACTIVE", revshare_pct: 20 } });
+
+  const ctx = await browser.newContext({ baseURL: "http://localhost:8808" });
+  const player = await ctx.newPage();
+  await player.goto(`/index.html?ref=${row.code}`);
+  await settle(player);
+  const p = await register(player);
+  await expect.poll(async () => (await (await request.get(`${API}/api/partners/referrals?range=all`, { headers: auth(partner.token) })).json()).referrals.length,
+    { timeout: 20_000 }).toBe(1);
+
+  /* 1. money an admin added (not a deposit): bets with it never earn commission, only wins deduct */
+  const credit = await request.post(`${API}/api/admin/credit`, { headers: auth(adminToken),
+    data: { phone: p.phone, amount: 30, reason: "e2e credit, not a deposit", idempotency_key: "adjust:e2e-" + Date.now() } });
+  expect(credit.status(), await credit.text()).toBe(200);
+  for (let i = 0; i < 3; i++) {
+    expect((await play(request, p.token, "volta-coin", { stake: 5, choice: { pick: "HEADS" }, idempotency_key: `round:credit-${Date.now()}-${i}` })).status).toBe(200);
+  }
+  const first = (await (await request.get(`${API}/api/partners/commissions?limit=50`, { headers: auth(partner.token) })).json()).commissions;
+  expect(first).toHaveLength(3);
+  for (const c of first) {
+    expect([c.depositStake, c.eligibleLoss]).toEqual([0, 0]);
+    expect(c.amount).toBeLessThanOrEqual(0);
+  }
+
+  /* 2. a real deposit: its losses earn 20%, wins deduct 10% of net winnings */
+  await deposit(player, 100);
+  await expect(player.locator("#msg")).toContainText("successful", { timeout: 30_000 });
+  let expected = first.reduce((s: number, c: { amount: number }) => cents(s + c.amount), 0);
+  let eligible = 0;
+  for (let i = 0; i < 4; i++) {
+    const r = await play(request, p.token, "volta-coin", { stake: 10, choice: { pick: "TAILS" }, idempotency_key: `round:dep-${Date.now()}-${i}` });
+    const payout = Number(r.body.payout);
+    if (payout < 10) eligible = cents(eligible + (10 - payout));
+    expected = cents(expected + commissionOf(10, payout, 20, 10));
+  }
+  const all = (await (await request.get(`${API}/api/partners/commissions?limit=50`, { headers: auth(partner.token) })).json()).commissions;
+  expect(all).toHaveLength(7);
+  for (const c of all.slice(0, 4)) expect(c.depositStake).toBe(10);
+  const sum = await (await request.get(`${API}/api/partners/summary`, { headers: auth(partner.token) })).json();
+  expect([sum.revenueShare.lifetime, sum.wallet.eligibleLosses, sum.deposits.total]).toEqual([expected, eligible, 100]);
+
+  /* the partner sees the working; the admin sees who the player is */
+  await page.goto("/partners.html");
+  await settle(page);
+  await expect(page.locator("#prtCommissions thead")).toContainText("From deposit");
+  await expect(page.locator("#prtCommissions tbody tr")).toHaveCount(7);
+  await expect.poll(async () => amountIn(await kpi(page, "Deposits by your players").textContent() || "")).toBe(100);
+  const detail = await (await request.get(`${API}/api/admin/partners/${row.user_id}`, { headers: auth(adminToken) })).json();
+  expect(detail.commissions).toHaveLength(7);
+  expect(detail.commissions[0].full_name).toBe(p.fullName);
+  expect(detail.lifetime.eligibleLosses).toBe(eligible);
 });

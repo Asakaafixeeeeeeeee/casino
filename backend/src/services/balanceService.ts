@@ -187,23 +187,42 @@ export async function postMovement(client: PoolClient, m: MovementInput): Promis
       // it only shrinks when the balance drops below it.
       const winningsCredit = leg.direction === "CREDIT" && WINNINGS_IN.has(m.entryType);
       const withdrawal = leg.direction === "DEBIT" && m.entryType === "WITHDRAWAL_REQUEST";
-      const r = await client.query<{ available: string }>(
+      // `deposit_funds` is the real deposited money in the balance (partners earn only on its losses). A deposit adds
+      // to it; any spend but a withdrawal uses it first (the part used is recorded on the leg, deposit_part); a
+      // cancelled or void bet gives back the part its stake took.
+      let depositIn = 0;
+      if (leg.direction === "CREDIT" && m.entryType === "DEPOSIT") depositIn = Number(qty);
+      if (leg.direction === "CREDIT" && m.entryType === "BET_VOID" && m.idempotencyKey.startsWith("void:")) {
+        const stake = await client.query<{ deposit_part: string | null }>(
+          `SELECT e.deposit_part FROM ledger_journal j
+             JOIN ledger_entries e ON e.journal_id = j.id AND e.user_id = $2 AND e.direction = 'DEBIT'
+            WHERE j.idempotency_key = $1 LIMIT 1`,
+          ["bet:" + m.idempotencyKey.slice(5), leg.userId]);
+        depositIn = Math.min(Number(qty), Number(stake.rows[0]?.deposit_part ?? 0));
+      }
+      const r = await client.query<{ available: string; deposit_used: string | null }>(
         leg.direction === "CREDIT"
           ? // Money in: upsert the row (created lazily on first credit) and add.
-            // Shares the debit query's parameter list: $1 amount, $2 user, $3 currency, $4 winnings/withdrawal.
-            `INSERT INTO user_balances (user_id, currency_code, available, withdrawable)
-               VALUES ($2, $3, $1, CASE WHEN $4::boolean THEN $1::numeric ELSE 0 END)
+            // Shares the debit query's parameter list: $1 amount, $2 user, $3 currency, $4 winnings/withdrawal,
+            // $5 the deposited money coming in.
+            `INSERT INTO user_balances (user_id, currency_code, available, withdrawable, deposit_funds)
+               VALUES ($2, $3, $1, CASE WHEN $4::boolean THEN $1::numeric ELSE 0 END, $5::numeric)
              ON CONFLICT (user_id, currency_code)
              DO UPDATE SET available = user_balances.available + EXCLUDED.available,
-                           withdrawable = user_balances.withdrawable + EXCLUDED.withdrawable
-             RETURNING available`
+                           withdrawable = user_balances.withdrawable + EXCLUDED.withdrawable,
+                           deposit_funds = user_balances.deposit_funds + EXCLUDED.deposit_funds
+             RETURNING available, NULL::numeric AS deposit_used`
           : // Money out: atomic overdraft guard. Returns nothing if insufficient (a withdrawal also needs winnings).
-            `UPDATE user_balances
+            // The CTE reads the row as it was, so the deposited money used is before minus after ($5 is always 0 on a
+            // debit; it's named only so both queries take the same parameters).
+            `WITH before AS (SELECT deposit_funds FROM user_balances WHERE user_id = $2 AND currency_code = $3 AND $5::numeric = 0)
+             UPDATE user_balances
                 SET available = available - $1,
-                    withdrawable = CASE WHEN $4::boolean THEN withdrawable - $1 ELSE LEAST(withdrawable, available - $1) END
+                    withdrawable = CASE WHEN $4::boolean THEN withdrawable - $1 ELSE LEAST(withdrawable, available - $1) END,
+                    deposit_funds = CASE WHEN $4::boolean THEN deposit_funds ELSE deposit_funds - LEAST($1, deposit_funds) END
                WHERE user_id = $2 AND currency_code = $3 AND available >= $1 AND (NOT $4::boolean OR withdrawable >= $1)
-               RETURNING available`,
-        [qty, leg.userId, leg.currencyCode, winningsCredit || withdrawal]
+               RETURNING available, (SELECT deposit_funds FROM before) - deposit_funds AS deposit_used`,
+        [qty, leg.userId, leg.currencyCode, winningsCredit || withdrawal, depositIn]
       );
 
       if (leg.direction === "DEBIT" && !r.rowCount) {
@@ -219,9 +238,10 @@ export async function postMovement(client: PoolClient, m: MovementInput): Promis
         );
       }
 
-      await client.query("UPDATE ledger_entries SET balance_after = $1 WHERE id = $2", [
+      await client.query("UPDATE ledger_entries SET balance_after = $1, deposit_part = $3 WHERE id = $2", [
         r.rows[0]!.available,
         entry.rows[0]!.id,
+        leg.direction === "DEBIT" ? r.rows[0]!.deposit_used ?? 0 : null,
       ]);
     }
   }

@@ -1,6 +1,8 @@
 /* WIN B casino Partners: apply, then (once an admin approves you) a revenue-share portal: dashboard, referrals,
-   statistics, wallet and settings. Access is enforced by the balance service: partner data only comes back for an
-   approved partner's own account. With ?preview=<user id> an admin sees that partner's portal, read only. */
+   statistics, wallet (your account wallet and, kept apart, your commission wallet), promo materials (flyers and banners),
+   game tools (real odds and finished rounds only), settings and support. Access is enforced by the balance service:
+   partner data only comes back for an approved partner's own account, and features an admin switched off are refused there.
+   With ?preview=<user id> an admin sees that partner's portal, read only. */
 (function () {
   "use strict";
   const U = window.VBUtil;
@@ -32,10 +34,20 @@
   const TODAY = () => new Date().toISOString().slice(0, 10);
 
   const state = {
-    partner: null, tab: "dashboard", readOnly: !!PREVIEW,
+    partner: null, tab: "dashboard", readOnly: !!PREVIEW, perms: null,
     ranges: { referrals: { range: "all" }, statistics: { range: "30d" } },
-    payMethod: "", saveMethod: "", settings: null,
+    payMethod: "", saveMethod: "", settings: null, txFilter: "all", txs: null, tool: "",
   };
+
+  /* features an admin can switch off for this partner (GET /me → permissions). The backend refuses a switched-off
+     feature whatever the page shows; hiding is only a courtesy. In admin preview everything is shown. */
+  const can = (k) => !state.perms || state.perms[k] !== false;
+  const TOOL_KEYS = ["tools_mines", "tools_aviator", "tools_crash", "tools_other"];
+  const isOff = (r) => !!(r && r.status === 403 && r.data && r.data.error === "feature_off");
+  const offBox = (msg, title) =>
+    '<div class="panel prt-off" role="note"><span class="prt-off-ico">' + U.icon("shield") + "</span><div><strong>" + esc(title || "Switched off for your account") +
+    "</strong><p>" + esc(msg || "This feature is switched off for your account. Contact support if you need it.") + "</p></div></div>";
+  const previewNote = (what) => '<div class="panel prt-off" role="note"><span class="prt-off-ico">' + U.icon("info") + "</span><div><strong>Not available in preview</strong><p>" + esc(what) + "</p></div></div>";
 
   let msgTimer = 0;
   function flash(kind, html) {
@@ -93,7 +105,17 @@
   }
 
   /* ---------------- the portal shell ---------------- */
-  const TABS = [["dashboard", "Dashboard"], ["referrals", "My Referrals"], ["statistics", "Statistics"], ["wallet", "Wallet"], ["settings", "Settings"]];
+  const ALL_TABS = [["dashboard", "Dashboard"], ["referrals", "My Referrals"], ["statistics", "Statistics"], ["wallet", "Wallet"],
+    ["promo", "Promo materials"], ["tools", "Game tools"], ["settings", "Settings"], ["support", "Support"]];
+  /* which tabs this partner sees: with the dashboard switched off, only Settings and Support */
+  function tabOn(id) {
+    if (!can("dashboard")) return id === "settings" || id === "support";
+    if (id === "referrals" || id === "statistics") return can("referral_stats");
+    if (id === "tools") return TOOL_KEYS.some(can);
+    return ALL_TABS.some((t) => t[0] === id);
+  }
+  const tabs = () => ALL_TABS.filter((t) => tabOn(t[0]));
+  const homeTab = () => (can("dashboard") ? "dashboard" : "settings");
   const link = () => location.origin + "/?ref=" + encodeURIComponent(state.partner.code);
 
   function drawPortal() {
@@ -102,17 +124,21 @@
       (PREVIEW ? '<div class="prt-preview">' + U.icon("shield") + "<span><b>Admin preview — read only</b> (partner " + esc(p.code) + ", " + esc(p.status) + ")</span></div>" : "") +
       (!PREVIEW && p.status === "SUSPENDED"
         ? '<div class="alert alert-info prt-notice">Your partner account is suspended: your link isn\'t counting new players, and payouts and changes are on hold. You can still see your figures. Contact support through the chat to find out more.</div>' : "") +
+      (can("dashboard") ? ""
+        : offBox("Your partner dashboard is switched off for your account at the moment, so your figures, wallet and promo materials aren't shown here. " +
+            "You can still update your settings and reach our team from Support.", "Partner dashboard unavailable")) +
       '<nav class="adm-tabs prt-tabs" role="tablist" aria-label="Partner portal">' +
-        TABS.map(([id, label]) => '<button type="button" role="tab" data-tab="' + id + '" aria-selected="false">' + label + "</button>").join("") +
+        tabs().map(([id, label]) => '<button type="button" role="tab" data-tab="' + id + '" aria-selected="false">' + label + "</button>").join("") +
       '</nav><div id="prtTab" role="tabpanel"></div>';
     const h = location.hash.slice(1);
-    show(TABS.some((t) => t[0] === h) ? h : "dashboard");
+    show(tabOn(h) ? h : homeTab());
   }
 
   /* a tab is drawn from scratch each time it's shown; a newer load makes an older one's answer stale */
   let loadSeq = 0;
   let lastLoad = 0;
   function show(tab) {
+    if (!tabOn(tab)) tab = homeTab();
     state.tab = tab;
     view.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
     if (location.hash.slice(1) !== tab) history.replaceState(null, "", "#" + tab);
@@ -125,27 +151,35 @@
   /* a failed load: the account may have stopped being a partner; otherwise say so with a retry */
   function failed(r, fallback, quiet) {
     if (r.status === 403 && !PREVIEW && r.data && r.data.error === "not_a_partner") return start();
+    /* a feature switched off since the page loaded: the server's own words, not a generic error */
+    if (isOff(r)) return ($("tabBody").innerHTML = offBox(r.data.message));
     if (quiet) return;
     $("tabBody").innerHTML = '<div class="alert alert-err">' + errText(r, fallback) + '</div><button class="btn btn-ghost btn-sm" type="button" data-retry>' + U.icon("refresh") + "Try again</button>";
   }
 
   const kpi = (label, value, sub, cls) =>
     '<div class="adm-kpi' + (cls ? " " + cls : "") + '"><span>' + label + "</span><strong>" + value + "</strong>" + (sub ? "<small>" + sub + "</small>" : "") + "</div>";
-  const terms = (s) => "You earn <b>" + pct(s.rate.pct) + "</b> of what your players lose; when a player wins, <b>" + pct(s.winDeductionPct) + "</b> of their net winnings is deducted.";
+  const terms = (s) => "You earn <b>" + pct(s.rate.pct) + "</b> of what your players lose from their own deposited money (losing money they won earns nothing); when a player wins, <b>" + pct(s.winDeductionPct) + "</b> of their net winnings is deducted.";
   const scheduled = (rate) => (rate.scheduled ? '<p class="hint">Your share changes to <b>' + pct(rate.scheduled.pct) + "</b> from " + whenTime(rate.scheduled.effective_from) + ".</p>" : "");
-  const linkRow = (id, value, what) =>
+  const linkRow = (id, value, what, share) =>
     '<div class="prt-linkrow"><input id="' + id + '" readonly value="' + esc(value) + '" aria-label="' + what + '">' +
-    '<button class="btn btn-primary btn-sm" type="button" data-copy="' + id + '" data-what="' + what + '">Copy</button></div>';
+    '<button class="btn btn-primary btn-sm" type="button" data-copy="' + id + '" data-what="' + what + '">Copy</button>' +
+    (share ? '<button class="btn btn-ghost btn-sm" type="button" data-share="' + id + '">' + U.icon("share") + "Share</button>" : "") + "</div>";
 
   /* ---------------- Dashboard ---------------- */
   const STATUS_WORD = { ACTIVE: ["ok", "Active"], SUSPENDED: ["bad", "Suspended"], PENDING: ["warn", "Pending"], REJECTED: ["bad", "Rejected"], DISABLED: ["bad", "Disabled"] };
   const VIA = { link: "Referral link", promo: "Promo code", "link+promo": "Link + promo code", admin: "Added by admin" };
   async function loadDashboard(seq, quiet) {
+    /* the referral list is its own feature (referral statistics): without it the dashboard still loads */
     const [sum, set, wal, refs, com] = await Promise.all([
-      get("summary"), get("settings"), get("wallet"), get("referrals", "range=all"), get("commissions", "limit=20"),
+      get("summary"), get("settings"), get("wallet"),
+      can("referral_stats") ? get("referrals", "range=all") : Promise.resolve(null), get("commissions", "limit=20"),
     ]);
     if (seq !== loadSeq || state.tab !== "dashboard") return;
-    for (const r of [sum, set, wal, refs, com]) if (!r.ok) return failed(r, "Couldn't load your dashboard.", quiet);
+    for (const r of [sum, set, wal, com]) if (!r.ok) return failed(r, "Couldn't load your dashboard.", quiet);
+    if (refs && !refs.ok && !isOff(refs)) return failed(refs, "Couldn't load your dashboard.", quiet);
+    const refsOff = !refs || !refs.ok;
+    const payOn = can("commission_withdrawals");
     const s = sum.data;
     const w = s.wallet;
     const rs = s.revenueShare;
@@ -153,17 +187,19 @@
     state.partner = Object.assign({}, state.partner, s.partner);
     const p = state.partner;
     const [stCls, stTxt] = STATUS_WORD[p.status] || ["", p.status];
-    const canPay = !state.readOnly && w.available >= w.minPayout;
-    const signups = refs.data.referrals.slice(0, 10);
+    const canPay = !state.readOnly && payOn && w.available >= w.minPayout;
+    const signups = refsOff ? [] : refs.data.referrals.slice(0, 10);
     const payouts = wal.data.payouts.slice(0, 5);
     const commissions = com.data.commissions;
     $("tabBody").innerHTML =
       /* the partner's unique link first: it's what they share */
       '<section class="panel prt-linkbox prt-mainlink">' +
-        '<span class="prt-label">Your unique referral link</span>' + linkRow("lnk", link(), "Your referral link") +
-        (p.link_live ? "" : '<p class="alert alert-info">Your link is switched off at the moment — new visitors through it won\'t become your players.</p>') +
+        (can("referral_links")
+          ? '<span class="prt-label">Your unique referral link</span>' + linkRow("lnk", link(), "Your referral link", true) +
+            (p.link_live ? "" : '<p class="alert alert-info">Your link is switched off at the moment — new visitors through it won\'t become your players.</p>')
+          : '<p class="alert alert-info">Your referral link is switched off. Contact support if you need it.</p>') +
         '<div class="prt-idrow"><span>Partner ID <b>' + esc(p.code) + "</b></span>" +
-          "<span>Promo code <b>" + (p.promo_code ? esc(p.promo_code) : "—") + "</b></span>" +
+          "<span>Promo code <b>" + (p.promo_code ? esc(p.promo_code) : "—") + "</b>" + (p.promo_code && !can("promo_codes") ? " <small>(switched off)</small>" : "") + "</span>" +
           '<span>Status <span class="adm-pill ' + stCls + '">' + esc(stTxt) + "</span></span>" +
           "<span>Commission <b>" + pct(st.rate.pct) + "</b></span></div>" +
         '<p class="prt-terms">' + terms(st) + "</p>" + scheduled(st.rate) +
@@ -174,8 +210,9 @@
         '<div><span class="prt-label">Total commission earned</span><b class="prt-codeval">' + money(w.totalEarned) + "</b>" +
         "<small>lifetime, before deductions</small></div>" +
         '<div class="prt-avail"><span class="prt-label">Available</span><b' + (w.available < 0 ? ' class="prt-neg"' : "") + ">" + smoney(w.available) + "</b>" +
-        (state.readOnly ? "" : '<button class="btn btn-primary btn-sm" type="button" data-go="wallet"' + (canPay ? "" : " disabled") + ">Request withdrawal</button>") +
-        (!state.readOnly && !canPay ? "<small>Withdrawals from " + money(w.minPayout) + "</small>" : "") + "</div></section>" +
+        (state.readOnly || !payOn ? "" : '<button class="btn btn-primary btn-sm" type="button" data-go="wallet"' + (canPay ? "" : " disabled") + ">Request withdrawal</button>") +
+        (!state.readOnly && payOn && !canPay ? "<small>Withdrawals from " + money(w.minPayout) + "</small>" : "") +
+        (!state.readOnly && !payOn ? "<small>Commission withdrawals are switched off for your account</small>" : "") + "</div></section>" +
 
       '<div class="adm-feed-head"><h3 class="adm-h">Players</h3>' +
         '<button class="btn btn-ghost btn-sm" type="button" data-refresh>' + U.icon("refresh") + "Refresh</button></div>" +
@@ -183,17 +220,19 @@
         kpi("Total referrals", count(s.totalReferrals), count(s.referrals30) + " in the last 30 days") +
         kpi("Active referrals", count(s.activePlayers), "played in the last 30 days") +
         kpi("Link clicks", count(s.clicks), "all time") +
+        kpi("Deposits by your players", money(s.deposits.total), count(s.deposits.players) + " depositing players") +
+        kpi("Eligible deposit losses", money(w.eligibleLosses), "losses of deposited money only") +
       "</div>" +
       '<h3 class="adm-h">Commission wallet</h3><div class="adm-kpis">' +
         kpi("Total commission earned", money(w.totalEarned), "lifetime", "in") +
         kpi("Available balance", smoney(w.available), "ready to withdraw", w.available < 0 ? "bad" : "in") +
         kpi("Pending commission", smoney(w.pending), "until the " + periodWord(w.settlementPeriod) + " period closes", tone(w.pending)) +
         kpi("Total withdrawn", money(w.withdrawn)) +
-        kpi("Negative adjustments", smoney(w.negativeAdjustments), "from player wins", w.negativeAdjustments < 0 ? "bad" : "") +
+        kpi("Deductions from player wins", smoney(w.negativeAdjustments), "net winnings × the win deduction", w.negativeAdjustments < 0 ? "bad" : "") +
         kpi("Pending withdrawals", money(w.pendingWithdrawals), "", w.pendingWithdrawals ? "warn" : "") +
         (w.carriedNegative ? kpi("Carried negative", smoney(w.carriedNegative), "set against your next earnings", "bad") : "") +
       "</div>" +
-      '<h3 class="adm-h">Revenue share</h3><div class="adm-kpis">' +
+      '<h3 class="adm-h">Earnings</h3><div class="adm-kpis">' +
         kpi("Today", smoney(rs.today), "", tone(rs.today)) +
         kpi("Yesterday", smoney(rs.yesterday), "", tone(rs.yesterday)) +
         kpi("This week", smoney(rs.week), "since Monday", tone(rs.week)) +
@@ -203,17 +242,21 @@
 
       '<h3 class="adm-h">Commission history</h3>' +
       (commissions.length
-        ? '<div class="adm-table-wrap"><table class="adm-table prt-table" id="prtCommissions"><thead><tr><th>Date</th><th>Player</th><th>Game</th><th>Stake</th><th>Payout</th>' +
-          "<th>Rate</th><th>Commission</th><th>Status</th></tr></thead><tbody>" +
+        ? '<div class="adm-table-wrap"><table class="adm-table prt-table" id="prtCommissions"><thead><tr><th>Date</th><th>Player</th><th>Game</th><th>Stake</th>' +
+          "<th>From deposit</th><th>Payout</th><th>Eligible loss</th><th>Rate</th><th>Commission</th><th>Status</th></tr></thead><tbody>" +
           commissions.map((c) => "<tr><td>" + whenTime(c.settled_at) + "</td><td>" + esc(c.id) + "</td><td>" + esc(c.game) + "</td><td>" + money(c.stake) +
-            "</td><td>" + money(c.payout) + "</td><td>" + pct(c.pct) + "</td><td>" + smoney(c.amount) + "</td><td>" +
+            "</td><td>" + (c.depositStake === null ? "—" : money(c.depositStake)) + "</td><td>" + money(c.payout) + "</td><td>" + money(c.eligibleLoss) +
+            "</td><td>" + pct(c.pct) + (c.kind === "deduction" ? " <small>deduction</small>" : "") + "</td><td>" + smoney(c.amount) +
+            (c.kind === "not_eligible" ? " <small>lost winnings</small>" : "") + "</td><td>" +
             '<span class="adm-pill ' + (c.status === "settled" ? "ok" : "warn") + '">' + (c.status === "settled" ? "Settled" : "Pending") + "</span></td></tr>").join("") +
           "</tbody></table></div>"
         : '<p class="me-sheet-note">No commission yet — it appears here as soon as your players\' bets settle.</p>') +
+      '<p class="hint">Eligible loss = the part of a lost stake that was your player\'s own deposited money. Stakes use deposited money first; every payout counts as winnings, so losing it later earns nothing.</p>' +
 
       '<div class="adm-feed-head"><h3 class="adm-h">Referral registrations</h3>' +
-        (s.totalReferrals > signups.length ? '<a href="#referrals" data-go="referrals">See all ' + count(s.totalReferrals) + "</a>" : "") + "</div>" +
-      (signups.length
+        (!refsOff && s.totalReferrals > signups.length ? '<a href="#referrals" data-go="referrals">See all ' + count(s.totalReferrals) + "</a>" : "") + "</div>" +
+      (refsOff ? '<p class="me-sheet-note">Referral statistics are switched off for your account.</p>'
+      : signups.length
         ? '<div class="adm-table-wrap"><table class="adm-table prt-table" id="prtSignups"><thead><tr><th>Registered</th><th>User ID</th><th>Joined through</th><th>Last activity</th></tr></thead><tbody>' +
           signups.map((r) => "<tr><td>" + whenTime(r.joined) + "</td><td>" + esc(r.id) + "</td><td>" + esc(VIA[r.via] || r.via || "—") +
             (r.sub_id ? " <small>" + esc(r.sub_id) + "</small>" : "") + "</td><td>" + (r.last_activity ? ago(r.last_activity) : "—") + "</td></tr>").join("") +
@@ -231,7 +274,7 @@
         : '<p class="me-sheet-note">No payout requests yet.</p>') +
 
       '<p class="hint prt-dimnote">Figures in GHS, from our records, counted by UTC day. This page updates itself every minute.</p>' +
-      banners();
+      '<p class="hint"><a href="#promo" data-go="promo">Banners, flyers and marketing rules → Promo materials</a></p>';
   }
   const periodWord = (p) => ({ DAILY: "daily", WEEKLY: "weekly", MONTHLY: "monthly" })[p] || "settlement";
 
@@ -367,7 +410,7 @@
             chartCard("Active players", count(t.activePlayers), bars(s, "activePlayers", d.unit, count, "pos"), d) +
           "</div>" +
           '<div class="adm-table-wrap"><table class="adm-table prt-table"><thead><tr><th>Date</th><th>Total stakes</th><th>Player payouts</th><th>Net gaming revenue</th>' +
-          "<th>Commission</th><th>Negative adjustments</th><th>Final earnings</th></tr></thead><tbody>" +
+          "<th>Commission</th><th>Deductions from wins</th><th>Final earnings</th></tr></thead><tbody>" +
           s.slice().reverse().map((x) => "<tr><td>" + esc(label(x.date, d.unit)) + "</td><td>" + money(x.stakes) + "</td><td>" + money(x.payouts) + "</td><td>" + smoney(x.ngr) +
             "</td><td>" + money(x.commission) + "</td><td>" + smoney(x.negative) + "</td><td><b>" + smoney(x.earnings) + "</b></td></tr>").join("") +
           "</tbody><tfoot><tr><td>Total</td><td>" + money(t.stakes) + "</td><td>" + money(t.payouts) + "</td><td>" + smoney(t.ngr) + "</td><td>" + money(t.commission) +
@@ -407,19 +450,67 @@
   const PAY_STATUS = { REQUESTED: ["warn", "Requested"], APPROVED: ["brand", "Approved"], PAID: ["ok", "Paid"], REJECTED: ["bad", "Rejected"] };
   const ENTRY = { OPENING: "Opening balance", SETTLEMENT: "Settlement", PAYOUT_HOLD: "Withdrawal requested", PAYOUT_RELEASE: "Withdrawal returned", CORRECTION: "Correction" };
 
+  /* the partner's own player account (they play too): its balance and deposits/withdrawals, kept apart from commission.
+     In admin preview these would be the admin's own, so they're skipped. */
+  const TX_STATUS = { success: ["ok", "Successful"], pending: ["warn", "Pending"], failed: ["bad", "Failed"] };
+  const TX_FILTERS = [["all", "All"], ["success", "Successful"], ["pending", "Pending"], ["failed", "Failed"]];
+  let acctMoney = (n) => money(n);
+  function txBlock() {
+    const all = state.txs || [];
+    const f = state.txFilter;
+    const list = f === "all" ? all : all.filter((t) => t.status === f);
+    return '<div class="chip-list prt-txf" role="group" aria-label="Filter transactions">' +
+        TX_FILTERS.map(([v, l]) => '<button type="button" class="chip' + (v === f ? " on" : "") + '" data-txf="' + v + '" aria-pressed="' + (v === f) + '">' + l +
+          (v === "all" ? "" : " <small>" + count(all.filter((t) => t.status === v).length) + "</small>") + "</button>").join("") + "</div>" +
+      (list.length
+        ? '<div class="adm-table-wrap"><table class="adm-table prt-table" id="prtTx"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Status</th><th>Reference</th></tr></thead><tbody>' +
+          list.map((t) => {
+            const [cls, txt] = TX_STATUS[t.status] || ["", t.status];
+            return "<tr><td>" + whenTime(t.created_at) + "</td><td>" + (t.kind === "deposit" ? "Deposit" : "Withdrawal") + "</td><td>" +
+              (t.kind === "deposit" ? '<span class="prt-pos">+' + acctMoney(t.amount) + "</span>" : "−" + acctMoney(t.amount)) + "</td>" +
+              '<td><span class="adm-pill ' + cls + '">' + esc(txt) + "</span>" + (t.reason ? " <small>" + esc(t.reason) + "</small>" : "") + "</td>" +
+              '<td><span class="prt-mono prt-ref">' + esc(t.ref || "—") + "</span></td></tr>";
+          }).join("") + "</tbody></table></div>"
+        : '<p class="me-sheet-note">' + (all.length ? "No " + esc(TX_FILTERS.find((x) => x[0] === f)[1].toLowerCase()) + " transactions." : "No deposits or withdrawals yet.") + "</p>");
+  }
+  function accountWallet(bal, txs) {
+    if (PREVIEW) return '<h3 class="adm-h">Account wallet</h3>' + previewNote("The partner's own player wallet (balance, deposits and withdrawals) belongs to their account and isn't shown in the admin preview.");
+    const b = bal && bal.ok && bal.data && bal.data.primary;
+    if (b && b.symbol) acctMoney = (n) => b.symbol + " " + Number(n || 0).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    state.txs = txs && txs.ok ? (txs.data && txs.data.transactions) || [] : null;
+    return '<h3 class="adm-h">Account wallet</h3><section class="panel prt-acct">' +
+      '<div class="prt-acct-head"><div><span class="prt-label">Available balance</span><b class="prt-acct-bal">' + (b ? acctMoney(b.available) : "—") + "</b>" +
+        (b && b.withdrawable != null ? "<small>" + acctMoney(b.withdrawable) + " of it is withdrawable winnings</small>" : "") + "</div>" +
+        (can("wallet_deposits")
+          ? '<a class="btn btn-primary btn-sm" href="wallet.html">' + U.icon("plus") + "Deposit</a>"
+          : '<p class="alert alert-info prt-acct-off">Deposits are switched off for your account.</p>') + "</div>" +
+      (bal && !bal.ok ? '<p class="alert alert-err">' + errText(bal, "Couldn't load your account balance.") + "</p>" : "") +
+      '<p class="hint">Money you deposit is for playing on WIN B casino. Your partner commission is not part of this balance — it\'s in the commission wallet below.</p>' +
+      '<h4 class="prt-sub-h">Deposits and withdrawals</h4>' +
+      (state.txs ? '<div id="txBox">' + txBlock() + "</div>" : '<p class="alert alert-err">' + errText(txs || { data: {} }, "Couldn't load your transactions.") + "</p>") +
+      "</section>";
+  }
+
   async function loadWallet(seq) {
-    const r = await get("wallet");
+    const [r, bal, txs] = await Promise.all([
+      get("wallet"),
+      PREVIEW ? null : U.paymentApi("/api/user/balances"),
+      PREVIEW ? null : U.paymentApi("/api/user/transactions"),
+    ]);
     if (seq !== loadSeq) return;
     if (!r.ok) return failed(r, "Couldn't load your wallet.");
     const d = r.data;
     const w = d.wallet;
     state.walletData = d;
     $("tabBody").innerHTML =
+      accountWallet(bal, txs) +
+      '<div class="prt-apart">' + U.icon("info") + "<span><b>Commission and deposited money are kept apart.</b> Deposits are for play; commission is earned from your players and withdrawn here on its own.</span></div>" +
+      '<h3 class="adm-h">Commission wallet</h3>' +
       '<div class="adm-kpis">' +
         kpi("Total commission earned", money(w.totalEarned), "lifetime, before deductions", "in") +
         kpi("Available balance", smoney(w.available), "ready to withdraw", w.available < 0 ? "bad" : "in") +
         kpi("Pending commission", smoney(w.pending), "period still open", tone(w.pending)) +
-        kpi("Negative adjustments", smoney(w.negativeAdjustments), "from player wins", w.negativeAdjustments < 0 ? "bad" : "") +
+        kpi("Deductions from player wins", smoney(w.negativeAdjustments), "net winnings × the win deduction", w.negativeAdjustments < 0 ? "bad" : "") +
         kpi("Total withdrawn", money(w.withdrawn)) +
         kpi("Pending withdrawals", money(w.pendingWithdrawals), "", w.pendingWithdrawals ? "warn" : "") +
         (w.carriedNegative ? kpi("Carried negative", smoney(w.carriedNegative), "set against your next earnings", "bad") : "") +
@@ -427,9 +518,9 @@
       "</div>" +
       '<p class="hint prt-dimnote">Commission is pending until its period (' + periodWord(w.settlementPeriod) + ") closes, then moves to your available balance. " +
         "Withdrawals: " + money(w.minPayout) + " to " + money(w.maxPayout) + ", one request at a time.</p>" +
-      '<h3 class="adm-h" id="payHead">Request withdrawal</h3><div id="payBox">' + payoutForm(d) + "</div>" +
+      '<h3 class="adm-h" id="payHead">Withdraw commission</h3><div id="payBox">' + payoutForm(d) + "</div>" +
 
-      '<h3 class="adm-h">Withdrawal history</h3>' +
+      '<h3 class="adm-h">Commission withdrawal history</h3>' +
       (d.payouts.length
         ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Status</th><th>Reference / note</th></tr></thead><tbody>' +
           d.payouts.map((x) => {
@@ -460,6 +551,7 @@
   function payoutForm(d) {
     const w = d.wallet;
     if (PREVIEW) return '<p class="me-sheet-note">Read only — withdrawals are requested by the partner.</p>';
+    if (!can("commission_withdrawals")) return offBox("Commission withdrawals are switched off for your account. Contact support if you need them.");
     if (state.readOnly) return '<p class="me-sheet-note">Withdrawals are on hold while your partner account is suspended.</p>';
     if (d.payouts.some((p) => p.status === "REQUESTED" || p.status === "APPROVED")) {
       return '<div class="alert alert-info">Your withdrawal request is with our team. You can ask for another once it\'s been dealt with.</div>';
@@ -522,26 +614,28 @@
       '<p class="hint">Your commission percentage is set by the WIN B casino team and can only be changed by an admin. Settlement: ' + periodWord(s.settlementPeriod) + ".</p></div>" +
 
       '<h3 class="adm-h">Referral settings</h3><div class="panel prt-linkbox">' +
-        '<span class="prt-label">Referral link</span>' + linkRow("lnk", link(), "Your link") +
+        '<span class="prt-label">Referral link</span>' +
+        (can("referral_links") ? linkRow("lnk", link(), "Your link", true) : '<p class="me-sheet-note">Your referral link is switched off. Contact support if you need it.</p>') +
         '<span class="prt-label">Promo code</span>' +
         (p.promo_code ? linkRow("promo", p.promo_code, "Your promo code") : '<p class="me-sheet-note">No promo code yet.</p>') +
         (p.promo_request ? '<div class="alert alert-info">Requested promo code <b>' + esc(p.promo_request) + "</b> is waiting for the admin's approval.</div>" : "") +
         (ro ? ""
+          : !can("promo_codes") ? '<p class="hint">Promo codes are switched off for your account. Contact support if you need one changed.</p>'
           : s.promoCodesEnabled === false ? '<p class="hint">Promo codes are switched off at the moment.</p>'
           : '<form id="promoForm" class="prt-inline"><div class="field"><label for="promoIn">' + (p.promo_code ? "Change promo code" : "Choose a promo code") + "</label>" +
             '<input id="promoIn" maxlength="16" autocapitalize="characters" placeholder="4–16 letters and numbers"></div>' +
             '<button class="btn btn-primary btn-sm" type="submit">' + (s.promoEditable ? "Save" : "Send request") + "</button></form>" +
             (s.promoEditable ? "" : '<p class="hint">Ask support to change your promo code, or send a request here — the admin approves it.</p>')) +
-        '<div class="adm-kpis prt-mini">' +
+        (!sm ? "" : '<div class="adm-kpis prt-mini">' +
           kpi("Total referrals", sm ? count(sm.totalReferrals) : "—") + kpi("Link clicks", sm ? count(sm.clicks) : "—") +
-        "</div></div>" +
+        "</div>") + "</div>" +
 
       '<h3 class="adm-h">Payment settings</h3><div class="panel">' +
         (s.payoutDetails ? '<p class="me-sheet-note">Saved: <b>' + esc(methodName(s.payoutDetails.method)) + "</b> · " + esc(detailsText(s.payoutDetails)) + "</p>" : '<p class="me-sheet-note">No payment details saved yet.</p>') +
         (ro ? ""
           : '<form id="saveForm" class="prt-payout">' + methodChips("save", state.saveMethod) + '<div id="saveFields"></div>' +
             '<button class="btn btn-primary btn-block" type="submit">Save payment details</button></form>') +
-        '<p class="hint"><a href="#wallet" data-go="wallet">Withdrawal history →</a></p></div>' +
+        (tabOn("wallet") ? '<p class="hint"><a href="#wallet" data-go="wallet">Withdrawal history →</a></p>' : "") + "</div>" +
 
       (PREVIEW ? ""
         : '<h3 class="adm-h">Security</h3><div class="panel">' +
@@ -570,7 +664,190 @@
       (list.some((x) => !x.current) ? '<button class="btn btn-ghost btn-sm" type="button" data-revoke-all>Sign out all other devices</button>' : "");
   }
 
-  const LOADERS = { dashboard: loadDashboard, referrals: loadReferrals, statistics: loadStatistics, wallet: loadWallet, settings: loadSettings };
+  /* ---------------- Promo materials: the flyer generator (flyers.js) and the ready-made banners ---------------- */
+  async function loadPromo(seq) {
+    const flyersOn = !PREVIEW && can("flyers");
+    $("tabBody").innerHTML =
+      '<h3 class="adm-h">Flyer generator</h3><div id="flyerBox">' +
+        (PREVIEW ? previewNote("The flyer generator works with the partner's own account, so it isn't shown in the admin preview.")
+          : !flyersOn ? offBox("The flyer generator is switched off for your account. Contact support if you need it.")
+          : LOADING) + "</div>" +
+      (can("referral_links") ? "" : '<p class="alert alert-info">Your referral link is switched off, so visits through these banners won\'t count for now.</p>') +
+      banners();
+    if (!flyersOn) return;
+    const r = await get("flyers");
+    if (seq !== loadSeq || state.tab !== "promo") return;
+    const box = $("flyerBox");
+    if (!box) return;
+    if (!r.ok) {
+      if (r.status === 403 && r.data && r.data.error === "not_a_partner") return start();
+      box.innerHTML = isOff(r) ? offBox(r.data.message)
+        : '<div class="alert alert-err">' + errText(r, "Couldn't load the flyer generator.") + '</div><button class="btn btn-ghost btn-sm" type="button" data-retry>' + U.icon("refresh") + "Try again</button>";
+      return;
+    }
+    const fp = (r.data && r.data.partner) || {};
+    const code = fp.code || state.partner.code;
+    const flyerLink = location.origin + "/?ref=" + encodeURIComponent(code) + (fp.promo_code ? "&promo=" + encodeURIComponent(fp.promo_code) : "");
+    if (!window.VBFlyers || typeof window.VBFlyers.mount !== "function") {
+      box.innerHTML = '<p class="me-sheet-note">The flyer generator is loading or unavailable right now. Refresh the page in a moment — the banners below work meanwhile.</p>';
+      return;
+    }
+    box.innerHTML = "";
+    try {
+      window.VBFlyers.mount(box, {
+        data: r.data, readOnly: state.readOnly, api: U.paymentApi, link: flyerLink,
+        onError: (m) => flash("error", esc((m && (m.message || m.error)) || m || "Something went wrong with the flyer generator.")),
+      });
+    } catch (e) {
+      box.innerHTML = '<p class="me-sheet-note">The flyer generator is unavailable right now. The banners below still work.</p>';
+    }
+  }
+
+  /* ---------------- Game tools: real odds and FINISHED rounds only — never a prediction ---------------- */
+  const TOOLS = [["mines", "Mines Predictor"], ["aviator", "Aviator"], ["crash", "Crash"], ["other", "Other games"]];
+  const xm = (n) => (n === null || n === undefined || !isFinite(n) ? "—" : Number(n).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "×");
+  const limitsBox = (text) =>
+    '<div class="prt-limits" role="note"><strong>' + U.icon("info") + "Outcomes are random and can't be predicted</strong>" +
+    "<p>" + esc(text || "Every result is drawn by the server with secure randomness when the round is played, and nobody can see or predict it in advance.") + "</p>" +
+    "<p><b>These are the games' real odds and the results of FINISHED rounds only.</b> Never promise players a win.</p></div>";
+  const oddsTable = (rows) =>
+    '<div class="adm-table-wrap"><table class="adm-table prt-table"><thead><tr><th>Reaches at least</th><th>Chance</th></tr></thead><tbody>' +
+    rows.map((o) => "<tr><td>" + xm(o.target) + "</td><td>" + pct(o.chance) + "</td></tr>").join("") + "</tbody></table></div>";
+  const statKpis = (s) => (s
+    ? '<div class="adm-kpis">' + kpi("Finished rounds", count(s.rounds)) + kpi("Median", xm(s.median)) + kpi("9 in 10 below", xm(s.p90)) + kpi("Highest", xm(s.highest)) +
+      kpi("Reached 2×", pct(s.atLeast2x)) + kpi("Reached 5×", pct(s.atLeast5x)) + kpi("Reached 10×", pct(s.atLeast10x)) + "</div>"
+    : '<p class="me-sheet-note">No finished rounds yet.</p>');
+  const toolNote = (d) => (d.note ? '<p class="hint prt-dimnote">' + esc(d.note) + "</p>" : "");
+
+  function renderTool(id, d) {
+    if (id === "mines") {
+      const cols = [1, 2, 3, 5, 8, 10];
+      const fin = d.finished || [];
+      const total = fin.reduce((s, x) => s + x.rounds, 0);
+      const cashed = fin.filter((x) => x.result === "cashed out").reduce((s, x) => s + x.rounds, 0);
+      return '<h3 class="adm-h">Mines Predictor — odds &amp; history</h3>' +
+        '<p class="hint">Nothing here can tell you where the mines are: each board is drawn at random when the round starts. These are the real chances and finished rounds.</p>' +
+        (d.rtp ? '<div class="adm-kpis prt-mini">' + kpi("Return to player", pct(d.rtp)) + kpi("Finished rounds (30 days)", count(total)) +
+          kpi("Cashed out", total ? pct((100 * cashed) / total) : "—") + "</div>" : "") +
+        '<h4 class="prt-sub-h">Chance of k safe picks in a row · multiplier</h4>' +
+        '<div class="adm-table-wrap"><table class="adm-table prt-table prt-odds"><thead><tr><th>Mines</th>' + cols.map((c) => "<th>" + c + " pick" + (c === 1 ? "" : "s") + "</th>").join("") +
+        "</tr></thead><tbody>" +
+        (d.odds || []).map((row) => "<tr><td><b>" + row.mines + "</b></td>" + cols.map((c) => {
+          const p = row.picks.find((x) => x.picks === c);
+          return "<td>" + (p ? pct(p.chance) + "<small>" + xm(p.multiplier) + "</small>" : "—") + "</td>";
+        }).join("") + "</tr>").join("") + "</tbody></table></div>" +
+        '<h4 class="prt-sub-h">Finished rounds, last 30 days (all players, no names)</h4>' +
+        (fin.length
+          ? '<div class="adm-table-wrap prt-scroll"><table class="adm-table prt-table"><thead><tr><th>Mines</th><th>Safe picks</th><th>Result</th><th>Rounds</th></tr></thead><tbody>' +
+            fin.slice().sort((a, b) => b.rounds - a.rounds).slice(0, 100).map((x) => "<tr><td>" + x.mines + "</td><td>" + x.picks + "</td><td>" +
+              '<span class="adm-pill ' + (x.result === "cashed out" ? "ok" : "bad") + '">' + esc(x.result) + "</span></td><td>" + count(x.rounds) + "</td></tr>").join("") +
+            "</tbody></table></div>"
+          : '<p class="me-sheet-note">No finished rounds yet.</p>') + toolNote(d);
+    }
+    if (id === "aviator") {
+      const hist = d.history || [];
+      return '<h3 class="adm-h">Aviator — odds &amp; finished rounds</h3>' +
+        (d.rtp ? '<div class="adm-kpis prt-mini">' + kpi("Return to player", pct(d.rtp)) + "</div>" : "") +
+        '<h4 class="prt-sub-h">Chance a round reaches a multiplier</h4>' + oddsTable(d.odds || []) +
+        '<h4 class="prt-sub-h">Last ' + count(hist.length) + " finished rounds</h4>" +
+        (hist.length
+          ? '<div class="prt-hist">' + hist.map((h) => '<span class="' + (h.crash >= 10 ? "hi" : h.crash >= 2 ? "mid" : "lo") + '" title="Round ' + esc(h.round) + " · " + esc(whenTime(h.at)) + '">' + xm(h.crash) + "</span>").join("") + "</div>"
+          : '<p class="me-sheet-note">No finished rounds yet.</p>') +
+        '<h4 class="prt-sub-h">Finished rounds summary</h4>' + statKpis(d.stats) + toolNote(d);
+    }
+    if (id === "crash") {
+      return '<h3 class="adm-h">Crash — odds &amp; finished flights</h3>' +
+        (d.games || []).map((g) => '<section class="panel prt-toolgame"><h4 class="prt-sub-h">' + esc(g.name) + ' <span class="adm-pill">RTP ' + pct(g.rtp) + "</span></h4>" +
+          oddsTable(g.odds || []) + '<h4 class="prt-sub-h">Finished flights</h4>' + statKpis(g.stats) + "</section>").join("") + toolNote(d);
+    }
+    return '<h3 class="adm-h">Other games — return to player and odds</h3>' +
+      '<div class="adm-table-wrap"><table class="adm-table prt-table"><thead><tr><th>Game</th><th>RTP</th><th>Min bet</th><th>Max bet</th></tr></thead><tbody>' +
+      (d.games || []).map((g) => "<tr><td>" + esc(g.name) + "</td><td>" + pct(g.rtp) + "</td><td>" + money(g.minBet) + "</td><td>" + money(g.maxBet) + "</td></tr>").join("") +
+      "</tbody></table></div>" +
+      '<h4 class="prt-sub-h">Roulette (13 pockets, 0–12)</h4>' +
+      '<div class="adm-table-wrap"><table class="adm-table prt-table"><thead><tr><th>Bet</th><th>Numbers</th><th>Pays</th><th>Chance</th></tr></thead><tbody>' +
+      (d.roulette || []).map((x) => "<tr><td>" + esc(x.spot) + "</td><td>" + count(x.numbers) + "</td><td>" + xm(x.pays) + "</td><td>" + pct(x.chance) + "</td></tr>").join("") +
+      "</tbody></table></div>" +
+      (d.hiloRtp ? '<div class="adm-kpis prt-mini">' + kpi("Hi-Lo return to player", pct(d.hiloRtp)) + "</div>" : "") + toolNote(d);
+  }
+
+  async function loadTool(seq) {
+    const id = state.tool;
+    const box = $("toolBody");
+    if (!box) return;
+    box.innerHTML = LOADING;
+    view.querySelectorAll("[data-tool]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tool === id)));
+    const r = await get("tools/" + id);
+    if (seq !== loadSeq || state.tab !== "tools" || state.tool !== id || !$("toolBody")) return;
+    if (!r.ok) {
+      $("toolBody").innerHTML = isOff(r) ? offBox(r.data.message)
+        : '<div class="alert alert-err">' + errText(r, "Couldn't load this tool.") + '</div><button class="btn btn-ghost btn-sm" type="button" data-tool="' + id + '">' + U.icon("refresh") + "Try again</button>";
+      return;
+    }
+    $("toolBody").innerHTML = renderTool(id, r.data);
+  }
+
+  async function loadTools(seq) {
+    if (PREVIEW) {
+      $("tabBody").innerHTML = '<h3 class="adm-h">Game tools</h3>' + limitsBox() + previewNote("Game tools are only shown to the partner, for the games switched on for them.");
+      return;
+    }
+    const r = await get("tools");
+    if (seq !== loadSeq) return;
+    if (!r.ok) return failed(r, "Couldn't load the game tools.");
+    const on = (r.data.tools || []).filter((t) => t.enabled).map((t) => t.id);
+    const list = TOOLS.filter((t) => on.includes(t[0]));
+    if (!list.length) {
+      $("tabBody").innerHTML = '<h3 class="adm-h">Game tools</h3>' + limitsBox(r.data.limitations) + offBox("No game tools are switched on for your account. Contact support if you need them.");
+      return;
+    }
+    if (!list.some((t) => t[0] === state.tool)) state.tool = list[0][0];
+    $("tabBody").innerHTML = '<h3 class="adm-h">Game tools</h3>' + limitsBox(r.data.limitations) +
+      '<div class="prt-subtabs" role="tablist" aria-label="Game tools">' +
+        list.map(([id, l]) => '<button type="button" role="tab" class="chip" data-tool="' + id + '" aria-selected="' + (id === state.tool) + '">' + l + "</button>").join("") +
+      '</div><div id="toolBody" role="tabpanel"></div>';
+    return loadTool(seq);
+  }
+
+  /* ---------------- Support ---------------- */
+  const FAQS = [
+    ["How do I earn commission?",
+      "You earn your revenue-share percentage of what the players you referred lose from their <b>own deposited money</b>. Money they won and then lose again earns nothing, and bonus or admin credits never earn."],
+    ["What happens when one of my players wins?",
+      "The configured win-deduction percentage of their <b>net winnings</b> is taken off your commission. If deductions are bigger than your earnings in a period, the difference is carried and set against your next earnings."],
+    ["Why is some commission pending?",
+      "Commission stays <b>pending until its settlement period</b> (daily, weekly or monthly — see your Wallet) closes. Then it moves to your available balance."],
+    ["How do commission withdrawals work?",
+      "Open <b>Wallet</b> and request a withdrawal once your available commission reaches the minimum. One request at a time; our team pays it to your mobile money, bank or crypto details and records the reference. A rejected request goes back to your available balance."],
+    ["Is my commission part of my account balance?",
+      "No. Money you deposit is in your <b>account wallet</b> and is for play. Commission is kept apart in the <b>commission wallet</b> and is withdrawn on its own."],
+    ["How do promo codes work?",
+      "A player who enters your promo code when signing up becomes your player, just like one who opens your link. You can choose or request a change of code in <b>Settings</b>; some changes need an admin's approval."],
+    ["Which players don't count?",
+      "Your own accounts, fake accounts and accounts shared between people don't count, and commission from them is withheld."],
+    ["Why is a feature switched off?",
+      "The WIN B casino team can switch partner features on or off for each account. If you need something that's switched off, contact support."],
+  ];
+  async function loadSupport() {
+    const c = U.contact || {};
+    const phones = c.phones || [];
+    $("tabBody").innerHTML =
+      '<h3 class="adm-h">Contact support</h3><div class="panel prt-support">' +
+        "<p>Questions about your commission, a withdrawal, your promo code or a player? Message our team in the live chat — a person replies there.</p>" +
+        '<div class="prt-support-actions">' +
+          '<button class="btn btn-primary" type="button" data-chat>' + U.icon("chat") + "Live chat</button>" +
+          phones.map((p) => '<a class="btn btn-ghost" href="' + esc(U.telHref(p.number)) + '">' + U.icon("phone") + "Call " + esc(p.number) + "</a>").join("") +
+          (c.whatsapp ? '<a class="btn btn-ghost" href="https://wa.me/' + esc(String(c.whatsapp).replace(/\D/g, "")) + '" target="_blank" rel="noopener">' + U.icon("chat") + "WhatsApp</a>" : "") +
+          (c.email ? '<a class="btn btn-ghost" href="mailto:' + esc(c.email) + '">' + U.icon("mail") + esc(c.email) + "</a>" : "") +
+        "</div>" +
+        (c.hours ? '<p class="hint">Hours: ' + esc(c.hours) + "</p>" : "") + "</div>" +
+      '<h3 class="adm-h">Frequently asked questions</h3><div class="prt-faq">' +
+        FAQS.map(([q, a]) => "<details><summary>" + q + "</summary><p>" + a + "</p></details>").join("") + "</div>" +
+      '<h3 class="adm-h">Marketing rules</h3><div class="panel prt-how">' + RULES + "</div>";
+  }
+
+  const LOADERS = { dashboard: loadDashboard, referrals: loadReferrals, statistics: loadStatistics, wallet: loadWallet, promo: loadPromo,
+    tools: loadTools, settings: loadSettings, support: loadSupport };
 
   /* ---------------- actions ---------------- */
   async function copy(text, what) {
@@ -601,6 +878,30 @@
     }
     const cp = t.closest("[data-copy]");
     if (cp) return copy($(cp.dataset.copy).value, cp.dataset.what);
+    const sh = t.closest("[data-share]");
+    if (sh) {
+      const url = $(sh.dataset.share).value;
+      if (navigator.share) {
+        try {
+          return await navigator.share({ title: "WIN B casino", text: "Play on WIN B casino — 18+ · Play responsibly.", url });
+        } catch (err) {
+          if (err && err.name === "AbortError") return;
+        }
+      }
+      return copy(url, "Your referral link");
+    }
+    const tf = t.closest("[data-txf]");
+    if (tf) {
+      state.txFilter = tf.dataset.txf;
+      if ($("txBox")) $("txBox").innerHTML = txBlock();
+      return;
+    }
+    const tl = t.closest("[data-tool]");
+    if (tl) {
+      state.tool = tl.dataset.tool;
+      return loadTool(++loadSeq);
+    }
+    if (t.closest("[data-chat]")) return U.openChat("partners");
     const em = t.closest("[data-embed]");
     if (em) return copy(embed(BANNERS[Number(em.dataset.embed)]), "Banner code");
     const cap = t.closest("[data-caption]");
@@ -737,6 +1038,7 @@
       return flash("error", errText(me, "Couldn't reach the server. Try again in a moment."));
     }
     state.partner = me.data.partner;
+    state.perms = me.data.permissions && typeof me.data.permissions === "object" ? me.data.permissions : null;
     if (PREVIEW) return drawPortal();
     if (!state.partner) return drawApply();
     state.readOnly = state.partner.status !== "ACTIVE";

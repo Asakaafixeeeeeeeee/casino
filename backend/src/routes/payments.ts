@@ -20,6 +20,8 @@ import {
 } from "../services/teller.js";
 import { noteIntent, reopenFailedIntent, settleIntent } from "../services/tellerSettlement.js";
 import { checkDeposit, LimitError } from "../services/responsibleGaming.js";
+import { partnerOf } from "../services/affiliates.js";
+import { permissionsOf } from "../services/partnerPlatform.js";
 
 const MIN_DEPOSIT = 5;     // GHS; well under US$ 1 (the page shows the dollar figure)
 const MAX_DEPOSIT = 50000;
@@ -45,6 +47,13 @@ function badRequest(res: Response, error: string, message: string): void {
 
 const clientStatus = (dbStatus: string) =>
   dbStatus === "CONFIRMED" ? "approved" : dbStatus === "PENDING" ? "pending" : "declined";
+
+/** A partner whose deposits an admin switched off (players, and partners with deposits on, pay in as usual). */
+async function partnerDepositsOff(db: Pool, userId: string): Promise<boolean> {
+  const a = await partnerOf(db, userId);
+  if (!a || a.status === "PENDING" || a.status === "REJECTED") return false;
+  return !(await permissionsOf(db, a)).effective.wallet_deposits;
+}
 
 export function paymentsRouter(db: Pool): Router {
   const router = Router();
@@ -124,6 +133,10 @@ export function paymentsRouter(db: Pool): Router {
   router.post("/teller/checkout", authenticate, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = requireUser(req);
+      if (await partnerDepositsOff(db, user.id)) {
+        res.status(403).json({ error: "feature_off", message: "Deposits are switched off for your partner account. Contact support." });
+        return;
+      }
       const { amount, currency, idempotency_key } = (req.body ?? {}) as Record<string, unknown>;
       const amt = readAmount(amount);
       if (amt === null) return badRequest(res, "invalid_amount", `Amount must be between GHS ${MIN_DEPOSIT} and GHS ${MAX_DEPOSIT}`);
@@ -185,6 +198,10 @@ export function paymentsRouter(db: Pool): Router {
   router.post("/teller/momo", authenticate, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = requireUser(req);
+      if (await partnerDepositsOff(db, user.id)) {
+        res.status(403).json({ error: "feature_off", message: "Deposits are switched off for your partner account. Contact support." });
+        return;
+      }
       const { amount, currency, idempotency_key, account_number, network } = (req.body ?? {}) as Record<string, unknown>;
       const amt = readAmount(amount);
       if (amt === null) return badRequest(res, "invalid_amount", `Amount must be between GHS ${MIN_DEPOSIT} and GHS ${MAX_DEPOSIT}`);

@@ -7,6 +7,9 @@ import {
   partnerSettings, partnerStatistics, partnerSummary, partnerView, partnerWallet, recordClick, requestPayout, savePayoutDetails,
   setOwnPromo,
 } from "../services/affiliates.js";
+import {
+  assetFile, deleteFlyer, gameTools, PERMISSIONS, type Permission, partnerFlyers, permissionsOf, requirePermission, saveFlyer, toolsList,
+} from "../services/partnerPlatform.js";
 
 /*
  * The partner portal's API. Access:
@@ -74,6 +77,16 @@ export function partnersRouter(db: Pool): Router {
   };
   const look = [authenticate, partnerOnly(false)];
   const act = [authenticate, partnerOnly(true)];
+  /* a feature the admin switched off is refused here, whatever the page shows */
+  const feature = (key: Permission) => async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await requirePermission(db, partner(req), key);
+      next();
+    } catch (e) {
+      if (e instanceof PartnerError) { res.status(e.status).json({ error: e.code, message: e.message }); return; }
+      next(e);
+    }
+  };
   const partner = (req: Request) => (req as Request & { partner: Affiliate }).partner;
   const q = (req: Request) => req.query as Record<string, unknown>;
 
@@ -95,23 +108,49 @@ export function partnersRouter(db: Pool): Router {
 
   r.get("/me", authenticate, send(async (req) => {
     const a = await partnerOf(db, requireUser(req).id);
-    return { partner: a ? partnerView(a) : null };
+    if (!a) return { partner: null };
+    const perms = await permissionsOf(db, a);
+    return { partner: partnerView(a, perms.global), permissions: perms.effective, features: PERMISSIONS.map(([key, label]) => ({ key, label })) };
   }));
+  /* an uploaded promotional image (public: flyers draw it into a canvas on the partner's page) */
+  r.get("/assets/:id", async (req, res, next) => {
+    try {
+      const f = await assetFile(db, req.params.id);
+      if (!f) { res.status(404).end(); return; }
+      res.setHeader("Content-Type", f.mime);
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      res.end(f.data);
+    } catch (e) {
+      next(e);
+    }
+  });
   r.post("/apply", authenticate, send(async (req) => ({ partner: await applyPartner(db, requireUser(req).id, req.body ?? {}) })));
   r.post("/attribute", authenticate, send((req) => attributeReferral(db, requireUser(req).id, req.body ?? {})));
 
-  r.get("/summary", ...look, send((req) => partnerSummary(db, partner(req))));
-  r.get("/stats", ...look, send((req) => partnerSummary(db, partner(req))));
-  r.get("/referrals", ...look, send((req) => partnerReferrals(db, partner(req), q(req))));
-  r.get("/statistics", ...look, send((req) => partnerStatistics(db, partner(req), q(req))));
-  r.get("/wallet", ...look, send((req) => partnerWallet(db, partner(req))));
+  const board = feature("dashboard");
+  r.get("/summary", ...look, board, send((req) => partnerSummary(db, partner(req))));
+  r.get("/stats", ...look, board, send((req) => partnerSummary(db, partner(req))));
+  r.get("/referrals", ...look, board, feature("referral_stats"), send((req) => partnerReferrals(db, partner(req), q(req))));
+  r.get("/statistics", ...look, board, feature("referral_stats"), send((req) => partnerStatistics(db, partner(req), q(req))));
+  r.get("/wallet", ...look, board, send((req) => partnerWallet(db, partner(req))));
   r.get("/settings", ...look, send((req) => partnerSettings(db, partner(req))));
-  r.get("/commissions", ...look, send((req) => partnerCommissions(db, partner(req), q(req))));
+  r.get("/commissions", ...look, board, send((req) => partnerCommissions(db, partner(req), q(req))));
   r.get("/payouts", ...look, send((req) => partnerPayouts(db, partner(req).user_id)));
 
-  r.post("/payouts", ...act, send((req) => requestPayout(db, partner(req), req.body ?? {})));
-  r.post("/settings/promo", ...act, send((req) => setOwnPromo(db, partner(req), req.body ?? {})));
+  r.post("/payouts", ...act, feature("commission_withdrawals"), send((req) => requestPayout(db, partner(req), req.body ?? {})));
+  r.post("/settings/promo", ...act, feature("promo_codes"), send((req) => setOwnPromo(db, partner(req), req.body ?? {})));
   r.post("/settings/payout-details", ...act, send((req) => savePayoutDetails(db, partner(req), req.body ?? {})));
+
+  /* the flyer generator: templates, live campaigns, the partner's codes; flyers they saved */
+  /* flyers and game tools are for ACTIVE partners only (a suspended partner keeps read access to their figures) */
+  r.get("/flyers", ...act, send((req) => partnerFlyers(db, partner(req))));
+  r.post("/flyers/saved", ...act, send((req) => saveFlyer(db, partner(req), req.body ?? {})));
+  r.post("/flyers/saved/:id/delete", ...act, send((req) => deleteFlyer(db, partner(req), req.params.id)));
+
+  /* game tools: the real odds and finished rounds only, for the games the admin switched on */
+  r.get("/tools", ...act, send((req) => toolsList(db, partner(req))));
+  r.get("/tools/:game", ...act, send((req) => gameTools(db, partner(req), String(req.params.game))));
 
   return r;
 }

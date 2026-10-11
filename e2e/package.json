@@ -12,6 +12,7 @@
   "devDependencies": {
     "@playwright/test": "1.64.0",
     "embedded-postgres": "^18.4.0-beta.17",
+    "jsqr": "^1.4.0",
     "pg": "^8.23.1"
   }
 }

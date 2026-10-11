@@ -37,7 +37,7 @@ export default defineConfig({
       url: "http://localhost:8792/health",
       /* the whole suite signs in from one address: past the usual 40 a run's last sign-ups were refused. The limit
          itself is tested in accounts-api/test. */
-      env: { PORT: "8792", PGLITE_DIR: "memory://", DATABASE_URL: "", SIGNIN_RATE_LIMIT: "1000" },
+      env: { PORT: "8792", PGLITE_DIR: "memory://", DATABASE_URL: "", SIGNIN_RATE_LIMIT: "1000", ACCOUNTS_INTERNAL_SECRET: "e2e-internal-secret-0123456789" },
       reuseExistingServer: false,
       timeout: 60_000,
     },
@@ -58,6 +58,7 @@ export default defineConfig({
         TELLER_PASSCODE: "e2e-passcode",
         FX_USD_GHS_URL: `${GATEWAY}/fx`,
         ADMIN_PHONES: "0209999001",
+        ACCOUNTS_INTERNAL_SECRET: "e2e-internal-secret-0123456789",
         DATABASE_URL: "",
       },
       reuseExistingServer: false,

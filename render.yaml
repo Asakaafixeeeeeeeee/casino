@@ -57,6 +57,12 @@ services:
         sync: false
       - key: GMAIL_WEBHOOK_SECRET
         sync: false
+      # lets an admin create partner accounts: the same value as on asakaa-accounts (Render copies it across)
+      - key: ACCOUNTS_INTERNAL_SECRET
+        fromService:
+          type: web
+          name: asakaa-accounts
+          envVarKey: ACCOUNTS_INTERNAL_SECRET
 
   - type: web
     name: asakaa-accounts
@@ -72,6 +78,9 @@ services:
         fromDatabase:
           name: asakaa-db
           property: connectionString
+      # shared with asakaa-balance so it can open partner accounts for an admin (generated once by Render)
+      - key: ACCOUNTS_INTERNAL_SECRET
+        generateValue: true
       - key: NODE_ENV
         value: production
 

@@ -167,3 +167,38 @@ test("Change password needs the current one and signs out every other device; se
   assert.equal((await s.call("POST", "/api/me/sessions/revoke", { id: third.id }, auth)).status, 200);
   assert.equal((await s.call("GET", "/api/me/sessions", null, auth)).body.sessions.length, 1);
 });
+
+test("Log in (and reset) with a mobile number, a username or an email", async (t) => {
+  const s = await server(); t.after(s.stop);
+  const reg = await s.call("POST", "/api/register", { ...player(60), username: "KwameBoss", email: "kwame@example.com" });
+  assert.equal(reg.status, 201);
+  for (const login of [player(60).phone, "kwameboss", "KWAME@example.com"]) {
+    const r = await s.call("POST", "/api/login", { login, password: PW });
+    assert.equal(r.status, 200, login);
+    assert.equal(r.body.user.username, "KwameBoss");
+  }
+  assert.equal((await s.call("POST", "/api/login", { login: "nobody99", password: PW })).status, 404);
+  assert.equal((await s.call("POST", "/api/login", { phone: player(60).phone, password: PW })).status, 200, "the old phone field still works");
+  const reset = await s.call("POST", "/api/reset", { login: "kwame@example.com", dob: "1990-05-17", password: "Brand-new-pw1" });
+  assert.equal(reset.status, 200);
+  assert.equal((await s.call("POST", "/api/login", { login: "KwameBoss", password: "Brand-new-pw1" })).status, 200);
+});
+
+test("The balance service can open an account for an admin (shared secret only), checked like a sign-up", async (t) => {
+  const secret = "test-secret-0123456789abcdef";
+  const s = await server({ ACCOUNTS_INTERNAL_SECRET: secret }); t.after(s.stop);
+  const body = { full_name: "Ama Partner", phone: "0245550001", username: "AmaPartner", email: "ama.partner@example.com", password: PW, dob: "1992-01-01", country: "GH" };
+  assert.equal((await s.call("POST", "/api/internal/accounts", body)).status, 403, "no secret");
+  assert.equal((await s.call("POST", "/api/internal/accounts", body, { "x-internal-secret": "wrong-secret-0123456789ab" })).status, 403);
+  const young = await s.call("POST", "/api/internal/accounts", { ...body, dob: "2015-01-01" }, { "x-internal-secret": secret });
+  assert.equal(young.status, 400);
+  const r = await s.call("POST", "/api/internal/accounts", body, { "x-internal-secret": secret });
+  assert.equal(r.status, 201);
+  assert.ok(r.body.user.id);
+  assert.equal(r.body.user.email, "ama.partner@example.com");
+  assert.equal((await s.call("POST", "/api/internal/accounts", body, { "x-internal-secret": secret })).status, 409, "a number registers once");
+  const login = await s.call("POST", "/api/login", { login: "AmaPartner", password: PW });
+  assert.equal(login.status, 200, "the partner logs in on the normal page");
+  const off = await server({ ACCOUNTS_INTERNAL_SECRET: "" }); t.after(off.stop);
+  assert.equal((await off.call("POST", "/api/internal/accounts", body, { "x-internal-secret": "" })).status, 403, "switched off without a secret");
+});

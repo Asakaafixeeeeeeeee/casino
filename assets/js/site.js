@@ -767,6 +767,9 @@
     if (b) { e.preventDefault(); openConvert({ from: b.dataset.openConvert || undefined }); }
   });
 
+  /* set at log-in when the account is a partner's (register.js) */
+  const isPartner = () => { try { return sessionStorage.getItem("vb.partner") === "1"; } catch (e) { return false; } };
+
   /* the account menu under the chip: every account with its balance; the chosen one is what the chip shows */
   function bindAccountMenu(root) {
     const btn = root.querySelector("[data-account-menu]");
@@ -778,7 +781,8 @@
         accounts.list().map((a) =>
           '<button type="button" role="menuitemradio" aria-checked="' + (a.code === shown) + '" data-account="' + esc(a.code) + '">' +
           '<i class="account-sym">' + esc(a.symbol) + "</i><span><b>" + esc(a.label) + "</b><small>" + esc(a.sub) + "</small></span><em>" + esc(a.short) + "</em></button>").join("") +
-        '<div class="account-menu-foot"><button type="button" data-convert>Convert</button><a href="wallet.html">Deposit &amp; withdraw</a></div>';
+        '<div class="account-menu-foot"><button type="button" data-convert>Convert</button><a href="wallet.html">Deposit &amp; withdraw</a>' +
+        (isPartner() ? '<a href="partners.html">Partner dashboard</a>' : "") + "</div>";
     };
     const close = () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); };
     btn.addEventListener("click", () => {
@@ -1197,7 +1201,8 @@
     wallet, session, api, paymentApi, refreshBalance, favs, recent, streak, toast, icon, gameCard, miniCard, markActiveNav, countdown, nextSundayEnd,
     format, money: format, esc, normalizePhone, isGhanaMobile, categoryIcon: (c) => CATEGORY_ICONS[c] || "grid", thumbFace,
     testMode, openChat: (topic) => chat.open(topic), openConvert, switchCurrency, moneyInDollars, attributeRef,
-    referral: { get: storedRef, setPromo: setRefPromo }
+    referral: { get: storedRef, setPromo: setRefPromo },
+    paymentBase: PAYMENT_API
   };
 
   /* Leaving a game must not trap the browser Back button. A "back to the lobby" control is a plain <a href>, which

@@ -293,6 +293,65 @@ async function main() {
     return until > Date.now() ? Math.ceil((until - Date.now()) / 1000) : 0;
   }
 
+  /* the account a log-in or reset names: a mobile number, a username, or an email address */
+  async function findAccount(raw, suffix) {
+    const v = String(raw || "").trim();
+    if (!v) throw new HttpError(400, "Enter your mobile number, username or email.", { field: suffix + "phone" });
+    if (v.includes("@")) {
+      const email = emailOf(v);
+      if (!email) throw new HttpError(400, "That email address doesn't look right.", { field: suffix + "phone" });
+      return (await db.query("SELECT * FROM users WHERE lower(email) = $1", [email])).rows[0] || null;
+    }
+    const phone = normalizePhone(v);
+    if (isGhanaMobile(phone) || isIntlMobile(phone)) return (await db.query("SELECT * FROM users WHERE phone = $1", [phone])).rows[0] || null;
+    if (USER_RE.test(v)) return (await db.query("SELECT * FROM users WHERE lower(username) = lower($1)", [v])).rows[0] || null;
+    throw new HttpError(400, "Enter your mobile number, username or email.", { field: suffix + "phone" });
+  }
+
+  /* the checks and the insert that sign-up and an admin's "create partner" share */
+  async function createAccount(body, opts) {
+    const fullName = tidyName(body.full_name);
+    const country = countryOf(body.country || "GH");
+    const phone = country ? phoneFor(country, body.phone) : "";
+    const username = String(body.username || "").trim() || await freeUsername();
+    const dob = String(body.dob || "");
+    const age = ageFrom(dob);
+    const currency = currencyOf(body.currency || "USD");
+    const email = emailOf(body.email);
+    const problem =
+      fullNameProblem(fullName) ? ["fullName", fullNameProblem(fullName)] :
+      !country ? ["country", "Choose your country."] :
+      !phone ? ["phone", country.code === "GH" ? "That is not a valid Ghanaian mobile number." : "Enter a valid " + country.name + " mobile number (+" + country.dial + " …)."] :
+      !currency ? ["currency", "Choose US dollars or Ghana cedis."] :
+      email === null ? ["email", "That email address doesn't look right — check it, or leave it empty."] :
+      !USER_RE.test(username) ? ["username", "Use 4–16 letters or numbers, no spaces."] :
+      RESERVED.includes(username.toLowerCase()) ? ["username", "That username is taken."] :
+      passwordProblem(body.password) ? ["pw", passwordProblem(body.password)] :
+      !(age >= 18) ? ["age", opts.admin ? "Partners must be 18 or older — check the date of birth." : "You must be 18 or older to register."] :
+      age > 120 ? ["age", "Check your date of birth."] : null;
+    if (problem) throw new HttpError(400, problem[1], { field: problem[0] });
+
+    const taken = await db.query("SELECT phone, lower(username) = lower($2) AS same_name FROM users WHERE phone = $1 OR lower(username) = lower($2)", [phone, username]);
+    if (taken.rows.some((r) => r.phone === phone)) {
+      throw new HttpError(409, opts.admin ? "This number already has an account — make that player a partner instead." : "An account already exists for this number — log in instead.", { field: "phone" });
+    }
+    if (taken.rows.length) throw new HttpError(409, "That username is taken.", { field: "username" });
+    if (email && (await db.query("SELECT 1 FROM users WHERE lower(email) = $1", [email])).rows.length) {
+      throw new HttpError(409, "That email address is already used by another account.", { field: "email" });
+    }
+    const hash = await hashPassword(body.password);
+    try {
+      const { rows: [user] } = await db.query(
+        "INSERT INTO users (phone, username, password_hash, dob, news, currency, country, full_name, email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
+        [phone, username, hash, dob, !!body.news, currency, country.code, fullName || null, email || null]);
+      return user;
+    } catch (err) {
+      /* two sign-ups for the same number or name at the same moment: the unique index decides */
+      if (err.code === "23505") throw new HttpError(409, "That number, username or email was just taken. Try again.");
+      throw err;
+    }
+  }
+
   /* sign-up doesn't ask for a username; each player gets a free one like Player482193 */
   async function freeUsername() {
     for (let i = 0; i < 8; i++) {
@@ -307,57 +366,17 @@ async function main() {
     "GET /health": async (req) => ({ ok: true, db: db.kind, proxy: proxyShape(req) }),
 
     "POST /api/register": async (req, body) => {
-      const fullName = tidyName(body.full_name);
-      const country = countryOf(body.country || "GH");
-      const phone = country ? phoneFor(country, body.phone) : "";
-      const username = String(body.username || "").trim() || await freeUsername();
-      const dob = String(body.dob || "");
-      const age = ageFrom(dob);
-      const currency = currencyOf(body.currency || "USD");
-      const email = emailOf(body.email);
-      const problem =
-        fullNameProblem(fullName) ? ["fullName", fullNameProblem(fullName)] :
-        !country ? ["country", "Choose your country."] :
-        !phone ? ["phone", country.code === "GH" ? "That is not a valid Ghanaian mobile number." : "Enter a valid " + country.name + " mobile number (+" + country.dial + " …)."] :
-        !currency ? ["currency", "Choose US dollars or Ghana cedis."] :
-        email === null ? ["email", "That email address doesn't look right — check it, or leave it empty."] :
-        !USER_RE.test(username) ? ["username", "Use 4–16 letters or numbers, no spaces."] :
-        RESERVED.includes(username.toLowerCase()) ? ["username", "That username is taken."] :
-        passwordProblem(body.password) ? ["pw", passwordProblem(body.password)] :
-        !(age >= 18) ? ["age", "You must be 18 or older to register."] :
-        age > 120 ? ["age", "Check your date of birth."] : null;
-      if (problem) throw new HttpError(400, problem[1], { field: problem[0] });
-
-      const taken = await db.query("SELECT phone, lower(username) = lower($2) AS same_name FROM users WHERE phone = $1 OR lower(username) = lower($2)", [phone, username]);
-      if (taken.rows.some((r) => r.phone === phone)) throw new HttpError(409, "An account already exists for this number — log in instead.", { field: "phone" });
-      if (taken.rows.length) throw new HttpError(409, "That username is taken.", { field: "username" });
-      if (email && (await db.query("SELECT 1 FROM users WHERE lower(email) = $1", [email])).rows.length) {
-        throw new HttpError(409, "That email address is already used by another account.", { field: "email" });
-      }
-
-      const hash = await hashPassword(body.password);
-      let user;
-      try {
-        ({ rows: [user] } = await db.query(
-          "INSERT INTO users (phone, username, password_hash, dob, news, currency, country, full_name, email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
-          [phone, username, hash, dob, !!body.news, currency, country.code, fullName || null, email || null]));
-      } catch (err) {
-        /* two sign-ups for the same number or name at the same moment: the unique index decides */
-        if (err.code === "23505") throw new HttpError(409, "That number, username or email was just taken. Try again.");
-        throw err;
-      }
+      const user = await createAccount(body, { admin: false });
       const token = await newSession(user.id, true, req);
       return { status: 201, body: { token, user: publicUser(user) } };
     },
 
     "POST /api/login": async (req, body) => {
-      const phone = normalizePhone(body.phone);
       const pw = String(body.password || "");
-      if (!isGhanaMobile(phone) && !isIntlMobile(phone)) throw new HttpError(400, "That is not a valid mobile number.", { field: "lphone" });
-      const { rows: [user] } = await db.query("SELECT * FROM users WHERE phone = $1", [phone]);
+      const user = await findAccount(body.login !== undefined ? body.login : body.phone, "l");
       if (!user) {
         await checkPassword(pw, DUMMY_HASH);
-        throw new HttpError(404, "No account found for this number.", { field: "lphone" });
+        throw new HttpError(404, "No account found for that number, username or email.", { field: "lphone" });
       }
       const wait = lockedFor(user);
       if (wait) throw new HttpError(429, "Too many wrong attempts. Try again in " + wait + " seconds.", { retryIn: wait });
@@ -390,6 +409,17 @@ async function main() {
       if (!currency) throw new HttpError(400, "Choose US dollars or Ghana cedis.", { field: "currency" });
       await db.query("UPDATE users SET currency = $2 WHERE id = $1", [user.id, currency]);
       return { body: { user: publicUser({ ...user, currency }) } };
+    },
+
+    /* an admin's "create partner": the balance service, holding ACCOUNTS_INTERNAL_SECRET, opens the account */
+    "POST /api/internal/accounts": async (req, body) => {
+      const secret = process.env.ACCOUNTS_INTERNAL_SECRET || "";
+      const given = String(req.headers["x-internal-secret"] || "");
+      if (secret.length < 16 || given.length !== secret.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(secret))) {
+        throw new HttpError(403, "Not allowed.");
+      }
+      const user = await createAccount(body, { admin: true });
+      return { status: 201, body: { user: { id: user.id, ...publicUser(user) } } };
     },
 
     "GET /api/session/verify": async (req) => {
@@ -459,12 +489,11 @@ async function main() {
 
     /* forgot password: the date of birth given at sign-up confirms it's you */
     "POST /api/reset": async (req, body) => {
-      const phone = normalizePhone(body.phone);
-      if (!isGhanaMobile(phone) && !isIntlMobile(phone)) throw new HttpError(400, "That is not a valid mobile number.", { field: "fphone" });
       const pwProblem = passwordProblem(body.password);
       if (pwProblem) throw new HttpError(400, pwProblem, { field: "fpw" });
-      const { rows: [user] } = await db.query("SELECT *, to_char(dob, 'YYYY-MM-DD') AS dob_text FROM users WHERE phone = $1", [phone]);
-      if (!user) throw new HttpError(404, "No account found for this number.", { field: "fphone" });
+      const found = await findAccount(body.login !== undefined ? body.login : body.phone, "f");
+      if (!found) throw new HttpError(404, "No account found for that number, username or email.", { field: "fphone" });
+      const { rows: [user] } = await db.query("SELECT *, to_char(dob, 'YYYY-MM-DD') AS dob_text FROM users WHERE id = $1", [found.id]);
       const wait = resetLockedFor(user);
       if (wait) throw new HttpError(429, "Password reset is paused on this account after too many wrong dates of birth. Try again in " + Math.ceil(wait / 3600) + " hours, or contact support.", { retryIn: wait });
       if (String(body.dob || "") !== user.dob_text) {

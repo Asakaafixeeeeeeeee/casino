@@ -109,10 +109,9 @@
       <!-- LOG IN -->
       <form id="loginForm" novalidate hidden>
         <div class="field">
-          <label for="lphone">Mobile number</label>
+          <label for="lphone">Mobile number, username or email</label>
           <div class="input-wrap">
-            <span class="prefix" aria-hidden="true">🇬🇭</span>
-            <input id="lphone" type="tel" inputmode="numeric" placeholder="024 123 4567" autocomplete="username" maxlength="16">
+            <input id="lphone" type="text" placeholder="024 123 4567" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="254">
           </div>
           <span class="err" id="lphoneErr"></span>
         </div>
@@ -131,10 +130,9 @@
       <!-- FORGOT PASSWORD -->
       <form id="forgotForm" novalidate hidden>
         <div class="field">
-          <label for="fphone">Mobile number</label>
+          <label for="fphone">Mobile number, username or email</label>
           <div class="input-wrap">
-            <span class="prefix" aria-hidden="true">🇬🇭</span>
-            <input id="fphone" type="tel" inputmode="numeric" placeholder="024 123 4567" autocomplete="username" maxlength="16">
+            <input id="fphone" type="text" placeholder="024 123 4567" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="254">
           </div>
           <span class="err" id="fphoneErr"></span>
         </div>
@@ -164,6 +162,6 @@
 
 <script src="assets/js/data.js?v=52"></script>
 <script src="assets/js/site.js?v=46"></script>
-<script src="assets/js/register.js?v=38"></script>
+<script src="assets/js/register.js?v=39"></script>
 </body>
 </html>

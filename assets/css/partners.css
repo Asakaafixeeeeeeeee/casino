@@ -95,3 +95,81 @@
 .prt-idrow { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .82rem; color: var(--muted); }
 .prt-idrow b { color: var(--text); font-family: ui-monospace, Menlo, monospace; letter-spacing: .04em; }
 .prt-mainlink .prt-terms { margin: 0; }
+
+/* nothing wider than a 360px phone: the tab bar and tables scroll inside themselves */
+#prtView, #prtTab, #tabBody { min-width: 0; max-width: 100%; }
+.prt-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+.prt-tabs button { white-space: nowrap; }
+.prt-linkrow input { min-width: 0; }
+.prt-linkrow .btn .ic { width: 15px; height: 15px; }
+.prt-ref { font-size: .78rem; overflow-wrap: anywhere; }
+
+/* a feature switched off (or not shown in admin preview): one calm notice */
+.prt-off { display: flex; gap: 12px; align-items: flex-start; margin: 0 0 14px; padding: 14px 16px; }
+.prt-off-ico { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--surface-3); color: var(--yellow); }
+.prt-off-ico .ic { width: 18px; height: 18px; }
+.prt-off strong { display: block; margin-bottom: 2px; font-size: .95rem; }
+.prt-off p { margin: 0; font-size: .86rem; line-height: 1.5; color: var(--muted); }
+
+/* wallet: the account wallet, then the commission wallet, clearly apart */
+.prt-acct { display: grid; gap: 10px; }
+.prt-acct-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.prt-acct-head > div { display: grid; gap: 2px; min-width: 0; }
+.prt-acct-bal { font-size: 1.7rem; font-variant-numeric: tabular-nums; color: var(--text); }
+.prt-acct-head small { font-size: .76rem; color: var(--dim); }
+.prt-acct-head .btn .ic { width: 16px; height: 16px; }
+.prt-acct-off { margin: 0; }
+.prt-acct .hint, .prt-acct .prt-sub-h { margin: 0; }
+.prt-txf .chip small { margin-left: 4px; opacity: .7; }
+.prt-apart {
+  display: flex; gap: 10px; align-items: flex-start; margin: 18px 0 4px; padding: 12px 14px; border-radius: var(--r);
+  border: 1px dashed rgba(255, 200, 61, .4); background: rgba(255, 200, 61, .06); font-size: .86rem; line-height: 1.5; color: var(--muted);
+}
+.prt-apart b { color: var(--text); }
+.prt-apart .ic { width: 18px; height: 18px; flex: none; margin-top: 1px; color: var(--yellow); }
+
+/* game tools */
+.prt-limits {
+  margin: 0 0 14px; padding: 14px 16px; border-radius: var(--r); border: 1px solid rgba(255, 200, 61, .45);
+  background: rgba(255, 200, 61, .08); font-size: .86rem; line-height: 1.55; color: var(--muted);
+}
+.prt-limits strong { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: .98rem; color: var(--yellow); }
+.prt-limits strong .ic { width: 18px; height: 18px; flex: none; }
+.prt-limits p { margin: 4px 0 0; }
+.prt-limits p b { color: var(--text); }
+.prt-subtabs { display: flex; gap: 7px; overflow-x: auto; margin: 0 0 12px; padding-bottom: 2px; scrollbar-width: none; }
+.prt-subtabs::-webkit-scrollbar { display: none; }
+.prt-subtabs .chip { flex: none; white-space: nowrap; }
+.prt-subtabs .chip[aria-selected="true"] { border-color: var(--yellow); background: var(--yellow); color: #111; }
+.prt-odds td small { display: block; margin: 0; font-size: .72rem; color: var(--dim); }
+.prt-scroll { max-height: 420px; overflow-y: auto; }
+.prt-hist { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.prt-hist span {
+  padding: 3px 9px; border-radius: var(--r-full); font-size: .76rem; font-weight: 800; font-variant-numeric: tabular-nums;
+  background: var(--surface-3); color: var(--muted);
+}
+.prt-hist .mid { background: rgba(255, 200, 61, .14); color: var(--yellow); }
+.prt-hist .hi { background: rgba(52, 215, 122, .14); color: var(--green); }
+.prt-toolgame { margin-bottom: 12px; display: grid; gap: 10px; min-width: 0; }
+.prt-toolgame .prt-sub-h { margin: 0; display: flex; align-items: center; gap: 8px; }
+
+/* support */
+.prt-support p { margin: 0 0 12px; font-size: .9rem; line-height: 1.55; color: var(--muted); }
+.prt-support .hint { margin: 10px 0 0; }
+.prt-support-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.prt-support-actions .btn { max-width: 100%; overflow-wrap: anywhere; }
+.prt-support-actions .ic { width: 16px; height: 16px; flex: none; }
+.prt-faq { display: grid; gap: 8px; margin-bottom: 8px; }
+.prt-faq details { border-radius: var(--r); border: 1px solid var(--line-soft); background: var(--surface); }
+.prt-faq summary { cursor: pointer; padding: 12px 14px; font-weight: 700; font-size: .9rem; list-style-position: inside; }
+.prt-faq details[open] summary { border-bottom: 1px solid var(--line-soft); }
+.prt-faq details p { margin: 0; padding: 10px 14px 12px; font-size: .88rem; line-height: 1.55; color: var(--muted); }
+.prt-faq details p b { color: var(--text); }
+
+@media (max-width: 420px) {
+  .prt-acct-bal { font-size: 1.4rem; }
+  .prt-support-actions .btn { flex: 1 1 100%; justify-content: center; }
+  .prt-banners { grid-template-columns: 1fr; }
+}
+/* the flyer generator (flyers.js) lives in this box: whatever it draws, it never widens the page */
+#flyerBox { min-width: 0; max-width: 100%; overflow-x: auto; margin-bottom: 14px; }

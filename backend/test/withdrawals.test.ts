@@ -117,8 +117,10 @@ test("An older payout left PAYING is still settled by a status check, never refu
 
 test("Requests made before the withdrawals table existed are picked up by the migration", async () => {
   const env = await setupWalletDb({ stopBefore: "007_withdrawals.sql" });
-  /* today's ledger code needs the winnings column, which this deliberately old schema doesn't have yet */
+  /* today's ledger code needs the winnings and deposited-money columns, which this deliberately old schema doesn't have yet */
   await env.db.query("ALTER TABLE user_balances ADD COLUMN IF NOT EXISTS withdrawable NUMERIC(38,18) NOT NULL DEFAULT 0");
+  await env.db.query("ALTER TABLE user_balances ADD COLUMN IF NOT EXISTS deposit_funds NUMERIC(38,18) NOT NULL DEFAULT 0");
+  await env.db.query("ALTER TABLE ledger_entries ADD COLUMN IF NOT EXISTS deposit_part NUMERIC(38,18)");
   await env.client.query("BEGIN");
   await deposit(env.client, env.userId, "GHS", 50, "deposit:legacy");
   await env.client.query("UPDATE user_balances SET withdrawable = available WHERE user_id = $1", [env.userId]);

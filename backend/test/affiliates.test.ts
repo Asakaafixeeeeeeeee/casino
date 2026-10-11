@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deposit } from "../src/services/balanceService.js";
+import { deposit, postMovement, SystemAccount } from "../src/services/balanceService.js";
 import { ensureWalletAccount } from "../src/services/accountLink.js";
 import { auditLog } from "../src/services/admin.js";
+import { requestWithdrawal } from "../src/services/withdrawals.js";
 import {
   accrueCommissions, applyPartner, attributeReferral, checkReferral, correctCommission, decidePartnerPayout, getSettings,
-  lastClosedPeriod, listPartnerPayouts, listPartners, lookupPlayer, PartnerError, partnerDetail, partnerOf, partnerPayouts,
+  lastClosedPeriod, listPartnerPayouts, partnerCommissions, listPartners, lookupPlayer, PartnerError, partnerDetail, partnerOf, partnerPayouts,
   partnerPreview, partnerReferrals, partnerSettings, partnerStatistics, partnerSummary, partnerWallet, programmeStats, recordClick,
   requestPayout, resolveReferral, saveSettings, savePayoutDetails, setOwnPromo, settleCommissions, updatePartner, walletOf,
 } from "../src/services/affiliates.js";
@@ -28,20 +29,60 @@ async function partnerWithTerms(terms: Record<string, unknown> = {}) {
 async function player(env: Env, name: string) {
   return ensureWalletAccount(env.db, "acct-" + name, name);
 }
-/* a settled one-draw round */
-async function bet(env: Env, userId: string, stake: number, payout: number, at?: Date) {
+/* money moves the way the game engines move it: a confirmed deposit, a stake, a payout (always winnings), a refund */
+async function move(env: Env, fn: () => Promise<unknown>) {
+  await env.client.query("BEGIN");
+  try {
+    await fn();
+    await env.client.query("COMMIT");
+  } catch (e) {
+    await env.client.query("ROLLBACK");
+    throw e;
+  }
+}
+async function fund(env: Env, userId: string, amount: number) {
+  await move(env, () => deposit(env.client, userId, "GHS", amount, "deposit:" + key()));
+}
+const leg = (userId: string, dir: "DEBIT" | "CREDIT", amountMajor: number) => [
+  { userId, currencyCode: "GHS", direction: dir, amountMajor },
+  { userId: null, systemAccount: SystemAccount.House, currencyCode: "GHS", direction: dir === "DEBIT" ? "CREDIT" : "DEBIT", amountMajor },
+] as const;
+/* a settled one-draw round from the player's own balance (deposit first with `fund`; `bet` deposits the stake itself
+   unless told the money is already there) */
+async function play(env: Env, userId: string, stake: number, payout: number, at?: Date) {
+  const k = key();
+  await move(env, async () => {
+    await postMovement(env.client, { idempotencyKey: "bet:" + k, entryType: "BET_PLACED", legs: [...leg(userId, "DEBIT", stake)] });
+    if (payout > 0) await postMovement(env.client, { idempotencyKey: "win:" + k, entryType: "BET_SETTLED", legs: [...leg(userId, "CREDIT", payout)] });
+  });
   const { rows } = await env.db.query(
     `INSERT INTO game_rounds (user_id, game, currency, stake, payout, choice, outcome, idempotency_key, created_at)
      VALUES ($1, 'volta-coin', 'GHS', $2, $3, '{}', '{}', $4, coalesce($5::timestamptz, now())) RETURNING id`,
-    [userId, stake, payout, key(), at ?? null]);
+    [userId, stake, payout, k, at ?? null]);
   return rows[0].id as string;
 }
-/* a step-game round in a given state (OPEN, WON, LOST, VOID) */
-async function session(env: Env, userId: string, stake: number, payout: number, status: string) {
-  await env.db.query(
-    `INSERT INTO game_sessions (user_id, game, currency, stake, params, secret, progress, status, payout, idempotency_key)
-     VALUES ($1, 'volta-mines', 'GHS', $2, '{}', '{}', '{}', $3, $4, $5)`, [userId, stake, status, payout, key()]);
+/* a bet staked from freshly deposited money */
+async function bet(env: Env, userId: string, stake: number, payout: number, at?: Date) {
+  await fund(env, userId, stake);
+  return play(env, userId, stake, payout, at);
 }
+/* a step-game round in a given state (OPEN, WON, LOST, VOID), staked from freshly deposited money */
+async function session(env: Env, userId: string, stake: number, payout: number, status: string) {
+  await fund(env, userId, stake);
+  const { rows } = await env.db.query(
+    `INSERT INTO game_sessions (user_id, game, currency, stake, params, secret, progress, status, payout, idempotency_key)
+     VALUES ($1, 'volta-mines', 'GHS', $2, '{}', '{}', '{}', $3, $4, $5) RETURNING id`, [userId, stake, status, payout, key()]);
+  const id = rows[0].id;
+  await move(env, async () => {
+    await postMovement(env.client, { idempotencyKey: "bet:session:" + id, entryType: "BET_PLACED", legs: [...leg(userId, "DEBIT", stake)] });
+    if (status === "VOID") await postMovement(env.client, { idempotencyKey: "void:session:" + id, entryType: "BET_VOID", legs: [...leg(userId, "CREDIT", stake)] });
+    else if (payout > 0) await postMovement(env.client, { idempotencyKey: "win:session:" + id, entryType: "BET_SETTLED", legs: [...leg(userId, "CREDIT", payout)] });
+  });
+}
+const balanceRow = async (env: Env, userId: string) => {
+  const r = (await env.db.query(`SELECT available, withdrawable, deposit_funds FROM user_balances WHERE user_id = $1 AND currency_code = 'GHS'`, [userId])).rows[0];
+  return { available: Number(r.available), winnings: Number(r.withdrawable), deposits: Number(r.deposit_funds) };
+};
 async function referred(env: Env, name: string) {
   const id = await player(env, name);
   assert.equal((await attributeReferral(env.db, id, { code: env.code! })).attributed, true);
@@ -376,6 +417,9 @@ test("Payment details are saved for the partner; settings show their terms but n
 test("Migration 026 keeps every partner's unpaid deposit commission as an opening balance, and waiting requests as holds", async () => {
   const env = await setupWalletDb({ stopBefore: "026_partner_revshare.sql" });
   const { db } = env;
+  /* the new wallet code (used below to move money) writes these columns; on Render the migration adds them before it runs */
+  await db.query("ALTER TABLE user_balances ADD COLUMN IF NOT EXISTS deposit_funds NUMERIC(38,18) NOT NULL DEFAULT 0");
+  await db.query("ALTER TABLE ledger_entries ADD COLUMN IF NOT EXISTS deposit_part NUMERIC(38,18)");
   await db.query(`INSERT INTO affiliates (user_id, code, status, deposit_pct) VALUES ($1, 'VBOLD123', 'ACTIVE', 10)`, [env.userId]);
   const ama = await ensureWalletAccount(db, "acct-ama", "ama");
   await db.query(`INSERT INTO referrals (user_id, affiliate_id) VALUES ($1, $2)`, [ama, env.userId]);
@@ -385,9 +429,144 @@ test("Migration 026 keeps every partner's unpaid deposit commission as an openin
   await db.query(`INSERT INTO affiliate_payouts (affiliate_id, amount, method, status) VALUES ($1, 30, 'MOMO', 'PAID'), ($1, 20, 'MOMO', 'REQUESTED')`,
     [env.userId]);
   await env.runMigration("026_partner_revshare.sql");
+  await env.runMigration("027_partner_deposit_funds.sql");
   const w = await walletOf(db, env.userId);
   assert.deepEqual([w.available, w.withdrawn, w.pendingWithdrawals], [50, 30, 20], "100 earned - 30 paid - 20 waiting");
   const reqId = (await db.query(`SELECT id FROM affiliate_payouts WHERE status = 'REQUESTED'`)).rows[0].id;
   await decidePartnerPayout(db, ADMIN, reqId, { action: "reject", note: "test rejection" });
   assert.equal((await walletOf(db, env.userId)).available, 70);
+});
+
+/* ---------------- commission only on losses of real deposited money ---------------- */
+
+test("Example 1: a player deposits 500, stakes 200 of it and loses: the partner earns 20% of 200 = 40", async () => {
+  const env = await partnerWithTerms({ revshare_pct: 20 });
+  const ama = await referred(env, "ama");
+  await fund(env, ama, 500);
+  await play(env, ama, 200, 0);
+  assert.deepEqual(await balanceRow(env, ama), { available: 300, winnings: 0, deposits: 300 });
+  await accrueCommissions(env.db);
+  const [c] = (await partnerCommissions(env.db, await fresh(env))).commissions;
+  assert.deepEqual([c!.stake, c!.depositStake, c!.eligibleLoss, c!.pct, c!.amount, c!.kind], [200, 200, 200, 20, 40, "commission"]);
+  const w = await walletOf(env.db, env.userId);
+  assert.deepEqual([w.eligibleLosses, w.totalEarned, w.pending], [200, 40, 40]);
+});
+
+test("Example 2: a player stakes 300 of their deposit and wins 1,000: no commission, the partner is deducted 10% = 100", async () => {
+  const env = await partnerWithTerms({ revshare_pct: 20 });
+  const ama = await referred(env, "ama");
+  await fund(env, ama, 500);
+  await play(env, ama, 300, 1300); // 1,000 net winnings
+  assert.deepEqual(await balanceRow(env, ama), { available: 1500, winnings: 1300, deposits: 200 }, "the whole payout is winnings");
+  await accrueCommissions(env.db);
+  const [c] = (await partnerCommissions(env.db, await fresh(env))).commissions;
+  assert.deepEqual([c!.depositStake, c!.eligibleLoss, c!.pct, c!.amount, c!.kind], [300, 0, 10, -100, "deduction"]);
+  const w = await walletOf(env.db, env.userId);
+  assert.deepEqual([w.totalEarned, w.negativeAdjustments, w.pending], [0, -100, -100]);
+});
+
+test("Example 3: losing money that came from winnings earns the partner nothing", async () => {
+  const env = await partnerWithTerms({ revshare_pct: 20 });
+  const ama = await referred(env, "ama");
+  await fund(env, ama, 500);
+  await play(env, ama, 300, 1300);          // example 2: deposits left 200, winnings 1,300
+  await play(env, ama, 200, 0);             // the remaining deposit, lost: +40
+  assert.deepEqual(await balanceRow(env, ama), { available: 1300, winnings: 1300, deposits: 0 });
+  await play(env, ama, 1000, 0);            // 1,000 of winnings, lost: nothing
+  await accrueCommissions(env.db);
+  const rows = (await partnerCommissions(env.db, await fresh(env))).commissions;
+  const lost = rows.find((c) => c.stake === 1000)!;
+  assert.deepEqual([lost.depositStake, lost.eligibleLoss, lost.amount, lost.kind], [0, 0, 0, "not_eligible"]);
+  const w = await walletOf(env.db, env.userId);
+  assert.deepEqual([w.eligibleLosses, w.totalEarned, w.negativeAdjustments, w.lifetimeNet], [200, 40, -100, -60]);
+});
+
+test("A stake of deposits and winnings together: only the deposited share of the loss counts", async () => {
+  const env = await partnerWithTerms({ revshare_pct: 50 });
+  const ama = await referred(env, "ama");
+  await fund(env, ama, 100);
+  await play(env, ama, 100, 150);           // all deposit, wins 50 net: -5; now winnings 150, deposits 0
+  await fund(env, ama, 60);                 // deposits 60, winnings 150
+  await play(env, ama, 100, 40);            // 60 deposit + 40 winnings, loses 60: eligible 60 x 60/100 = 36, at 50% = 18
+  await accrueCommissions(env.db);
+  const c = (await partnerCommissions(env.db, await fresh(env))).commissions.find((x) => x.payout === 40)!;
+  assert.deepEqual([c.depositStake, c.eligibleLoss, c.amount], [60, 36, 18]);
+});
+
+test("Admin credits and refunded stakes: an admin's credit isn't deposited money; a void bet gives its deposit back", async () => {
+  const env = await partnerWithTerms({ revshare_pct: 50 });
+  const ama = await referred(env, "ama");
+  /* an admin's credit is spent like deposits but never earns commission */
+  await move(env, () => postMovement(env.client, { idempotencyKey: "adjust:" + key(), entryType: "ADJUSTMENT", reason: "goodwill credit for testing",
+    legs: [...leg(ama, "CREDIT", 100)] }));
+  await play(env, ama, 100, 0);
+  /* a void step-game round returns its deposited stake as deposited money */
+  await session(env, ama, 40, 0, "VOID");
+  assert.deepEqual(await balanceRow(env, ama), { available: 40, winnings: 0, deposits: 40 });
+  await play(env, ama, 40, 0);              // the refunded deposit, lost: +20
+  await accrueCommissions(env.db);
+  const rows = (await partnerCommissions(env.db, await fresh(env))).commissions;
+  assert.deepEqual(rows.map((c) => [c.stake, c.eligibleLoss, c.amount]).sort(), [[100, 0, 0], [40, 40, 20]].sort());
+  assert.equal(rows.length, 2, "the void round itself never counts");
+});
+
+test("A withdrawal takes winnings only and leaves deposited money (and its eligibility) alone", async () => {
+  const env = await partnerWithTerms({ revshare_pct: 50 });
+  const ama = await referred(env, "ama");
+  await fund(env, ama, 100);
+  await play(env, ama, 50, 150);            // deposits 50, winnings 150
+  await requestWithdrawal(env.db, { id: ama, phone: "0241234567" }, 100, key());
+  assert.deepEqual(await balanceRow(env, ama), { available: 100, winnings: 50, deposits: 50 });
+});
+
+test("The admin sees every commission record with the player behind it and its working", async () => {
+  const env = await partnerWithTerms({ revshare_pct: 20 });
+  const ama = await referred(env, "ama");
+  await env.db.query(`UPDATE users SET full_name = 'Ama Mensah', phone = '0551112222' WHERE id = $1`, [ama]);
+  await fund(env, ama, 500);
+  await play(env, ama, 200, 0);
+  await play(env, ama, 100, 500);
+  const d = await partnerDetail(env.db, env.userId);
+  assert.equal(d.commissions.length, 2);
+  for (const c of d.commissions) assert.deepEqual([c.full_name, c.phone, c.user_id], ["Ama Mensah", "0551112222", ama]);
+  assert.deepEqual([d.lifetime.deposits, d.lifetime.eligibleLosses, d.lifetime.commission, d.lifetime.negative], [500, 200, 40, -40]);
+  const s = await partnerSummary(env.db, await fresh(env));
+  assert.deepEqual(s.deposits, { total: 500, players: 1 });
+  const mine = (await partnerCommissions(env.db, await fresh(env))).commissions[0]!;
+  assert.ok(!("full_name" in mine) && !("phone" in mine), "the partner never sees who the player is");
+});
+
+test("Migration 027 works out each past stake's deposited part and re-rates unsettled commission", async () => {
+  const env = await setupWalletDb({ stopBefore: "027_partner_deposit_funds.sql" });
+  const { db } = env;
+  /* the new wallet code (used below to move money) writes these columns; on Render the migration adds them before it runs */
+  await db.query("ALTER TABLE user_balances ADD COLUMN IF NOT EXISTS deposit_funds NUMERIC(38,18) NOT NULL DEFAULT 0");
+  await db.query("ALTER TABLE ledger_entries ADD COLUMN IF NOT EXISTS deposit_part NUMERIC(38,18)");
+  await applyPartner(db, env.userId, { channel: "My football WhatsApp group (2,000 members)" });
+  await updatePartner(db, ADMIN, env.userId, { status: "ACTIVE", revshare_pct: 20 });
+  const ama = await ensureWalletAccount(db, "acct-ama", "ama");
+  await attributeReferral(db, ama, { code: (await partnerOf(db, env.userId))!.code });
+  await db.query(`UPDATE referrals SET created_at = now() - interval '1 day'`);
+  /* the old way: deposit 500, win 1,000 net on a 300 stake, then lose 1,000 (200 deposit left + 800 winnings) */
+  const k1 = key(), k2 = key();
+  await move(env, async () => {
+    await deposit(env.client, ama, "GHS", 500, "deposit:" + key());
+    await postMovement(env.client, { idempotencyKey: "bet:" + k1, entryType: "BET_PLACED", legs: [...leg(ama, "DEBIT", 300)] });
+    await postMovement(env.client, { idempotencyKey: "win:" + k1, entryType: "BET_SETTLED", legs: [...leg(ama, "CREDIT", 1300)] });
+    await postMovement(env.client, { idempotencyKey: "bet:" + k2, entryType: "BET_PLACED", legs: [...leg(ama, "DEBIT", 1000)] });
+  });
+  for (const [k, stake, payout] of [[k1, 300, 1300], [k2, 1000, 0]] as const) {
+    await db.query(`INSERT INTO game_rounds (user_id, game, currency, stake, payout, choice, outcome, idempotency_key)
+                    VALUES ($1, 'volta-coin', 'GHS', $2, $3, '{}', '{}', $4)`, [ama, stake, payout, k]);
+  }
+  await db.query(`INSERT INTO partner_commissions (affiliate_id, player_id, source, bet_id, game, stake, payout, ngr, pct, amount, settled_at)
+                  SELECT $1, user_id, 'round', id, game, stake, payout, stake - payout, CASE WHEN payout > stake THEN 10 ELSE 20 END,
+                         CASE WHEN payout > stake THEN -trunc((payout - stake) * 0.1, 2) ELSE trunc((stake - payout) * 0.2, 2) END, created_at
+                    FROM game_rounds`, [env.userId]);   // what the old rule recorded: -100 and +200
+  await env.runMigration("027_partner_deposit_funds.sql");
+  const rows = (await db.query(`SELECT stake, deposit_stake, eligible_loss, amount FROM partner_commissions ORDER BY stake`)).rows
+    .map((r) => [Number(r.stake), Number(r.deposit_stake), Number(r.eligible_loss), Number(r.amount)]);
+  assert.deepEqual(rows, [[300, 300, 0, -100], [1000, 200, 200, 40]], "only the 200 of deposited money in the 1,000 earns");
+  const b = (await db.query(`SELECT available, withdrawable, deposit_funds FROM user_balances WHERE user_id = $1 AND currency_code = 'GHS'`, [ama])).rows[0];
+  assert.deepEqual([Number(b.available), Number(b.withdrawable), Number(b.deposit_funds)], [500, 500, 0]);
 });

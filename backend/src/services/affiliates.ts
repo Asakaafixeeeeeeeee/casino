@@ -8,9 +8,13 @@ import { logAction } from "./admin.js";
  * who signs up through either is theirs for good (one partner per player, only for accounts opened in the last
  * `referral_days`, never themselves, and a link and a promo code of two different partners is refused).
  *
- * Commission is revenue share, decided per settled bet of a referred player (migration 026):
- *   losing bet  (stake > payout):  + revshare% of (stake - payout)      the partner's rate when the bet settled
- *   winning bet (payout > stake):  - deduction% of (payout - stake)     the deduction in force when the bet settled
+ * Commission is revenue share on REAL DEPOSITED MONEY only, decided per settled bet of a referred player
+ * (migrations 026 and 027). The wallet records how much of each stake was deposited money (stakes spend deposited
+ * money first, then other credits, then winnings; every payout counts as winnings):
+ *   losing bet  (stake > payout):  + revshare% of the eligible loss = (stake - payout) x deposited part / stake
+ *                                    — losing winnings (or an admin's credit) earns nothing
+ *   winning bet (payout > stake):  - deduction% of (payout - stake), the player's net winnings
+ * at the partner's rate and the deduction in force when the bet settled
  * each truncated to the cent and recorded once (partner_commissions, UNIQUE source + bet). Open, cancelled and void
  * bets never count. Commission is pending until its settlement period (daily, weekly or monthly) closes; settling
  * credits the period's net to the partner's commission wallet, and a negative period is carried forward or written
@@ -47,6 +51,10 @@ export interface Affiliate {
   decided_at: Date | null;
   decided_by: string | null;
   accrue_from: Date | null;
+  /** this partner's feature switches (true / false), over the global ones (partnerPlatform.ts) */
+  permissions?: Record<string, boolean>;
+  /** the admin who created this partner directly, if one did */
+  created_by_admin?: string | null;
 }
 
 export interface Settings {
@@ -60,6 +68,8 @@ export interface Settings {
   links_enabled: boolean;
   promo_codes_enabled: boolean;
   partner_promo_edit: boolean;
+  /** the global feature switches (migration 028) */
+  permissions: Record<string, boolean>;
   updated_by: string | null;
   updated_at: Date;
 }
@@ -91,6 +101,7 @@ export async function getSettings(db: Db): Promise<Settings> {
     links_enabled: s.links_enabled,
     promo_codes_enabled: s.promo_codes_enabled,
     partner_promo_edit: s.partner_promo_edit,
+    permissions: s.permissions ?? {},
     updated_by: s.updated_by,
     updated_at: s.updated_at,
   };
@@ -205,12 +216,19 @@ export async function rateOf(db: Db, affiliateId: string, at = new Date()) {
   };
 }
 
-const linkLive = (a: Pick<Affiliate, "status" | "link_enabled">) => (a.status === "ACTIVE" || a.status === "PENDING") && a.link_enabled;
+/** Whether a feature is on for this partner: their own switch, else the global one, else on. */
+export function featureOn(a: Pick<Affiliate, "permissions">, global: Record<string, boolean> | undefined, key: string): boolean {
+  const own = a.permissions?.[key];
+  if (typeof own === "boolean") return own;
+  return typeof global?.[key] === "boolean" ? global[key]! : true;
+}
+const linkLive = (a: Pick<Affiliate, "status" | "link_enabled" | "permissions">, global?: Record<string, boolean>) =>
+  (a.status === "ACTIVE" || a.status === "PENDING") && a.link_enabled && featureOn(a, global, "referral_links");
 
-export function partnerView(a: Affiliate) {
+export function partnerView(a: Affiliate, global?: Record<string, boolean>) {
   return {
     code: a.code, promo_code: a.promo_code, promo_request: a.promo_request, status: a.status, link_enabled: a.link_enabled,
-    link_live: linkLive(a), channel: a.channel, created_at: a.created_at, decided_at: a.decided_at,
+    link_live: linkLive(a, global), channel: a.channel, created_at: a.created_at, decided_at: a.decided_at,
   };
 }
 
@@ -260,11 +278,13 @@ export async function resolveReferral(db: Db, input: { code?: unknown; promo?: u
   let byPromo: Affiliate | null = null;
   if (code) {
     byLink = s.links_enabled ? await ownerOf(db, "code", code) : null;
-    if (byLink && !linkLive(byLink)) byLink = null;
+    if (byLink && !linkLive(byLink, s.permissions)) byLink = null;
   }
   if (promo) {
     if (!s.promo_codes_enabled) throw new PartnerError("promo_off", "Promo codes can't be used at the moment.");
     byPromo = (await ownerOf(db, "promo_code", promo)) ?? (await ownerOf(db, "code", promo));
+    if (byPromo && promo === byPromo.promo_code && !featureOn(byPromo, s.permissions, "promo_codes")) byPromo = null;
+    if (byPromo && promo === byPromo.code && !linkLive(byPromo, s.permissions)) byPromo = null;
     if (!byPromo || !(byPromo.status === "ACTIVE" || byPromo.status === "PENDING")) {
       throw new PartnerError("unknown_promo", "That promo code isn't valid. Check it, or leave it empty.", 404);
     }
@@ -282,7 +302,7 @@ export async function resolveReferral(db: Db, input: { code?: unknown; promo?: u
 export async function recordClick(db: Pool, code: unknown, sub: unknown): Promise<boolean> {
   const s = await getSettings(db);
   const a = s.links_enabled ? await ownerOf(db, "code", code) : null;
-  if (!a || !linkLive(a)) return false;
+  if (!a || !linkLive(a, s.permissions)) return false;
   await db.query(
     `INSERT INTO referral_clicks (affiliate_id, day, sub_id, clicks) VALUES ($1, current_date, $2, 1)
      ON CONFLICT (affiliate_id, day, sub_id) DO UPDATE SET clicks = referral_clicks.clicks + 1`, [a.user_id, normSub(sub)]);
@@ -325,14 +345,21 @@ export async function attributeReferral(
  */
 export async function accrueCommissions(db: Db, affiliateId?: string): Promise<number> {
   const { rowCount } = await db.query(
-    `INSERT INTO partner_commissions (affiliate_id, player_id, source, bet_id, game, stake, payout, ngr, pct, amount, settled_at)
+    `INSERT INTO partner_commissions (affiliate_id, player_id, source, bet_id, game, stake, payout, ngr, pct, amount, settled_at,
+                                     deposit_stake, eligible_loss, rule)
      SELECT x.affiliate_id, x.user_id, x.source, x.bet_id, x.game, x.stake, x.payout, x.stake - x.payout, x.pct,
-            CASE WHEN x.stake > x.payout THEN trunc((x.stake - x.payout) * x.pct / 100, 2)
+            CASE WHEN x.stake > x.payout THEN trunc(x.eligible * x.pct / 100, 2)
                  WHEN x.payout > x.stake THEN -trunc((x.payout - x.stake) * x.pct / 100, 2)
                  ELSE 0 END,
-            x.settled_at
+            x.settled_at, x.deposit_part, x.eligible, 'deposit'
        FROM (
+         SELECT y.*, CASE WHEN y.stake > y.payout THEN trunc((y.stake - y.payout) * y.deposit_part / y.stake, 2) ELSE 0 END AS eligible
+           FROM (
          SELECT r.affiliate_id, b.*,
+                /* how much of the stake was real deposited money (recorded on the stake's ledger leg) */
+                coalesce((SELECT e.deposit_part FROM ledger_journal j
+                            JOIN ledger_entries e ON e.journal_id = j.id AND e.user_id = b.user_id AND e.direction = 'DEBIT'
+                           WHERE j.idempotency_key = b.stake_key LIMIT 1), 0) AS deposit_part,
                 CASE WHEN b.payout > b.stake THEN
                   coalesce((SELECT d.pct FROM partner_deduction_rates d WHERE d.effective_from <= b.settled_at
                              ORDER BY d.effective_from DESC, d.id DESC LIMIT 1),
@@ -350,6 +377,7 @@ export async function accrueCommissions(db: Db, affiliateId?: string): Promise<n
                               AND (a.accrue_from IS NULL OR b.settled_at >= a.accrue_from)
           WHERE ($1::uuid IS NULL OR r.affiliate_id = $1::uuid)
             AND NOT EXISTS (SELECT 1 FROM partner_commissions c WHERE c.source = b.source AND c.bet_id = b.bet_id)
+           ) y
        ) x
      ON CONFLICT (source, bet_id) DO NOTHING`, [affiliateId ?? null]);
   return rowCount ?? 0;
@@ -499,7 +527,7 @@ export async function walletOf(db: Db, affiliateId: string) {
     db.query(`SELECT coalesce(sum(amount) FILTER (WHERE status = 'PAID'), 0) AS withdrawn,
                      coalesce(sum(amount) FILTER (WHERE status IN ('REQUESTED', 'APPROVED')), 0) AS pending_withdrawals
                 FROM affiliate_payouts WHERE affiliate_id = $1`, [affiliateId]),
-    db.query(`SELECT coalesce(sum(amount), 0) AS lifetime,
+    db.query(`SELECT coalesce(sum(amount), 0) AS lifetime, coalesce(sum(eligible_loss), 0) AS eligible,
                      coalesce(sum(amount) FILTER (WHERE amount > 0), 0) AS earned,
                      coalesce(sum(amount) FILTER (WHERE amount < 0), 0) AS negative,
                      coalesce(sum(amount) FILTER (WHERE settlement_id IS NULL), 0) AS pending
@@ -514,6 +542,8 @@ export async function walletOf(db: Db, affiliateId: string) {
     totalEarned: round2(num(c.rows[0].earned) + num(w.rows[0].opening)),
     opening: round2(num(w.rows[0].opening)),
     negativeAdjustments: round2(num(c.rows[0].negative)),
+    /* the referred players' losses of deposited money that earned commission */
+    eligibleLosses: round2(num(c.rows[0].eligible)),
     lifetimeNet: round2(num(c.rows[0].lifetime)),
     /* commission recorded but whose period hasn't closed yet */
     pending: round2(num(c.rows[0].pending)),
@@ -531,14 +561,22 @@ export async function walletOf(db: Db, affiliateId: string) {
 const sumIn = (from: Date | null, to: Date | null) =>
   `coalesce(sum(amount) FILTER (WHERE ${from ? `settled_at >= '${from.toISOString()}'` : "true"} AND ${to ? `settled_at < '${to.toISOString()}'` : "true"}), 0)`;
 
-/** The dashboard: referrals, active players, revenue share by period, and the wallet. */
+/* confirmed deposits by a partner's referred players since they were referred (an admin's credit isn't a deposit) */
+const REFERRED_DEPOSITS = `
+  SELECT coalesce(sum(e.amount), 0) AS total, count(DISTINCT e.user_id) AS players
+    FROM referrals r
+    JOIN ledger_entries e ON e.user_id = r.user_id AND e.direction = 'CREDIT' AND e.currency_code = 'GHS' AND e.created_at >= r.created_at
+    JOIN ledger_journal j ON j.id = e.journal_id AND j.entry_type = 'DEPOSIT'
+   WHERE r.affiliate_id = $1`;
+
+/** The dashboard: referrals, active players, deposits, revenue share by period, and the wallet. */
 export async function partnerSummary(db: Pool, a: Affiliate, now = new Date()) {
   await accrueCommissions(db, a.user_id);
   const today = utcDay(now);
   const week = new Date(today.getTime() - ((today.getUTCDay() + 6) % 7) * DAY);
   const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const yesterday = new Date(today.getTime() - DAY);
-  const [refs, active, shares, clicks] = await Promise.all([
+  const [refs, active, shares, clicks, deps] = await Promise.all([
     db.query(`SELECT count(*) AS total, count(*) FILTER (WHERE created_at >= $2) AS last30 FROM referrals WHERE affiliate_id = $1`,
       [a.user_id, new Date(today.getTime() - 29 * DAY)]),
     db.query(`SELECT count(DISTINCT player_id) AS n FROM partner_commissions WHERE affiliate_id = $1 AND settled_at >= $2`,
@@ -547,15 +585,18 @@ export async function partnerSummary(db: Pool, a: Affiliate, now = new Date()) {
                      ${sumIn(month, null)} AS month, ${sumIn(null, null)} AS lifetime
                 FROM partner_commissions WHERE affiliate_id = $1`, [a.user_id]),
     db.query(`SELECT coalesce(sum(clicks), 0) AS total FROM referral_clicks WHERE affiliate_id = $1`, [a.user_id]),
+    db.query(REFERRED_DEPOSITS, [a.user_id]),
   ]);
   const sh = shares.rows[0];
+  const global = (await getSettings(db)).permissions;
   return {
-    partner: partnerView(a),
+    partner: partnerView(a, global),
     rate: await rateOf(db, a.user_id, now),
     totalReferrals: num(refs.rows[0].total),
     referrals30: num(refs.rows[0].last30),
     activePlayers: num(active.rows[0].n),
     clicks: num(clicks.rows[0].total),
+    deposits: { total: round2(num(deps.rows[0].total)), players: num(deps.rows[0].players) },
     revenueShare: {
       today: round2(num(sh.today)), yesterday: round2(num(sh.yesterday)), week: round2(num(sh.week)),
       month: round2(num(sh.month)), lifetime: round2(num(sh.lifetime)),
@@ -649,14 +690,25 @@ export async function partnerCommissions(db: Pool, a: Affiliate, input: { limit?
   await accrueCommissions(db, a.user_id);
   const limit = Math.min(500, Math.max(1, Math.floor(Number(input.limit)) || 50));
   const { rows } = await db.query(
-    `SELECT c.player_id, u.username, c.game, c.stake, c.payout, c.ngr, c.pct, c.amount, c.settled_at, c.settlement_id IS NOT NULL AS settled
+    `SELECT c.player_id, u.username, c.game, c.stake, c.payout, c.ngr, c.pct, c.amount, c.settled_at, c.settlement_id IS NOT NULL AS settled,
+            c.deposit_stake, c.eligible_loss, c.rule
        FROM partner_commissions c JOIN users u ON u.id = c.player_id
       WHERE c.affiliate_id = $1 ORDER BY c.settled_at DESC, c.id DESC LIMIT $2`, [a.user_id, limit]);
+  return { commissions: rows.map((c) => commissionView(c, false)) };
+}
+
+/* one commission record with its working; the admin also sees who the player is */
+function commissionView(c: Record<string, any>, forAdmin: boolean) {
+  const stake = round2(num(c.stake));
+  const payout = round2(num(c.payout));
   return {
-    commissions: rows.map((c) => ({
-      player: mask(c.username), id: publicId(c.player_id), game: c.game, stake: round2(num(c.stake)), payout: round2(num(c.payout)),
-      ngr: round2(num(c.ngr)), pct: num(c.pct), amount: round2(num(c.amount)), settled_at: c.settled_at, status: c.settled ? "settled" : "pending",
-    })),
+    player: mask(c.username), id: publicId(c.player_id), game: c.game, stake, payout, ngr: round2(num(c.ngr)),
+    /* how much of the stake was deposited money, and the loss of it that earned commission */
+    depositStake: c.deposit_stake === null ? null : round2(num(c.deposit_stake)),
+    eligibleLoss: round2(num(c.eligible_loss)),
+    kind: payout > stake ? "deduction" : stake > payout ? (num(c.eligible_loss) > 0 ? "commission" : "not_eligible") : "even",
+    rule: c.rule, pct: num(c.pct), amount: round2(num(c.amount)), settled_at: c.settled_at, status: c.settled ? "settled" : "pending",
+    ...(forAdmin ? { user_id: c.player_id, username: c.username, full_name: c.full_name, phone: c.phone, source: c.source, bet_id: c.bet_id } : {}),
   };
 }
 
@@ -697,11 +749,11 @@ export async function partnerSettings(db: Pool, a: Affiliate) {
       full_name: u.full_name ?? null, username: u.username ?? null, phone: u.phone ?? null, email: u.contact_email ?? null,
       partner_id: a.code, registered: a.created_at, status: a.status,
     },
-    partner: partnerView(a),
+    partner: partnerView(a, s.permissions),
     rate: await rateOf(db, a.user_id),
     winDeductionPct: s.win_deduction_pct,
     settlementPeriod: s.settlement_period,
-    promoEditable: s.partner_promo_edit && s.promo_codes_enabled,
+    promoEditable: s.partner_promo_edit && s.promo_codes_enabled && featureOn(a, s.permissions, "promo_codes"),
     promoCodesEnabled: s.promo_codes_enabled,
     payoutDetails: a.payout_details,
   };
@@ -726,6 +778,7 @@ async function claimPromo(db: Db, affiliateId: string, raw: unknown): Promise<st
 export async function setOwnPromo(db: Pool, a: Affiliate, input: { promo_code?: unknown }) {
   if (a.status !== "ACTIVE") throw new PartnerError("not_active", "Your partner account isn't active", 403);
   const s = await getSettings(db);
+  if (!featureOn(a, s.permissions, "promo_codes")) throw new PartnerError("feature_off", "Promo codes are switched off for your account", 403);
   if (!s.promo_codes_enabled) throw new PartnerError("promo_off", "Promo codes are switched off at the moment");
   const client = await db.connect();
   try {
@@ -800,6 +853,9 @@ export async function requestPayout(db: Pool, a: Affiliate, input: { amount?: un
     await client.query("BEGIN");
     const fresh = (await client.query<Affiliate>(`SELECT * FROM affiliates WHERE user_id = $1 FOR UPDATE`, [a.user_id])).rows[0];
     if (!fresh || fresh.status !== "ACTIVE") throw new PartnerError("not_active", "Your partner account isn't active", 403);
+    if (!featureOn(fresh, s.permissions, "commission_withdrawals")) {
+      throw new PartnerError("feature_off", "Commission withdrawals are switched off for your account. Contact support.", 403);
+    }
     if ((await client.query(`SELECT 1 FROM affiliate_payouts WHERE affiliate_id = $1 AND status IN ('REQUESTED', 'APPROVED')`, [a.user_id])).rowCount) {
       throw new PartnerError("request_open", "You already have a payout request waiting — we'll deal with it soon.", 409);
     }
@@ -896,14 +952,18 @@ export async function partnerDetail(db: Pool, userId: unknown, now = new Date())
   const lifetime = (await db.query(
     `SELECT coalesce(sum(stake), 0) AS stakes, coalesce(sum(payout), 0) AS payouts, coalesce(sum(ngr), 0) AS ngr,
             coalesce(sum(amount) FILTER (WHERE amount > 0), 0) AS commission, coalesce(sum(amount) FILTER (WHERE amount < 0), 0) AS negative,
-            coalesce(sum(amount), 0) AS net
+      coalesce(sum(amount), 0) AS net, coalesce(sum(eligible_loss), 0) AS eligible
        FROM partner_commissions WHERE affiliate_id = $1`, [uid])).rows[0];
-  const [wallet, daily, monthly, referrals, audit] = await Promise.all([
+  const [wallet, daily, monthly, referrals, audit, commissions, deposits] = await Promise.all([
     partnerWallet(db, a),
     partnerStatistics(db, a, { range: "30d" }, now),
     partnerStatistics(db, a, { range: "custom", from: ymd(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1))), to: ymd(now) }, now),
     partnerReferrals(db, a, { range: "all" }, now, true),
     db.query(`SELECT admin, action, details, created_at FROM admin_actions WHERE target = $1 ORDER BY created_at DESC LIMIT 100`, [uid]),
+    db.query(`SELECT c.*, c.settlement_id IS NOT NULL AS settled, u.username, u.full_name, u.phone
+                FROM partner_commissions c JOIN users u ON u.id = c.player_id
+               WHERE c.affiliate_id = $1 ORDER BY c.settled_at DESC, c.id DESC LIMIT 500`, [uid]),
+    db.query(REFERRED_DEPOSITS, [uid]),
   ]);
   return {
     partner: { ...adminRow(row), accrue_from: a.accrue_from, payout_details: a.payout_details, channel: a.channel },
@@ -911,7 +971,9 @@ export async function partnerDetail(db: Pool, userId: unknown, now = new Date())
     lifetime: {
       stakes: round2(num(lifetime.stakes)), payouts: round2(num(lifetime.payouts)), ngr: round2(num(lifetime.ngr)),
       commission: round2(num(lifetime.commission)), negative: round2(num(lifetime.negative)), net: round2(num(lifetime.net)),
+      eligibleLosses: round2(num(lifetime.eligible)), deposits: round2(num(deposits.rows[0].total)),
     },
+    commissions: commissions.rows.map((c) => commissionView(c, true)),
     wallet: wallet.wallet,
     payouts: (await db.query(`SELECT id, amount, method, details, status, note, reference, created_at, approved_at, approved_by, decided_at, decided_by
                                 FROM affiliate_payouts WHERE affiliate_id = $1 ORDER BY created_at DESC LIMIT 100`, [uid])).rows

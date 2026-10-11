@@ -22,6 +22,11 @@ import { adminReply, adminThread, adminThreads, setThreadStatus, SupportError, u
 import { listAdminMinesSignals } from "../services/minesSignal.js";
 import { DepositError, recheckDeposit, waitingDeposits } from "../services/depositRecheck.js";
 import { aviatorOverview, saveAviatorSettings } from "../services/aviatorAdmin.js";
+import {
+  adminFlyers, createCampaign, createPartnerAccount, createTemplate, deleteAsset, deleteTemplate, globalPermissions, PERMISSIONS,
+  permissionsOf, saveGlobalPermissions, savePartnerPermissions, saveTemplate, updateCampaign, uploadAsset,
+} from "../services/partnerPlatform.js";
+import { partnerOf } from "../services/affiliates.js";
 
 const STATUSES = ["REQUESTED", "PAYING", "PAID", "DECLINED"];
 
@@ -105,10 +110,38 @@ export function adminRouter(db: Pool): Router {
   r.post("/partner-settings/settle", send(() => settleCommissions(db)));
   r.get("/partner-stats", send((req) => programmeStats(db, query(req))));
   r.get("/partner-lookup", send((req) => lookupPlayer(db, query(req))));
+  /* a partner who has never registered: their sign-in account, wallet and partner account in one go */
+  r.post("/partners/create", send((req) => createPartnerAccount(db, adminOf(req), req.body ?? {})));
+  /* feature switches: for every partner, and for one */
+  r.get("/partner-permissions", send(async () => ({ permissions: await globalPermissions(db), list: PERMISSIONS.map(([key, label]) => ({ key, label })) })));
+  r.post("/partner-permissions", send((req) => saveGlobalPermissions(db, adminOf(req), req.body?.permissions)));
+  r.get("/partners/:id/permissions", send(async (req) => {
+    const a = await partnerOf(db, String(req.params.id));
+    if (!a) throw new PartnerError("not_found", "That partner wasn't found", 404);
+    return { ...(await permissionsOf(db, a)), list: PERMISSIONS.map(([key, label]) => ({ key, label })) };
+  }));
+  r.post("/partners/:id/permissions", send((req) => savePartnerPermissions(db, adminOf(req), req.params.id, req.body?.permissions)));
+  /* flyers: templates, campaigns and uploaded images */
+  r.get("/flyers", send(() => adminFlyers(db)));
+  r.post("/flyer-templates", send((req) => createTemplate(db, adminOf(req), req.body ?? {})));
+  r.post("/flyer-templates/:id", send((req) => saveTemplate(db, adminOf(req), req.params.id, req.body ?? {})));
+  r.post("/flyer-templates/:id/delete", send((req) => deleteTemplate(db, adminOf(req), req.params.id)));
+  r.post("/flyer-campaigns", send((req) => createCampaign(db, adminOf(req), req.body ?? {})));
+  r.post("/flyer-campaigns/:id", send((req) => updateCampaign(db, adminOf(req), req.params.id, req.body ?? {})));
+  r.post("/flyer-assets", send((req) => uploadAsset(db, adminOf(req), req.body ?? {})));
+  r.post("/flyer-assets/:id/delete", send((req) => deleteAsset(db, adminOf(req), req.params.id)));
   r.get("/partners", send((req) => listPartners(db, query(req))));
   r.get("/partners/:id", send((req) => partnerDetail(db, req.params.id)));
   /* the partner's own dashboard, read-only: summary, referrals, statistics, wallet, settings */
-  r.get("/partners/:id/view/:view", send((req) => partnerPreview(db, req.params.id, String(req.params.view), query(req))));
+  r.get("/partners/:id/view/:view", send(async (req) => {
+    const out = await partnerPreview(db, req.params.id, String(req.params.view), query(req));
+    /* the preview shows the partner's portal with their own feature switches */
+    if (req.params.view === "me") {
+      const a = await partnerOf(db, String(req.params.id));
+      if (a) return { ...out, permissions: (await permissionsOf(db, a)).effective, features: PERMISSIONS.map(([key, label]) => ({ key, label })) };
+    }
+    return out;
+  }));
   r.post("/partners/:id", send((req) => updatePartner(db, adminOf(req), req.params.id, req.body ?? {})));
   r.post("/partners/:id/correction", send((req) => correctCommission(db, adminOf(req), req.params.id, req.body ?? {})));
   r.get("/partner-payouts", send((req) => listPartnerPayouts(db, query(req))));

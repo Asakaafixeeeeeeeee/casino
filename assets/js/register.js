@@ -53,6 +53,11 @@
   }
 
   /* log-in and reset take any registered number: a Ghana number as 024…, any other as +<code>… */
+  /* what was typed to log in: a number (tidied the usual way), a username or an email */
+  const loginOf = (raw) => {
+    const v = String(raw || "").trim();
+    return /^[\d\s+()-]+$/.test(v) ? U.normalizePhone(v) : v;
+  };
   const phoneProblem = (phone) =>
     !phone ? "Enter your mobile number." : !U.isGhanaMobile(phone) && !/^\+[1-9]\d{7,14}$/.test(phone) ? "That is not a valid mobile number." : "";
 
@@ -91,6 +96,7 @@
   /* shows the number as 024 123 4567 while typing (a +233 number is left as typed) */
   function formatPhone(input) {
     const raw = input.value;
+    if (/[^\d\s+()-]/.test(raw)) return;   /* a username or an email (log in and reset take those too) */
     if (/^\+|^00/.test(raw.trim())) return;
     if (input.id === "phone" && country().code !== "GH") return;   /* other countries: typed as they are */
     const d = raw.replace(/\D/g, "").slice(0, 10);
@@ -152,9 +158,9 @@
   /* after signing in, return to the page the player came from (on this site), else the lobby.
      replace (not assign) so the login page drops out of history — pressing Back from the destination doesn't
      return to the login form. */
-  function leave() {
+  function leave(to) {
     const ref = document.referrer && new URL(document.referrer);
-    const back = ref && ref.origin === location.origin && !/register\.html/.test(ref.pathname) ? ref.href : "index.html";
+    const back = to || (ref && ref.origin === location.origin && !/register\.html/.test(ref.pathname) ? ref.href : "index.html");
     /* an account opened through a partner's link is credited now, before leaving (in case the next page never loads) */
     const credited = Promise.race([Promise.resolve(U.attributeRef && U.attributeRef()).catch(() => {}), new Promise((r) => setTimeout(r, 2500))]);
     Promise.all([credited, new Promise((r) => setTimeout(r, 900))]).then(() => location.replace(back));
@@ -291,16 +297,16 @@
   forms.login.addEventListener("submit", async (e) => {
     e.preventDefault();
     formMsg.innerHTML = "";
-    const phone = U.normalizePhone($("lphone").value);
+    const login = loginOf($("lphone").value);
     const pw = $("lpw").value;
-    const okA = setError("lphone", "lphoneErr", phoneProblem(phone));
+    const okA = setError("lphone", "lphoneErr", login ? "" : "Enter your mobile number, username or email.");
     const okB = setError("lpw", "lpwErr", !pw ? "Enter your password." : "");
     if (!okA || !okB) return;
 
-    const r = await call($("loginBtn"), "Logging in…", "/api/login", { phone, password: pw, remember: true });
+    const r = await call($("loginBtn"), "Logging in…", "/api/login", { login, password: pw, remember: true });
     if (r.status === 404) {
-      setError("lphone", "lphoneErr", "No account with this number.");
-      say("err", 'No account found for this number. <a href="#register" data-goto-inline="register">Register</a> — it takes a minute.' +
+      setError("lphone", "lphoneErr", "No account with that number, username or email.");
+      say("err", 'No account found. <a href="#register" data-goto-inline="register">Register</a> — it takes a minute.' +
         "<br><small>" + OLD_ACCOUNTS_NOTE + "</small>");
       return;
     }
@@ -314,25 +320,30 @@
     U.session.set({ phone: r.data.user.phone, name: r.data.user.username, token: r.data.token, currency: r.data.user.currency }, { remember: true });
     forms.login.reset();
     say("ok", "Welcome back, " + U.esc(r.data.user.username) + "!");
-    leave();
+    /* a partner's account opens their partner dashboard */
+    const p = await Promise.race([U.paymentApi("/api/partners/me", { timeout: 8000 }), new Promise((res) => setTimeout(() => res(null), 8000))]);
+    const partner = p && p.ok && p.data && p.data.partner;
+    const isPartner = !!partner && (partner.status === "ACTIVE" || partner.status === "SUSPENDED");
+    try { sessionStorage.setItem("vb.partner", isPartner ? "1" : "0"); } catch (e) { /* storage unavailable */ }
+    leave(isPartner ? "partners.html" : "");
   });
 
   /* ---------------- forgot password ---------------- */
   forms.forgot.addEventListener("submit", async (e) => {
     e.preventDefault();
     formMsg.innerHTML = "";
-    const phone = U.normalizePhone($("fphone").value);
+    const login = loginOf($("fphone").value);
     const dob = $("fdob").value;
     const pw = $("fpw").value;
     const ok = [
-      setError("fphone", "fphoneErr", phoneProblem(phone)),
+      setError("fphone", "fphoneErr", login ? "" : "Enter your mobile number, username or email."),
       setError("fdob", "fdobErr", !dob ? "Enter your date of birth." : ""),
       setError("fpw", "fpwErr", passwordProblem(pw))
     ];
     if (ok.includes(false)) return;
-    const r = await call($("forgotBtn"), "Saving…", "/api/reset", { phone, dob, password: pw });
+    const r = await call($("forgotBtn"), "Saving…", "/api/reset", { login, dob, password: pw });
     if (r.status === 404) {
-      setError("fphone", "fphoneErr", "No account with this number.");
+      setError("fphone", "fphoneErr", "No account with that number, username or email.");
       say("err", OLD_ACCOUNTS_NOTE);
       return;
     }

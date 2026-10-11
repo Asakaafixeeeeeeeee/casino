@@ -535,9 +535,9 @@
      player they brought in, less the win deduction % of the net winnings of every winning bet. Commission is recorded per
      settled bet, credited to the partner's commission wallet when its settlement period closes, and paid out by hand on
      request. Everything here comes from the server; this page only draws it. */
-  const pt = { view: "PENDING", q: "", pay: "OPEN", range: "30d", from: "", to: "", timer: 0, seq: 0, settings: null };
+  const pt = { view: "PENDING", q: "", pay: "OPEN", range: "30d", from: "", to: "", timer: 0, seq: 0, settings: null, perms: null, flyers: null };
   const PVIEWS = [["PENDING", "Applications"], ["ACTIVE", "Active"], ["SUSPENDED", "Suspended"], ["DISABLED", "Disabled"], ["", "All"],
-    ["payouts", "Payout requests"], ["stats", "Statistics"], ["settings", "Commission settings"]];
+    ["payouts", "Payout requests"], ["stats", "Statistics"], ["settings", "Commission settings"], ["permissions", "Permissions"], ["flyers", "Flyers"]];
   const LIST_VIEWS = ["PENDING", "ACTIVE", "SUSPENDED", "DISABLED", ""];
   const PAY_VIEWS = [["OPEN", "Open"], ["REQUESTED", "Requested"], ["APPROVED", "Approved"], ["PAID", "Paid"], ["REJECTED", "Rejected"]];
   const PRANGES = [["today", "Today"], ["yesterday", "Yesterday"], ["7d", "7 days"], ["30d", "30 days"], ["this_month", "This month"],
@@ -569,10 +569,10 @@
   const fold = (title, n, inner, open) => '<details class="adm-pdet"' + (open ? " open" : "") + "><summary>" + title +
     (n !== null && n !== undefined ? " <small>(" + count(n) + ")</small>" : "") + "</summary>" + inner + "</details>";
 
-  async function copyText(text) {
+  async function copyText(text, done) {
     try {
       await navigator.clipboard.writeText(text);
-      flash("ok", "Copied: " + esc(text));
+      flash("ok", done ? esc(done) : "Copied: " + esc(text));
     } catch (e) {
       window.prompt("Copy this:", text);
     }
@@ -607,6 +607,8 @@
     if (pt.view === "payouts") return loadPartnerPayouts();
     if (pt.view === "stats") return loadPartnerStats();
     if (pt.view === "settings") return loadPartnerSettings();
+    if (pt.view === "permissions") return loadPartnerPermissions();
+    if (pt.view === "flyers") return loadPartnerFlyers();
     $("ptBody").innerHTML = '<div class="adm-toolbar"><label class="searchbar adm-search">' + U.icon("search") +
       '<input id="ptQ" type="search" placeholder="Name, phone, email, Partner ID or promo code" autocomplete="off" aria-label="Search partners" value="' + esc(pt.q) + '"></label></div>' +
       '<p class="txr-count" id="ptCount"></p><div id="ptList"></div>';
@@ -906,16 +908,587 @@
       : errText(r, "Couldn't settle."));
   }
 
-  /* ---- "Add partner": find a registered player and make them a partner ---- */
+  /* ---- partner features: on or off for every partner (a partner's profile can override each one) ---- */
+  const PERM_HINT = {
+    dashboard: "Their partner dashboard: summary, earnings and settings.",
+    referral_links: "Their referral link and its numbers.",
+    promo_codes: "Their promo code, and asking for a new one.",
+    referral_stats: "Statistics on the players they brought in.",
+    commission_withdrawals: "Asking for commission payouts.",
+    wallet_deposits: "Deposits through their partner wallet.",
+    flyers: "Making promotional flyers from the templates switched on in Flyers.",
+    campaigns: "Adding an active campaign's offer to their flyers.",
+    tools_mines: "Mines: the real odds per number of mines and picks, and finished rounds.",
+    tools_aviator: "Aviator: the published RTP, odds per multiplier and finished rounds.",
+    tools_crash: "Crash and Knockout: odds and finished flights.",
+    tools_other: "The other games' published RTP and main odds.",
+  };
+  async function loadPartnerPermissions() {
+    $("ptBody").innerHTML = loading;
+    const r = await api("/partner-permissions");
+    if (!ptHere("permissions")) return;
+    if (!r.ok) {
+      $("ptBody").innerHTML = "";
+      return flash("error", errText(r, "Couldn't load the partner features."));
+    }
+    pt.perms = r.data;
+    const sw = ({ key, label }) => '<div class="adm-pset-sw"><div><b>' + esc(label) + "</b><small>" + esc(PERM_HINT[key] || "") + "</small></div>" +
+      '<label class="adm-switch"><input type="checkbox" data-perm="' + esc(key) + '"' + (r.data.permissions[key] ? " checked" : "") + ' aria-label="' + esc(label) + '"><span aria-hidden="true"></span></label></div>';
+    const list = r.data.list || [];
+    $("ptBody").innerHTML = '<section class="adm-card"><h3 class="adm-h">Partner features</h3>' +
+      '<p class="adm-note">These apply to <b>every partner</b> unless you set a feature differently on a partner\'s profile (open a partner → Permissions). ' +
+      "A feature switched off is <b>blocked by the server</b>, not just hidden: the partner's requests for it are refused.</p>" +
+      '<form class="adm-pset" data-form="pperms"><div class="adm-pset-sws">' + list.filter((x) => !x.key.startsWith("tools_")).map(sw).join("") + "</div>" +
+        '<h3 class="adm-h adm-wide">Game tools</h3>' +
+        '<div class="alert alert-info adm-wide">Game tools show each game\'s <b>real odds</b> and the results of rounds that have <b>already finished</b> — never a round in play, a hidden board or anyone\'s balance. ' +
+          "Results are drawn by the server with secure randomness and can't be predicted. They're off by default.</div>" +
+        '<div class="adm-pset-sws">' + list.filter((x) => x.key.startsWith("tools_")).map(sw).join("") + "</div>" +
+        '<button class="btn btn-primary btn-sm" type="submit">Save features</button></form></section>';
+  }
+  async function savePartnerPermissions(form) {
+    if (!pt.perms) return;
+    const now = pt.perms.permissions;
+    const changes = {};
+    const lines = [];
+    (pt.perms.list || []).forEach(({ key, label }) => {
+      const i = form.querySelector('input[data-perm="' + CSS.escape(key) + '"]');
+      if (!i || i.checked === Boolean(now[key])) return;
+      changes[key] = i.checked;
+      lines.push(esc(label) + " → <b>" + (i.checked ? "on" : "off") + "</b>");
+    });
+    if (!lines.length) return flash("info", "Nothing changed.");
+    const ok = await ask({ title: "Change features for every partner?", text: lines.join("<br>") + "<br>Partners with their own setting for a feature keep it. The server applies this at once.", yes: "Save" });
+    if (ok === null) return;
+    const btn = form.querySelector("button[type=submit]");
+    btn.disabled = true;
+    const r = await api("/partner-permissions", { permissions: changes });
+    btn.disabled = false;
+    if (!r.ok) return flash("error", errText(r, "Couldn't save the partner features."));
+    flash("ok", "Partner features saved.");
+    loadPartnerPermissions();
+  }
+
+  /* ---- flyers: the templates partners make flyers from, admin-approved campaigns (the only source of an offer on a
+     flyer) and uploaded images. Previews are drawn by the flyer module (assets/js/flyers.js) with a sample partner. ---- */
+  const FLY_SAMPLE = { code: "WB7K2Q9X", promo_code: "PREVIEW1" };
+  const FLY_THUMB = { w: 540, h: 675 };
+  const FLY_BIG = { w: 1080, h: 1350 };
+  const SPORTS = ["sports", "football", "basketball"];
+  const IMG_TYPES = ["image/png", "image/jpeg", "image/webp"];
+  const assetUrl = (id) => U.paymentBase + "/api/partners/assets/" + encodeURIComponent(id);
+  const tplOf = (id) => (pt.flyers ? pt.flyers.templates.find((t) => t.id === id) : null);
+  const campOf = (id) => (pt.flyers ? pt.flyers.campaigns.find((c) => c.id === id) : null);
+  const cfgOf = (t) => {
+    if (!t || !t.config) return {};
+    if (typeof t.config === "object") return t.config;
+    try { return JSON.parse(t.config) || {}; } catch (e) { return {}; }
+  };
+  const layoutName = (id) => id.charAt(0).toUpperCase() + id.slice(1).replace(/-/g, " ");
+  const kb = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1e3)) + " KB");
+  /* a datetime-local value (local time) from an ISO date */
+  const localInput = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T" + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  };
+  const assetOptions = (current) => '<option value="">None</option>' + (pt.flyers ? pt.flyers.assets : []).map((a) =>
+    '<option value="' + esc(a.id) + '"' + (a.id === current ? " selected" : "") + ">" + esc(a.name) + "</option>").join("");
+
+  /* draws one flyer on a canvas, or says the preview isn't available */
+  function drawFlyer(canvas, template, campaign, size) {
+    const box = canvas.parentElement;
+    const na = box.querySelector(".adm-flprev-na");
+    if (na) na.remove();
+    canvas.hidden = false;
+    const fail = () => {
+      canvas.hidden = true;
+      if (!box.querySelector(".adm-flprev-na")) box.insertAdjacentHTML("beforeend", '<span class="adm-flprev-na">Preview unavailable</span>');
+    };
+    if (!window.VBFlyers || typeof window.VBFlyers.render !== "function") return fail();
+    canvas.width = size.w;
+    canvas.height = size.h;
+    try {
+      Promise.resolve(window.VBFlyers.render(canvas, { template, campaign: campaign || null, size, partner: FLY_SAMPLE, link: refLink(FLY_SAMPLE.code), assetUrl })).catch(fail);
+    } catch (e) {
+      fail();
+    }
+  }
+  /* the small previews are drawn as they scroll into view */
+  let flyObs = null;
+  function lazyPreviews(root) {
+    if (flyObs) flyObs.disconnect();
+    const go = (c) => { const t = tplOf(c.dataset.flprev); if (t) drawFlyer(c, t, null, FLY_THUMB); };
+    const all = root.querySelectorAll("canvas[data-flprev]");
+    if (!("IntersectionObserver" in window)) return all.forEach(go);
+    flyObs = new IntersectionObserver((seen) => seen.forEach((x) => {
+      if (!x.isIntersecting) return;
+      flyObs.unobserve(x.target);
+      go(x.target);
+    }), { rootMargin: "300px" });
+    all.forEach((c) => flyObs.observe(c));
+  }
+
+  async function loadPartnerFlyers() {
+    if (!$("ptBody").innerHTML) $("ptBody").innerHTML = loading;
+    const r = await api("/flyers");
+    if (!ptHere("flyers")) return;
+    if (!r.ok) {
+      $("ptBody").innerHTML = "";
+      return flash("error", errText(r, "Couldn't load the flyers."));
+    }
+    pt.flyers = r.data;
+    $("ptBody").innerHTML = flyerTemplatesHtml(r.data) + flyerCampaignsHtml(r.data) + flyerAssetsHtml(r.data);
+    lazyPreviews($("ptBody"));
+  }
+
+  function tplCard(t) {
+    const sport = SPORTS.includes(t.id) || SPORTS.includes(cfgOf(t).layout);
+    return '<div class="adm-fltpl' + (t.enabled ? "" : " off") + '" data-fltpl="' + esc(t.id) + '">' +
+      '<div class="adm-flprev"><canvas data-flprev="' + esc(t.id) + '" role="img" aria-label="Preview of ' + esc(t.name) + '"></canvas></div>' +
+      '<div class="adm-fltpl-main"><strong>' + esc(t.name) + "</strong><small>" + esc(t.category) + " · order " + esc(String(t.sort)) + "</small>" +
+        '<span class="adm-pills">' + (t.builtin ? pill("Built-in", "") : pill("Custom", "brand")) + (sport ? pill("No sportsbook yet", "warn") : "") + "</span></div>" +
+      '<div class="adm-fltpl-act"><label class="adm-switch"><input type="checkbox" data-fltpl-on="' + esc(t.id) + '"' + (t.enabled ? " checked" : "") +
+          ' aria-label="' + esc(t.name) + ' on for partners"><span aria-hidden="true"></span></label>' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-fl="tpl-edit" data-id="' + esc(t.id) + '">Edit</button>' +
+        (t.builtin ? "" : '<button class="btn btn-ghost btn-sm" type="button" data-fl="tpl-del" data-id="' + esc(t.id) + '" data-name="' + esc(t.name) + '">Delete</button>') +
+      "</div></div>";
+  }
+  function flyerTemplatesHtml(f) {
+    const on = f.templates.filter((t) => t.enabled).length;
+    return '<section class="adm-card"><div class="adm-card-top"><h3 class="adm-h">Flyer templates <small>' + count(on) + " of " + count(f.templates.length) + " on</small></h3>" +
+        '<button class="btn btn-primary btn-sm" type="button" data-fl="tpl-add">' + U.icon("plus") + "Add template</button></div>" +
+      '<p class="adm-note">Partners make flyers from the templates switched on here, with their own referral link, QR code and promo code. ' +
+        "<b>Sports, Football and Basketball are off by default because WIN B has no sportsbook yet</b> — keep them off until it does." +
+        (window.VBFlyers ? "" : " <b>Preview unavailable:</b> the flyer module didn't load.") + "</p>" +
+      (f.templates.length ? '<div class="adm-fltpls">' + f.templates.map(tplCard).join("") + "</div>" : '<p class="me-sheet-note">No templates.</p>') + "</section>";
+  }
+  function campState(c) {
+    const now = Date.now();
+    if (!c.active) return pill("Off", "bad");
+    if (c.ends_at && new Date(c.ends_at).getTime() <= now) return pill("Ended", "bad");
+    if (c.starts_at && new Date(c.starts_at).getTime() > now) return pill("Scheduled", "warn");
+    return pill("Live on flyers", "ok");
+  }
+  function campRow(c) {
+    const ids = Array.isArray(c.template_ids) && c.template_ids.length ? c.template_ids : null;
+    const tpls = ids ? ids.map((id) => (tplOf(id) || { name: id }).name).join(", ") : "any template";
+    const dates = c.starts_at || c.ends_at
+      ? (c.starts_at ? "From " + when(c.starts_at) : "From now") + (c.ends_at ? " until " + when(c.ends_at) : ", no end date")
+      : "No dates: runs while active";
+    return '<div class="txr-row adm-item adm-flcamp" data-flcamp="' + esc(c.id) + '">' +
+      (c.asset_id ? '<img class="adm-flthumb" src="' + esc(assetUrl(c.asset_id)) + '" alt="" loading="lazy">' : '<span class="txr-ico">' + U.icon("star") + "</span>") +
+      '<span class="txr-main"><strong>' + esc(c.title) + "</strong>" +
+        "<small>Headline <b>" + esc(c.headline) + "</b></small>" +
+        (c.offer ? "<small>Offer <b>" + esc(c.offer) + "</b></small>" : "<small>No offer</small>") +
+        "<small>" + dates + " · " + esc(tpls) + "</small>" +
+        '<span class="adm-pills">' + campState(c) + "</span></span>" +
+      '<span class="adm-item-actions"><label class="adm-switch"><input type="checkbox" data-flcamp-on="' + esc(c.id) + '"' + (c.active ? " checked" : "") +
+          ' aria-label="' + esc(c.title) + ' active"><span aria-hidden="true"></span></label>' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-fl="camp-edit" data-id="' + esc(c.id) + '">Edit</button>' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-fl="camp-del" data-id="' + esc(c.id) + '" data-name="' + esc(c.title) + '">Delete</button></span></div>';
+  }
+  function flyerCampaignsHtml(f) {
+    return '<section class="adm-card"><div class="adm-card-top"><h3 class="adm-h">Campaigns</h3>' +
+        '<button class="btn btn-primary btn-sm" type="button" data-fl="camp-add">' + U.icon("plus") + "New campaign</button></div>" +
+      '<p class="adm-note">Offers and bonuses appear on partners\' flyers <b>only from active campaigns, exactly as written here</b> — partners can\'t type their own. ' +
+        "A flyer is always drawn with the campaign's current wording, so new flyers (and saved ones made again) use what's here now; switching a campaign off or letting it end takes its offer off flyers.</p>" +
+      (f.campaigns.length ? '<div class="txr-group">' + f.campaigns.map(campRow).join("") + "</div>" : empty("No campaigns yet. Without one, flyers carry no offer.", "star")) + "</section>";
+  }
+  function flyerAssetsHtml(f) {
+    return '<section class="adm-card"><h3 class="adm-h">Images</h3>' +
+      '<p class="adm-note">Backgrounds and pictures for templates and campaigns: PNG, JPG or WebP, up to 2 MB. Anyone with an image\'s link can see it, so upload promotional images only.</p>' +
+      '<form class="adm-flup" data-form="flupload">' +
+        fld("flFile", "Image", '<input id="flFile" type="file" accept="image/png,image/jpeg,image/webp" required>') +
+        fld("flName", "Name" + OPT, '<input id="flName" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Gold coins background">') +
+        '<button class="btn btn-primary btn-sm" type="submit">Upload</button></form>' +
+      (f.assets.length
+        ? '<div class="adm-flassets">' + f.assets.map((a) => '<figure class="adm-flasset"><img src="' + esc(assetUrl(a.id)) + '" alt="' + esc(a.name) + '" loading="lazy">' +
+            "<figcaption><b>" + esc(a.name) + "</b><small>" + kb(Number(a.size)) + " · " + dayOf(a.created_at) + "</small></figcaption>" +
+            '<button class="btn btn-ghost btn-sm" type="button" data-fl="asset-del" data-id="' + esc(a.id) + '" data-name="' + esc(a.name) + '">Delete</button></figure>').join("") + "</div>"
+        : '<p class="me-sheet-note">No images yet.</p>') + "</section>";
+  }
+
+  /* add a template (from a built-in design) or change one; built-in designs only get a name, category and order */
+  function openTemplate(id, base) {
+    if (!pt.flyers) return;
+    const t = id ? tplOf(id) : null;
+    if (id && !t) return;
+    const custom = !t || !t.builtin;
+    const layouts = pt.flyers.layouts || [];
+    const c = t ? cfgOf(t) : { layout: layouts.includes(base) ? base : "general" };
+    const own = !(c.primary || c.accent || c.background);
+    const s = sheet(t ? "Edit template" : "Add a flyer template");
+    const msg = '<div class="adm-sheet-msg" aria-live="polite"></div>';
+    const color = (cid, label, v) => '<div class="field"><label for="' + cid + '">' + label + '</label><input id="' + cid + '" type="color" value="' + esc(v) + '"' + (own ? " disabled" : "") + "></div>";
+    s.set('<div class="adm-flbig"><canvas id="ftPrev" role="img" aria-label="Preview"></canvas></div>' +
+      '<p class="hint">Preview with a sample partner (Partner ID ' + FLY_SAMPLE.code + ", promo code " + FLY_SAMPLE.promo_code + ").</p>" +
+      '<form class="adm-flform" data-form="fltpl" autocomplete="off" novalidate>' +
+        fld("ftName", "Name", '<input id="ftName" type="text" maxlength="60" required value="' + tx(t ? t.name : "") + '">') +
+        fld("ftCat", "Category" + (t ? "" : OPT), '<input id="ftCat" type="text" maxlength="30" value="' + tx(t ? t.category : "") + '" placeholder="Custom">') +
+        (t ? fld("ftSort", "Order", '<input id="ftSort" type="number" step="1" inputmode="numeric" value="' + esc(String(t.sort)) + '">', "Lower numbers come first for partners.") : "") +
+        (custom
+          ? fld("ftLayout", "Based on design", '<select id="ftLayout">' + layouts.map((l) => '<option value="' + esc(l) + '"' + (l === c.layout ? " selected" : "") + ">" + esc(layoutName(l)) +
+              (SPORTS.includes(l) ? " (no sportsbook yet)" : "") + "</option>").join("") + "</select>") +
+            fld("ftAsset", "Background image" + OPT, '<select id="ftAsset">' + assetOptions(c.asset_id) + "</select>", "Upload images under Images.") +
+            '<div class="adm-wide adm-flcolors"><label class="adm-check"><input type="checkbox" id="ftOwn"' + (own ? " checked" : "") + "> Use the design's own colours</label>" +
+              '<div class="adm-flcolor-row">' + color("ftPrimary", "Primary", c.primary || "#ffc83d") + color("ftAccent", "Accent", c.accent || "#34d77a") +
+              color("ftBg", "Background", c.background || "#0d0e10") + "</div></div>" +
+            fld("ftHead", "Headline" + OPT, '<input id="ftHead" type="text" maxlength="60" value="' + tx(c.headline) + '" placeholder="The design\'s own">', "", true) +
+            fld("ftTag", "Tagline" + OPT, '<input id="ftTag" type="text" maxlength="120" value="' + tx(c.tagline) + '">', "", true) +
+            fld("ftCta", "Button words" + OPT, '<input id="ftCta" type="text" maxlength="24" value="' + tx(c.cta) + '" placeholder="Join now">') +
+            '<p class="hint adm-wide">No bonuses or offers here: an offer can only come from an active campaign.</p>'
+          : '<p class="adm-note adm-wide">Built-in designs are drawn by the page and can\'t be redrawn. ' +
+            '<button class="link-btn adm-link" type="button" data-fl-copy>Add a custom template based on it</button> to change its colours, image or words.</p>') +
+        '<button class="btn btn-primary adm-wide" type="submit">' + (t ? "Save template" : "Add template") + "</button></form>" + msg);
+    const g = (x) => s.body.querySelector("#" + x);
+    const say = (html) => (s.body.querySelector(".adm-sheet-msg").innerHTML = html ? "<div class='alert alert-err'>" + html + "</div>" : "");
+    const config = () => {
+      const out = { layout: g("ftLayout").value, headline: g("ftHead").value.trim(), tagline: g("ftTag").value.trim(), cta: g("ftCta").value.trim() };
+      if (!g("ftOwn").checked) { out.primary = g("ftPrimary").value; out.accent = g("ftAccent").value; out.background = g("ftBg").value; }
+      if (g("ftAsset").value) out.asset_id = g("ftAsset").value;
+      return out;
+    };
+    const preview = () => drawFlyer(g("ftPrev"), custom
+      ? { id: t ? t.id : "preview", name: g("ftName").value.trim() || "Preview", category: g("ftCat").value.trim() || "Custom", builtin: false, enabled: true, config: config() }
+      : t, null, FLY_BIG);
+    let timer = 0;
+    s.body.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(preview, 250); });
+    s.body.addEventListener("change", (e) => {
+      if (e.target.id === "ftOwn") ["ftPrimary", "ftAccent", "ftBg"].forEach((x) => (g(x).disabled = e.target.checked));
+      clearTimeout(timer);
+      timer = setTimeout(preview, 100);
+    });
+    s.body.addEventListener("click", (e) => {
+      if (!e.target.closest("[data-fl-copy]")) return;
+      s.close();
+      openTemplate(null, c.layout || t.id);
+    });
+    s.body.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      say("");
+      const name = g("ftName").value.trim();
+      if (name.length < 3) return say("Give the template a name (at least 3 characters).");
+      const body = { name, category: g("ftCat").value.trim() };
+      if (t) {
+        const sort = g("ftSort").value.trim();
+        if (sort !== "" && !Number.isInteger(Number(sort))) return say("The order is a whole number.");
+        if (sort !== "") body.sort = Number(sort);
+      }
+      if (custom) body.config = config();
+      const btn = e.target.querySelector("button[type=submit]");
+      btn.disabled = true;
+      const r = await api(t ? "/flyer-templates/" + encodeURIComponent(t.id) : "/flyer-templates", body);
+      btn.disabled = false;
+      if (!r.ok) return say(errText(r, "Couldn't save the template."));
+      s.close();
+      flash("ok", t ? "Template saved." : "Template added and switched on for partners.");
+      if (ptHere("flyers")) loadPartnerFlyers();
+    });
+    g("ftName").focus();
+    requestAnimationFrame(preview);
+  }
+
+  /* a promotional campaign: the approved wording (and offer) partners can put on flyers */
+  function openCampaign(id) {
+    if (!pt.flyers) return;
+    const c = id ? campOf(id) : null;
+    if (id && !c) return;
+    const s = sheet(c ? "Edit campaign" : "New campaign");
+    const msg = '<div class="adm-sheet-msg" aria-live="polite"></div>';
+    const chosen = c && Array.isArray(c.template_ids) ? c.template_ids : [];
+    const tpls = pt.flyers.templates;
+    s.set('<div class="adm-flbig"><canvas id="fcPrev" role="img" aria-label="Preview"></canvas></div>' +
+      '<div class="field"><label for="fcPrevTpl">Preview on</label><select id="fcPrevTpl">' +
+        tpls.filter((t) => t.enabled).map((t) => '<option value="' + esc(t.id) + '"' + (chosen[0] === t.id ? " selected" : "") + ">" + esc(t.name) + "</option>").join("") + "</select></div>" +
+      '<p class="hint">The words below are exactly what partners\' flyers show — new flyers always use the current wording.</p>' +
+      '<form class="adm-flform" data-form="flcamp" autocomplete="off" novalidate>' +
+        fld("fcTitle", "Campaign name", '<input id="fcTitle" type="text" maxlength="80" required value="' + tx(c && c.title) + '" placeholder="e.g. October weekend">', "Partners see it when choosing a campaign.", true) +
+        fld("fcHead", "Headline", '<input id="fcHead" type="text" maxlength="60" required value="' + tx(c && c.headline) + '" placeholder="e.g. Play this weekend">', "", true) +
+        fld("fcOffer", "Offer or bonus" + OPT, '<input id="fcOffer" type="text" maxlength="80" value="' + tx(c && c.offer) + '">', "Only what the casino actually gives — it's printed word for word.", true) +
+        fld("fcBody", "Supporting text" + OPT, '<input id="fcBody" type="text" maxlength="160" value="' + tx(c && c.body) + '">', "", true) +
+        fld("fcCta", "Button words" + OPT, '<input id="fcCta" type="text" maxlength="24" value="' + tx(c && c.cta) + '" placeholder="Join now">') +
+        fld("fcAsset", "Image" + OPT, '<select id="fcAsset">' + assetOptions(c && c.asset_id) + "</select>") +
+        fld("fcTerms", "Terms (small print)" + OPT, '<input id="fcTerms" type="text" maxlength="200" value="' + tx(c && c.terms) + '" placeholder="e.g. 18+. T&amp;Cs apply.">', "", true) +
+        fld("fcFrom", "Starts" + OPT, '<input id="fcFrom" type="datetime-local" value="' + esc(localInput(c && c.starts_at)) + '">', "Empty: straight away.") +
+        fld("fcTo", "Ends" + OPT, '<input id="fcTo" type="datetime-local" value="' + esc(localInput(c && c.ends_at)) + '">', "Empty: no end date.") +
+        '<div class="adm-wide">' + fold("Templates it suits <small>" + (chosen.length ? count(chosen.length) + " chosen" : "any") + "</small>", null,
+          '<p class="hint">None ticked: any template.</p><div class="adm-fltplpick">' + tpls.map((t) => '<label class="adm-check"><input type="checkbox" data-fctpl="' + esc(t.id) + '"' +
+            (chosen.includes(t.id) ? " checked" : "") + "> " + esc(t.name) + (t.enabled ? "" : " <small>(off)</small>") + "</label>").join("") + "</div>") + "</div>" +
+        '<div class="adm-pset-sw adm-wide"><div><b>Active</b><small>Partners can use it between its dates.</small></div>' +
+          '<label class="adm-switch"><input type="checkbox" id="fcActive"' + (!c || c.active ? " checked" : "") + ' aria-label="Active"><span aria-hidden="true"></span></label></div>' +
+        '<button class="btn btn-primary adm-wide" type="submit">' + (c ? "Save campaign" : "Create campaign") + "</button></form>" + msg);
+    const g = (x) => s.body.querySelector("#" + x);
+    const say = (html) => (s.body.querySelector(".adm-sheet-msg").innerHTML = html ? "<div class='alert alert-err'>" + html + "</div>" : "");
+    const val = (x) => g(x).value.trim();
+    const iso = (x) => (val(x) ? new Date(val(x)) : null);
+    const draft = () => ({ id: c ? c.id : "preview", title: val("fcTitle"), headline: val("fcHead"), offer: val("fcOffer") || null, body: val("fcBody") || null,
+      cta: val("fcCta") || "Join now", terms: val("fcTerms") || null, asset_id: g("fcAsset").value || null });
+    const preview = () => {
+      const t = tplOf(g("fcPrevTpl").value);
+      if (t) drawFlyer(g("fcPrev"), t, draft(), FLY_BIG);
+      else g("fcPrev").hidden = true;
+    };
+    let timer = 0;
+    const later = () => { clearTimeout(timer); timer = setTimeout(preview, 250); };
+    s.body.addEventListener("input", later);
+    s.body.addEventListener("change", later);
+    s.body.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      say("");
+      const d = draft();
+      if (d.title.length < 3) return say("Enter the campaign name (at least 3 characters).");
+      if (d.headline.length < 3) return say("Enter the headline (at least 3 characters).");
+      const from = iso("fcFrom");
+      const to = iso("fcTo");
+      if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime()))) return say("Enter valid dates.");
+      if (from && to && to <= from) return say("The end must be after the start.");
+      const ids = Array.from(s.body.querySelectorAll("input[data-fctpl]:checked")).map((x) => x.dataset.fctpl);
+      const body = { title: d.title, headline: d.headline, offer: d.offer || "", body: d.body || "", cta: val("fcCta"), terms: d.terms || "", asset_id: d.asset_id,
+        template_ids: ids.length ? ids : null, active: g("fcActive").checked, starts_at: from ? from.toISOString() : null, ends_at: to ? to.toISOString() : null };
+      const btn = e.target.querySelector("button[type=submit]");
+      btn.disabled = true;
+      const r = await api(c ? "/flyer-campaigns/" + encodeURIComponent(c.id) : "/flyer-campaigns", body);
+      btn.disabled = false;
+      if (!r.ok) return say(errText(r, "Couldn't save the campaign."));
+      s.close();
+      flash("ok", c ? "Campaign saved. New flyers use the new wording." : "Campaign created.");
+      if (ptHere("flyers")) loadPartnerFlyers();
+    });
+    g("fcTitle").focus();
+    requestAnimationFrame(preview);
+  }
+
+  async function uploadFlyerAsset(form) {
+    const file = form.querySelector("#flFile").files[0];
+    if (!file) return flash("error", "Choose an image to upload.");
+    if (!IMG_TYPES.includes(file.type)) return flash("error", "Upload a PNG, JPG or WebP image.");
+    if (file.size > 2000000) return flash("error", "Images can be up to 2 MB — this one is " + kb(file.size) + ".");
+    const data = await new Promise((resolve) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = () => resolve(null);
+      fr.readAsDataURL(file);
+    });
+    if (!data) return flash("error", "Couldn't read that file.");
+    const name = form.querySelector("#flName").value.trim() || file.name.replace(/\.[^.]+$/, "");
+    const btn = form.querySelector("button[type=submit]");
+    btn.disabled = true;
+    const r = await api("/flyer-assets", { name, data });
+    btn.disabled = false;
+    if (!r.ok) return flash("error", errText(r, "Couldn't upload the image."));
+    flash("ok", "Image uploaded: " + esc(r.data.asset.name) + ".");
+    if (ptHere("flyers")) loadPartnerFlyers();
+  }
+
+  /* the Flyers view's buttons */
+  async function flyerAction(b) {
+    const act = b.dataset.fl;
+    const id = b.dataset.id;
+    const name = esc(b.dataset.name || "");
+    if (act === "tpl-add") return openTemplate(null);
+    if (act === "tpl-edit") return openTemplate(id);
+    if (act === "camp-add") return openCampaign(null);
+    if (act === "camp-edit") return openCampaign(id);
+    let req;
+    if (act === "tpl-del") {
+      if ((await ask({ title: "Delete " + name + "?", text: "Partners can't make flyers with it any more, and flyers they saved with it are removed.", yes: "Delete", danger: true })) === null) return;
+      req = ["/flyer-templates/" + encodeURIComponent(id) + "/delete", {}, "Template deleted."];
+    } else if (act === "camp-del") {
+      if ((await ask({ title: "Delete " + name + "?", text: "Its offer and wording come off every flyer at once. To pause it instead, switch it off.", yes: "Delete", danger: true })) === null) return;
+      req = ["/flyer-campaigns/" + encodeURIComponent(id), { delete: true }, "Campaign deleted."];
+    } else if (act === "asset-del") {
+      const f = pt.flyers || { templates: [], campaigns: [] };
+      const used = f.templates.filter((t) => cfgOf(t).asset_id === id).length + f.campaigns.filter((c) => c.asset_id === id).length;
+      if ((await ask({ title: "Delete " + name + "?", text: used ? "It's used by " + count(used) + " template" + (used === 1 ? "" : "s") + " or campaign" + (used === 1 ? "" : "s") + ", which will show without it." : "It isn't used by any template or campaign.", yes: "Delete", danger: true })) === null) return;
+      req = ["/flyer-assets/" + encodeURIComponent(id) + "/delete", {}, "Image deleted."];
+    } else return;
+    b.disabled = true;
+    const r = await api(req[0], req[1]);
+    b.disabled = false;
+    flash(r.ok ? "ok" : "error", r.ok ? req[2] : errText(r, "Couldn't delete it."));
+    if (r.ok && ptHere("flyers")) loadPartnerFlyers();
+  }
+  /* switching a template on or off, or a campaign active or not */
+  async function flyerToggle(input) {
+    const on = input.checked;
+    const tid = input.dataset.fltplOn;
+    if (tid) {
+      const t = tplOf(tid);
+      if (!t) return;
+      if (on && (SPORTS.includes(t.id) || SPORTS.includes(cfgOf(t).layout))) {
+        const ok = await ask({ title: "Switch on " + esc(t.name) + "?", text: "WIN B has no sportsbook yet, so a sports flyer would advertise something players can't find.", yes: "Switch on anyway", danger: true });
+        if (ok === null) { input.checked = false; return; }
+      }
+      input.disabled = true;
+      const r = await api("/flyer-templates/" + encodeURIComponent(tid), { enabled: on });
+      input.disabled = false;
+      if (!r.ok) { input.checked = !on; return flash("error", errText(r, "Couldn't change the template.")); }
+      t.enabled = on;
+      const card = input.closest(".adm-fltpl");
+      if (card) card.classList.toggle("off", !on);
+      return flash("ok", esc(t.name) + (on ? " is on for partners." : " is off: partners can't make new flyers with it, and their saved ones with it are hidden."));
+    }
+    const c = campOf(input.dataset.flcampOn);
+    if (!c) return;
+    input.disabled = true;
+    const r = await api("/flyer-campaigns/" + encodeURIComponent(c.id), { active: on });
+    input.disabled = false;
+    if (!r.ok) { input.checked = !on; return flash("error", errText(r, "Couldn't change the campaign.")); }
+    Object.assign(c, r.data.campaign || { active: on });
+    const row = input.closest(".adm-flcamp");
+    if (row) row.outerHTML = campRow(c);
+    flash("ok", esc(c.title) + (on ? " is active: partners can use it on flyers." : " is off: its offer is off every flyer."));
+  }
+
+  /* ---- "Add partner": a brand-new partner account (sign-in account, wallet and partner account in one go), or, as a
+     second way, a player who already has an account made a partner ---- */
+  const fld = (id, label, input, hint, wide) => '<div class="field' + (wide ? " adm-wide" : "") + '"><label for="' + id + '">' + label + "</label>" + input +
+    (hint ? '<small class="hint">' + hint + "</small>" : "") + "</div>";
+  const OPT = ' <span class="opt">(optional)</span>';
+  const pad2 = (n) => String(n).padStart(2, "0");
+  /* the latest date of birth that is 18 or older today, as YYYY-MM-DD */
+  const adultBy = () => {
+    const d = new Date();
+    return d.getFullYear() - 18 + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  };
+  /* a first password the admin sends privately: 12 letters and numbers, with no look-alikes (0/O, 1/l/I) */
+  function newPassword() {
+    const sets = ["ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghijkmnopqrstuvwxyz", "23456789"];
+    const all = sets.join("");
+    const r = new Uint32Array(12);
+    for (;;) {
+      crypto.getRandomValues(r);
+      const pw = Array.from(r, (x) => all.charAt(x % all.length)).join("");
+      if (sets.every((s) => Array.from(pw).some((c) => s.includes(c)))) return pw;
+    }
+  }
+
   function openAddPartner() {
     const s = sheet("Add a partner");
     const settings = api("/partner-settings");
-    s.set('<form class="adm-padd" data-form="plookup" autocomplete="off">' +
-        '<div class="field"><label for="paQ">Find a registered player</label><input id="paQ" type="search" maxlength="120" placeholder="Phone number, username or email" required></div>' +
-        '<button class="btn btn-primary" type="submit">Find</button></form>' +
-      '<div class="adm-sheet-msg" aria-live="polite"></div><div id="paFound"></div>' +
-      '<p class="adm-credit-note">The player becomes an active partner straight away, with a referral link and a Partner ID. They earn the revenue share you set of the net gaming revenue from players they bring in, less the win deduction on those players\' net winnings.</p>');
-    const say = (html) => (s.body.querySelector(".adm-sheet-msg").innerHTML = html ? "<div class='alert alert-err'>" + html + "</div>" : "");
+    let details = ""; /* the created partner's details for "Copy details"; only while this sheet is open */
+    const msg = '<div class="adm-sheet-msg" aria-live="polite"></div>';
+    const say = (html, kind) => {
+      const box = s.body.querySelector(".adm-sheet-msg");
+      if (box) box.innerHTML = html ? "<div class='alert alert-" + (kind || "err") + "'>" + html + "</div>" : "";
+    };
+
+    /* the usual way: a new account for someone who hasn't registered */
+    function showCreate() {
+      details = "";
+      s.set('<p class="adm-credit-note adm-padd-lead">Opens a new WIN B casino account for someone who hasn\'t registered: their sign-in, a wallet and a partner account with a referral link, Partner ID and promo code. They sign in on the normal login page with their number, username or email.</p>' +
+        '<form class="adm-pcreate" data-form="pcreate" autocomplete="off" novalidate>' +
+          fld("pcName", "Full name", '<input id="pcName" type="text" maxlength="80" autocomplete="off" placeholder="First and last name" required>', "", true) +
+          fld("pcPhone", "Mobile number", '<input id="pcPhone" type="tel" inputmode="tel" maxlength="20" autocomplete="off" placeholder="024 123 4567" required>') +
+          fld("pcDob", "Date of birth", '<input id="pcDob" type="date" max="' + adultBy() + '" required>', "Partners must be 18 or older.") +
+          fld("pcEmail", "Email" + OPT, '<input id="pcEmail" type="email" maxlength="120" autocomplete="off" placeholder="name@example.com">') +
+          fld("pcUser", "Username" + OPT, '<input id="pcUser" type="text" maxlength="30" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Made up if empty">') +
+          '<div class="field adm-wide"><label for="pcPass">Initial password</label><div class="adm-pass">' +
+            '<input id="pcPass" type="text" minlength="8" maxlength="128" spellcheck="false" autocapitalize="off" autocomplete="off" required>' +
+            '<button class="btn btn-ghost btn-sm" type="button" data-pc-gen>Generate</button></div>' +
+            '<small class="hint">At least 8 characters, not only digits. It\'s shown once more after creating — send it to the partner privately; they can change it in Settings.</small></div>' +
+          fld("pcPct", "Commission (revenue share %)", '<input id="pcPct" type="number" inputmode="decimal" min="0" max="90" step="0.01" placeholder="Default">', "0% to 90% of the net gaming revenue from their players.") +
+          fld("pcStatus", "Status", '<select id="pcStatus"><option value="ACTIVE">Active — can start now</option><option value="SUSPENDED">Suspended — not live yet</option></select>') +
+          fld("pcCode", "Partner ID" + OPT, '<input id="pcCode" type="text" maxlength="16" class="adm-upper" spellcheck="false" autocapitalize="characters" autocomplete="off" placeholder="Made up if empty">', "4 to 16 letters and numbers; it's in their referral link.") +
+          fld("pcPromo", "Promo code" + OPT, '<input id="pcPromo" type="text" maxlength="16" class="adm-upper" spellcheck="false" autocapitalize="characters" autocomplete="off" placeholder="None">', "4 to 16 letters and numbers.") +
+          fld("pcNote", "Admin note" + OPT, '<input id="pcNote" type="text" maxlength="300" autocomplete="off" placeholder="Admins only">', "", true) +
+          '<button class="btn btn-primary adm-wide" type="submit">Create partner account</button>' +
+        "</form>" + msg +
+        '<p class="adm-padd-alt"><button class="link-btn" type="button" data-padd-mode="existing">Already a player? Make an existing account a partner</button></p>');
+      settings.then((st) => {
+        const i = s.body.querySelector("#pcPct");
+        if (i && st.ok && i.value === "") i.value = st.data.settings.default_revshare_pct;
+      });
+      s.body.querySelector("#pcName").focus();
+    }
+
+    async function submitCreate(form) {
+      say("");
+      const v = (id) => form.querySelector("#" + id).value.trim();
+      const body = { full_name: v("pcName").replace(/\s+/g, " "), phone: v("pcPhone"), dob: v("pcDob"), password: form.querySelector("#pcPass").value,
+        status: v("pcStatus"), country: "GH" };
+      if (body.full_name.split(" ").length < 2) return say("Enter their full name: first and last name.");
+      if (body.phone.replace(/\D/g, "").length < 9) return say("Enter their mobile number.");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(body.dob)) return say("Enter their date of birth.");
+      if (body.dob > adultBy()) return say("Partners must be 18 or older — check the date of birth.");
+      if (body.password.length < 8 || /^\d+$/.test(body.password)) return say("The password needs at least 8 characters and not only digits. Press <b>Generate</b> for one.");
+      if (v("pcEmail")) body.email = v("pcEmail");
+      if (v("pcUser")) body.username = v("pcUser");
+      const pctv = v("pcPct");
+      if (pctv !== "") {
+        if (!(Number(pctv) >= 0 && Number(pctv) <= 90)) return say("Enter a commission from 0% to 90%.");
+        body.revshare_pct = pctv;
+      }
+      const code = v("pcCode").toUpperCase();
+      const promo = v("pcPromo").toUpperCase();
+      if (code && !/^[A-Z0-9]{4,16}$/.test(code)) return say("The Partner ID must be 4 to 16 letters and numbers, no spaces or symbols.");
+      if (promo && !/^[A-Z0-9]{4,16}$/.test(promo)) return say("The promo code must be 4 to 16 letters and numbers, no spaces or symbols.");
+      if (code && code === promo) return say("Use a different Partner ID and promo code.");
+      if (code) body.code = code;
+      if (promo) body.promo_code = promo;
+      if (v("pcNote")) body.note = v("pcNote");
+      const btn = form.querySelector("button[type=submit]");
+      btn.disabled = true;
+      const r = await api("/partners/create", body);
+      btn.disabled = false;
+      if (!r.ok) {
+        if (r.data && r.data.error === "already_registered") {
+          return say(errText(r, "That number already has an account.") +
+            ' <button class="btn btn-ghost btn-sm" type="button" data-padd-mode="existing" data-q="' + esc(body.phone) + '">Make that existing player a partner instead</button>', "info");
+        }
+        return say(errText(r, "Couldn't create the partner."));
+      }
+      showCreated(r.data, body.password);
+      refreshBadges();
+      if (state.tab === "partners") loadPartners();
+    }
+
+    /* everything the new partner needs, once: the password isn't kept anywhere after this sheet closes */
+    function showCreated(d, password) {
+      const link = refLink(d.code);
+      const page = location.origin + "/partners.html";
+      const signIn = location.origin + "/register.html#login";
+      const logins = [d.phone, d.username, d.email].filter(Boolean);
+      details = ["Your WIN B casino partner account", "Name: " + (d.full_name || ""), "Sign in with: " + logins.join(" or "), "Password: " + password,
+        "Sign in at: " + signIn, "Partner dashboard: " + page, "Partner ID: " + d.code, "Referral link: " + link, "Promo code: " + (d.promo_code || "none"),
+        "Please change your password in Settings after you first sign in."].join("\n");
+      const row = (label, value, cls) => '<div class="adm-pcreated-row"><span>' + label + "</span><b" + (cls ? ' class="' + cls + '"' : "") + ">" + value + "</b></div>";
+      s.set('<div class="alert alert-ok">Partner account created' + (d.status === "SUSPENDED" ? " — suspended: reactivate it on their profile when they should start" : "") + ".</div>" +
+        '<div class="adm-pcreated" data-pc-summary>' +
+          row("Name", tx(d.full_name)) +
+          row("Sign in with", logins.map(esc).join(" · ")) +
+          row("Initial password", esc(password), "adm-addr adm-pc-pass") +
+          row("Sign in at", esc(signIn), "adm-addr") +
+          row("Partner ID", tx(d.code), "adm-addr") +
+          row("Referral link", esc(link), "adm-addr") +
+          row("Promo code", d.promo_code ? esc(d.promo_code) : "none") +
+          row("Partner page", esc(page), "adm-addr") +
+          row("Status", statusPill(d.status)) +
+        "</div>" +
+        '<p class="adm-credit-note adm-credit-warn"><b>The password is shown only now.</b> Send these details to the partner privately (a direct message, not a group), and ask them to change the password in Settings after they first sign in.</p>' +
+        '<div class="adm-actions-box"><button class="btn btn-primary btn-sm" type="button" data-pc-copy>Copy details</button>' +
+          '<button class="btn btn-ghost btn-sm" type="button" data-copy="' + esc(link) + '">Copy link</button>' +
+          '<button class="btn btn-ghost btn-sm" type="button" data-open-partner="' + esc(d.user_id) + '">Open partner profile</button>' +
+          '<button class="btn btn-ghost btn-sm" type="button" data-padd-mode="create">Add another</button></div>');
+      s.body.querySelector("[data-pc-copy]").focus();
+    }
+
+    /* the second way: find a registered player and make them a partner */
+    function showExisting(q) {
+      details = "";
+      s.set('<form class="adm-padd" data-form="plookup" autocomplete="off">' +
+          '<div class="field"><label for="paQ">Find a registered player</label><input id="paQ" type="search" maxlength="120" placeholder="Phone number, username or email" required></div>' +
+          '<button class="btn btn-primary" type="submit">Find</button></form>' +
+        msg + '<div id="paFound"></div>' +
+        '<p class="adm-credit-note">The player becomes an active partner straight away, with a referral link and a Partner ID. They earn the revenue share you set of the net gaming revenue from players they bring in, less the win deduction on those players\' net winnings.</p>' +
+        '<p class="adm-padd-alt"><button class="link-btn" type="button" data-padd-mode="create">Not registered yet? Create a new partner account</button></p>');
+      const input = s.body.querySelector("#paQ");
+      input.focus();
+      if (q) {
+        input.value = q;
+        s.body.querySelector('form[data-form="plookup"] button[type=submit]').click();
+      }
+    }
     const card = (u, def) => {
       const name = u.full_name || u.username || "Player";
       return '<div class="adm-pfound-card">' + avatar(name) + '<div class="adm-pfound-main"><strong>' + esc(name) + "</strong>" +
@@ -929,30 +1502,22 @@
             '<button class="btn btn-primary btn-sm" type="button" data-make="' + esc(u.user_id) + '" data-name="' + esc(name) + '">Make partner</button></div>') +
         "</div>";
     };
-    s.body.addEventListener("submit", async (e) => {
-      if (!e.target.matches('form[data-form="plookup"]')) return;
-      e.preventDefault();
+    async function lookup() {
       say("");
       const q = s.body.querySelector("#paQ").value.trim();
       if (q.length < 3) return say("Enter at least 3 characters: a phone number, username or email.");
       const found = s.body.querySelector("#paFound");
       found.innerHTML = loading;
       const [r, st] = await Promise.all([api("/partner-lookup?q=" + encodeURIComponent(q)), settings]);
+      if (!s.body.contains(found)) return;
       const def = st.ok ? st.data.settings.default_revshare_pct : null;
       if (!r.ok) {
         found.innerHTML = "";
         return say(errText(r, "Couldn't find that player."));
       }
       found.innerHTML = '<div class="adm-pfound">' + r.data.players.map((u) => card(u, def)).join("") + "</div>";
-    });
-    s.body.addEventListener("click", async (e) => {
-      const open = e.target.closest("[data-open-partner]");
-      if (open) {
-        s.close();
-        return openPartner(open.dataset.openPartner);
-      }
-      const b = e.target.closest("[data-make]");
-      if (!b) return;
+    }
+    async function make(b) {
       say("");
       const id = b.dataset.make;
       const pct = s.body.querySelector("#paPct-" + CSS.escape(id)).value.trim();
@@ -971,8 +1536,38 @@
       refreshBadges();
       if (state.tab === "partners") loadPartners();
       openPartner(id);
+    }
+
+    s.body.addEventListener("submit", (e) => {
+      if (e.target.matches('form[data-form="pcreate"]')) { e.preventDefault(); return submitCreate(e.target); }
+      if (e.target.matches('form[data-form="plookup"]')) { e.preventDefault(); return lookup(); }
     });
-    s.body.querySelector("#paQ").focus();
+    s.body.addEventListener("click", async (e) => {
+      if (e.target.closest("[data-pc-gen]")) {
+        const i = s.body.querySelector("#pcPass");
+        i.value = newPassword();
+        i.focus();
+        return i.select();
+      }
+      const mode = e.target.closest("[data-padd-mode]");
+      if (mode) return mode.dataset.paddMode === "existing" ? showExisting(mode.dataset.q || "") : showCreate();
+      const all = e.target.closest("[data-pc-copy]");
+      if (all) {
+        await copyText(details, "Partner details copied. Send them to the partner privately.");
+        all.textContent = "Copied";
+        return setTimeout(() => { if (all.isConnected) all.textContent = "Copy details"; }, 2000);
+      }
+      const cp = e.target.closest("[data-copy]");
+      if (cp) return copyText(cp.dataset.copy);
+      const open = e.target.closest("[data-open-partner]");
+      if (open) {
+        s.close();
+        return openPartner(open.dataset.openPartner);
+      }
+      const b = e.target.closest("[data-make]");
+      if (b) return make(b);
+    });
+    showCreate();
   }
 
   /* ---- one partner's profile: account, link and promo code, totals, statistics, money, history, and every action ---- */
@@ -980,6 +1575,23 @@
     const s = sheet("Partner");
     const uid = encodeURIComponent(userId);
     let cur = null;
+    let perms = null; /* {effective, global, overrides, list}, or the reason it could not load */
+    let permsErr = "";
+    /* each feature: Default (follows the setting for every partner), On or Off for this partner, and what applies now */
+    const permsHtml = () => {
+      if (!perms) return "<p class='me-sheet-note'>" + (permsErr || "Couldn't load the permissions.") + "</p>";
+      const ov = perms.overrides || {};
+      return '<form class="adm-pperms" data-pf="perms"><p class="hint">Default follows the setting for every partner (Partners → Permissions); On or Off here is for this partner only. ' +
+        "A feature that's off is blocked by the server, not just hidden.</p>" +
+        perms.list.map(({ key, label }) => {
+          const now = key in ov ? (ov[key] ? "on" : "off") : "";
+          const opt = (v, l) => '<label><input type="radio" name="pp-' + esc(key) + '" value="' + v + '" data-pperm="' + esc(key) + '"' + (v === now ? " checked" : "") + "><span>" + l + "</span></label>";
+          return '<div class="adm-pperm"><div class="adm-pperm-name"><b>' + esc(label) + "</b>" + (perms.effective[key] ? pill("On", "ok") : pill("Off", "bad")) +
+              (key in ov ? "<small>set for this partner</small>" : "<small>default</small>") + "</div>" +
+            '<div class="adm-seg" role="radiogroup" aria-label="' + esc(label) + '">' + opt("", "Default (" + (perms.global[key] ? "on" : "off") + ")") + opt("on", "On") + opt("off", "Off") + "</div></div>";
+        }).join("") +
+        '<button class="btn btn-primary btn-sm" type="submit">Save permissions</button></form>';
+    };
     const statRow = (x, label) => "<tr><td>" + label + "</td><td>" + count(x.signups) + "</td><td>" + (x.activePlayers === null ? "—" : count(x.activePlayers)) + "</td><td>" + money(x.stakes) +
       "</td><td>" + money(x.payouts) + '</td><td class="' + tone(x.ngr) + '">' + money(x.ngr) + "</td><td>" + money(x.commission) + '</td><td class="' + tone(x.negative) + '">' +
       money(x.negative) + '</td><td class="' + tone(x.earnings) + '"><b>' + money(x.earnings) + "</b></td></tr>";
@@ -1041,7 +1653,9 @@
           mini("Payouts (winnings)", money(lt.payouts)) +
           mini("Net gaming revenue", money(lt.ngr), tone(lt.ngr)) +
           mini("Total commission", money(lt.commission), "in") +
-          mini("Negative adjustments", money(lt.negative), lt.negative < 0 ? "bad" : "") +
+          mini("Deposits by their players", money(lt.deposits || 0)) +
+          mini("Eligible deposit losses", money(lt.eligibleLosses || 0)) +
+          mini("Deductions from player wins", money(lt.negative), lt.negative < 0 ? "bad" : "") +
           mini("Net commission", money(lt.net), tone(lt.net)) +
           (Math.abs(p.totalEarnings - lt.net) >= 0.005 ? mini("Total earnings", money(p.totalEarnings) + " <small>(incl. opening balance)</small>") : "") +
           mini("Pending (period open)", money(w.pending), w.pending ? "warn" : "") +
@@ -1081,12 +1695,27 @@
         '<form class="adm-terms" data-pf="note"><div class="field adm-wide"><label for="pNote">Note (admins only)</label><input id="pNote" type="text" maxlength="300" value="' + tx(p.note) + '"></div>' +
           '<button class="btn btn-ghost btn-sm" type="submit">Save note</button></form>' +
 
+        '<h3 class="me-sheet-sub">Permissions</h3>' +
+        fold("Features for this partner" + (perms && Object.keys(perms.overrides || {}).length ? " · " + count(Object.keys(perms.overrides).length) + " set here" : ""), null, permsHtml()) +
+        (p.status !== "ACTIVE" ? '<p class="hint">They\'re not an active partner right now; these settings apply while they are.</p>' : "") +
+
         '<h3 class="me-sheet-sub">Statistics</h3>' +
         fold("Daily · last 30 days", null, statTable(d.daily || [], "30 days", {
           signups: sum(d.daily || [], "signups"), activePlayers: null, stakes: sum(d.daily || [], "stakes"), payouts: sum(d.daily || [], "payouts"),
           ngr: sum(d.daily || [], "ngr"), commission: sum(d.daily || [], "commission"), negative: sum(d.daily || [], "negative"), earnings: sum(d.daily || [], "earnings") }), true) +
         fold("Monthly · last 12 months", null, statTable(d.monthly || [], "Lifetime", {
           signups: p.referrals, activePlayers: null, stakes: lt.stakes, payouts: lt.payouts, ngr: lt.ngr, commission: lt.commission, negative: lt.negative, earnings: lt.net })) +
+
+        fold("Commission records", (d.commissions || []).length, (d.commissions || []).length
+          ? table(["Date", "Player", "Game", "Stake", "From deposit", "Payout", "Eligible loss", "Rate", "Commission", "Status"], d.commissions.map((c) =>
+              "<tr><td>" + when(c.settled_at) + '</td><td><a href="#" data-user="' + esc(c.user_id) + '">' + esc(c.full_name || c.username || c.player) + "</a>" +
+              (c.phone ? " <small>" + esc(c.phone) + "</small>" : "") + "</td><td>" + esc(c.game) + "</td><td>" + money(c.stake) + "</td><td>" +
+              (c.depositStake === null ? "—" : money(c.depositStake)) + "</td><td>" + money(c.payout) + "</td><td>" + money(c.eligibleLoss) + "</td><td>" + c.pct + "%" +
+              (c.kind === "deduction" ? " <small>deduction</small>" : "") + '</td><td class="' + tone(c.amount) + '">' + money(c.amount) +
+              (c.kind === "not_eligible" ? " <small>lost winnings — not eligible</small>" : "") + (c.rule === "loss" ? " <small>earlier rule</small>" : "") +
+              "</td><td>" + (c.status === "settled" ? "Settled" : "Pending") + "</td></tr>")) +
+            '<p class="hint">Commission = rate × the eligible loss: the part of a lost stake that was the player\'s own deposited money (stakes use deposited money first; every payout counts as winnings). A win deducts the win-deduction % of the player\'s net winnings. Newest 500.</p>'
+          : '<p class="me-sheet-note">No commission records yet.</p>') +
 
         fold("Referred users", ref.length, ref.length
           ? table(["Player", "Joined", "Via", "Stakes", "Payouts", "NGR", "Commission", "Last bet"], ref.slice(0, 300).map((x) =>
@@ -1125,7 +1754,9 @@
     }
 
     const draw = async () => {
-      const r = await api("/partners/" + uid);
+      const [r, pr] = await Promise.all([api("/partners/" + uid), api("/partners/" + uid + "/permissions")]);
+      perms = pr.ok ? pr.data : null;
+      permsErr = pr.ok ? "" : errText(pr, "Couldn't load the permissions.");
       if (!r.ok) return s.set("<div class='alert alert-err'>" + errText(r, "Couldn't load this partner.") + "</div>");
       cur = r.data;
       /* keep the scroll position and which folds are open across a redraw */
@@ -1249,6 +1880,28 @@
         return;
       }
       if (kind === "note") return update({ note: v("pNote") }, () => "Note saved.", b);
+      if (kind === "perms" && perms) {
+        const ov = perms.overrides || {};
+        const changes = {};
+        const lines = [];
+        perms.list.forEach(({ key, label }) => {
+          const pick = f.querySelector('input[data-pperm="' + CSS.escape(key) + '"]:checked');
+          const want = !pick || pick.value === "" ? null : pick.value === "on";
+          const had = key in ov ? ov[key] : null;
+          if (want === had) return;
+          changes[key] = want;
+          lines.push(esc(label) + " → <b>" + (want === null ? "default (" + (perms.global[key] ? "on" : "off") + ")" : want ? "on" : "off") + "</b>");
+        });
+        if (!lines.length) return flash("info", "Nothing changed.");
+        const ok = await ask({ title: "Change " + esc(p.full_name || p.username || "this partner") + "'s permissions?", text: lines.join("<br>") + "<br>The server applies it at once.", yes: "Save" });
+        if (ok === null) return;
+        b.disabled = true;
+        const r = await api("/partners/" + uid + "/permissions", { permissions: changes });
+        b.disabled = false;
+        flash(r.ok ? "ok" : "error", r.ok ? "Permissions saved." : errText(r, "Couldn't save the permissions."));
+        if (r.ok) draw();
+        return;
+      }
     });
     draw();
   }
@@ -1687,6 +2340,8 @@
   document.querySelector(".adm-wrap").addEventListener("submit", (e) => {
     if (e.target.matches('form[data-form="aviator"]')) { e.preventDefault(); saveAviator(e.target); }
     if (e.target.matches('form[data-form="psettings"]')) { e.preventDefault(); savePartnerSettings(e.target); }
+    if (e.target.matches('form[data-form="pperms"]')) { e.preventDefault(); savePartnerPermissions(e.target); }
+    if (e.target.matches('form[data-form="flupload"]')) { e.preventDefault(); uploadFlyerAsset(e.target); }
     if (e.target.matches('form[data-form="pstats"]')) {
       e.preventDefault();
       pt.from = e.target.querySelector("#pstFrom").value;
@@ -1703,6 +2358,8 @@
     if (pact) return partnerQuick(pact);
     const settle = e.target.closest("[data-psettle]");
     if (settle) return settleNow(settle);
+    const fl = e.target.closest("button[data-fl]");
+    if (fl) return flyerAction(fl);
     const chip = e.target.closest("[data-chips] [data-v]");
     if (chip) {
       const group = chip.closest("[data-chips]").dataset.chips;
@@ -1749,6 +2406,8 @@
     }
   });
   document.querySelector(".adm-wrap").addEventListener("change", async (e) => {
+    const flsw = e.target.closest("input[data-fltpl-on], input[data-flcamp-on]");
+    if (flsw) return flyerToggle(flsw);
     const sw = e.target.closest(".adm-switch input[data-kind]");
     if (!sw) return;
     const on = sw.checked;
