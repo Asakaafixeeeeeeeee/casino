@@ -384,15 +384,14 @@
     wdAmount.addEventListener("input", sync);
     wireIncrements("wquick", wdAmount, sync);
 
-    /* withdrawals open once winnings reach 3x everything deposited: show how far the player has to go */
-    const showRequirement = async () => {
-      const r = await U.paymentApi("/api/user/withdraw/requirement");
-      if (!r.ok || !r.data || !(r.data.remaining > 0)) return;
-      msg.innerHTML = "<div class='alert alert-info'>You can withdraw once your winnings reach " + r.data.multiple +
-        "x your deposits (" + U.money(r.data.required) + "). You've won " + U.money(r.data.won) + " so far, " +
-        U.money(r.data.remaining) + " to go.</div>";
+    /* only winnings can be withdrawn: say how much of the balance that is, when part of it is deposited money */
+    const showWithdrawable = async () => {
+      const r = await U.paymentApi("/api/user/withdraw/available");
+      if (!r.ok || !r.data || !(r.data.balance > r.data.withdrawable)) return;
+      msg.innerHTML = "<div class='alert alert-info'>You can withdraw " + U.money(r.data.withdrawable) +
+        " (your winnings). Deposited money can't be withdrawn; it stays in your balance for betting.</div>";
     };
-    showRequirement();
+    showWithdrawable();
 
     submit.addEventListener("click", async () => {
       const amt = Math.round(Number(wdAmount.value) * 100) / 100;

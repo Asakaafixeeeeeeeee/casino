@@ -52,6 +52,11 @@ services:
         sync: false
       - key: TELLER_PASSCODE
         sync: false
+      # pending-withdrawal emails (Resend HTTPS API; Render's free plan blocks SMTP)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: WITHDRAWAL_ALERT_EMAIL
+        value: asakaafixed@gmail.com
 
   - type: web
     name: asakaa-accounts

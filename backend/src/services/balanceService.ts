@@ -121,6 +121,9 @@ export class BalanceError extends Error {
 
 /* --- core: one atomic idempotent movement ------------------------------- */
 
+/** Credits that count as withdrawable winnings: game payouts, and a refused withdrawal coming back. */
+const WINNINGS_IN = new Set<string>(["BET_SETTLED", "REVERSAL"]);
+
 /**
  * Post one double-entry movement atomically.
  *
@@ -179,21 +182,28 @@ export async function postMovement(client: PoolClient, m: MovementInput): Promis
     );
 
     if (leg.userId !== null) {
+      // `withdrawable` is the winnings part of `available` (only winnings can be withdrawn). Game payouts and a
+      // returned withdrawal add to it; a withdrawal takes from it; any other spend uses deposited money first, so
+      // it only shrinks when the balance drops below it.
+      const winningsCredit = leg.direction === "CREDIT" && WINNINGS_IN.has(m.entryType);
+      const withdrawal = leg.direction === "DEBIT" && m.entryType === "WITHDRAWAL_REQUEST";
       const r = await client.query<{ available: string }>(
         leg.direction === "CREDIT"
           ? // Money in: upsert the row (created lazily on first credit) and add.
-            // Shares the debit query's parameter list: $1 amount, $2 user, $3 currency.
-            `INSERT INTO user_balances (user_id, currency_code, available)
-               VALUES ($2, $3, $1)
+            // Shares the debit query's parameter list: $1 amount, $2 user, $3 currency, $4 winnings/withdrawal.
+            `INSERT INTO user_balances (user_id, currency_code, available, withdrawable)
+               VALUES ($2, $3, $1, CASE WHEN $4::boolean THEN $1::numeric ELSE 0 END)
              ON CONFLICT (user_id, currency_code)
-             DO UPDATE SET available = user_balances.available + EXCLUDED.available
+             DO UPDATE SET available = user_balances.available + EXCLUDED.available,
+                           withdrawable = user_balances.withdrawable + EXCLUDED.withdrawable
              RETURNING available`
-          : // Money out: atomic overdraft guard. Returns nothing if insufficient.
+          : // Money out: atomic overdraft guard. Returns nothing if insufficient (a withdrawal also needs winnings).
             `UPDATE user_balances
-                SET available = available - $1
-               WHERE user_id = $2 AND currency_code = $3 AND available >= $1
+                SET available = available - $1,
+                    withdrawable = CASE WHEN $4::boolean THEN withdrawable - $1 ELSE LEAST(withdrawable, available - $1) END
+               WHERE user_id = $2 AND currency_code = $3 AND available >= $1 AND (NOT $4::boolean OR withdrawable >= $1)
                RETURNING available`,
-        [qty, leg.userId, leg.currencyCode]
+        [qty, leg.userId, leg.currencyCode, winningsCredit || withdrawal]
       );
 
       if (leg.direction === "DEBIT" && !r.rowCount) {

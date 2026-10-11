@@ -29,6 +29,7 @@ const migrationFiles = [
   "021_partner_deposit_pct.sql",
   "022_regional_admins.sql",
   "023_user_full_name.sql",
+  "024_withdrawable_winnings.sql",
 ];
 
 if (!process.env.DATABASE_URL) {
