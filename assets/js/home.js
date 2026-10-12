@@ -1,75 +1,69 @@
 /* Home page: promo carousel, For You row, live winner banner, game sections and payments */
 (function () {
   "use strict";
-  const { games, payments, promos, categories } = window.VB;
+  const { games, payments, categories } = window.VB;
   const U = window.VBUtil;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const byId = (id) => games.find((g) => g.id === id);
   const byPlayers = (a, b) => b.players - a.players;
 
-  /* ---------------- promo carousel ---------------- */
-  function carousel(host, slides) {
-    const title = (p) => p.title.replace(p.highlight, "<span>" + p.highlight + "</span>");
+  /* ---------------- hero banners ---------------- */
+  /* WIN B casino's own banners: black, gold and red, each with a different game's artwork. Every amount is the
+     game's real top prize (data.js maxWin). Slides change by themselves every 5 seconds (or by swiping, or the arrows
+     on a desktop); no pause button and no dots. */
+  const HERO = [
+    { game: "roulette", kicker: "WIN B casino", title: "Ghana's <span>premium</span> casino", sub: "Crash games, live tables, slots and instant wins, all in one place.", cta: "Play now", href: "games.html", tone: "gold" },
+    { game: "crash", kicker: "Crash", title: "Fly up to <span>₵ 250,000</span>", sub: "Cash out before the plane goes down. A new round every few seconds.", cta: "Play Crash", tone: "red" },
+    { game: "olympus", kicker: "Slots", title: "Win up to <span>15,000x</span>", sub: "Olympus: tumbling wins and multipliers from the gods.", cta: "Spin Olympus", tone: "gold" },
+    { game: "knockout", kicker: "Fight night", title: "Knock out <span>₵ 250,000</span>", sub: "Mad Punch: cash out before the knockout, or call the colour of the round.", cta: "Play Knockout", tone: "red" },
+    { game: "mines", kicker: "Instant win", title: "Pick the <span>gems</span>", sub: "Mines: every safe tile raises your win. Deposit in seconds with mobile money.", cta: "Play Mines", tone: "gold" }
+  ];
+  function carousel(host, list) {
+    /* a slide whose game an admin switched off is left out */
+    const slides = list.filter((p) => byId(p.game));
     host.innerHTML =
       '<div class="slides">' +
-      slides.map((p, i) =>
-        '<a class="slide slide-' + p.theme + '" href="' + p.href + '" aria-roledescription="slide" aria-label="' +
-        (i + 1) + " of " + slides.length + ": " + p.title + '">' +
-        '<span class="slide-copy"><span class="slide-kicker">' + p.kicker + "</span>" +
-        '<strong class="slide-title">' + title(p) + "</strong>" +
-        '<span class="slide-sub">' + p.sub + "</span>" +
-        '<span class="btn btn-primary btn-sm">' + p.cta + "</span></span>" +
-        '<span class="slide-art" aria-hidden="true">' + p.art + "</span></a>").join("") +
+      slides.map((p, i) => {
+        const g = byId(p.game);
+        const href = p.href || "game.html?game=" + encodeURIComponent(g.id);
+        const plain = p.title.replace(/<[^>]+>/g, "");
+        return '<a class="slide hero-slide hero-' + p.tone + '" href="' + href + '" aria-roledescription="slide" aria-label="' +
+          (i + 1) + " of " + slides.length + ": " + U.esc(plain) + '">' +
+          (g.thumb ? '<img class="hero-photo" src="' + g.thumb + '" alt="" ' + (i ? 'loading="lazy" ' : "") + 'decoding="async">' : "") +
+          '<span class="slide-copy"><span class="slide-kicker">' + p.kicker + "</span>" +
+          '<strong class="slide-title">' + p.title + "</strong>" +
+          '<span class="slide-sub">' + p.sub + "</span>" +
+          '<span class="btn btn-primary btn-sm">' + p.cta + "</span></span></a>";
+      }).join("") +
       "</div>" +
       '<button class="car-arrow prev" type="button" data-step="-1" aria-label="Previous slide">' + U.icon("chevronLeft") + "</button>" +
-      '<button class="car-arrow next" type="button" data-step="1" aria-label="Next slide">' + U.icon("chevronRight") + "</button>" +
-      '<div class="dots">' +
-      slides.map((p, i) => '<button class="dot" type="button" data-go="' + i + '" aria-label="Show slide ' + (i + 1) + '"></button>').join("") +
-      "</div>" +
-      '<button class="car-pause" type="button"></button>';
+      '<button class="car-arrow next" type="button" data-step="1" aria-label="Next slide">' + U.icon("chevronRight") + "</button>";
 
     const track = host.querySelector(".slides");
-    const dots = Array.from(host.querySelectorAll(".dot"));
-    const pauseBtn = host.querySelector(".car-pause");
     let index = 0;
     let timer = null;
-    let paused = reduceMotion; /* never auto-advance for people who asked for less motion */
+    const still = reduceMotion; /* never auto-advance for people who asked for less motion */
     let hovering = false;
     let keyboardFocus = false;
 
-    const paint = () => {
-      dots.forEach((d, i) => d.setAttribute("aria-current", String(i === index)));
-      pauseBtn.innerHTML = U.icon(paused ? "play" : "pause");
-      pauseBtn.setAttribute("aria-label", paused ? "Play slideshow" : "Pause slideshow");
-    };
     const go = (i) => {
       index = (i + slides.length) % slides.length;
       track.scrollTo({ left: index * track.clientWidth, behavior: reduceMotion ? "auto" : "smooth" });
-      paint();
     };
-    /* auto-advance every 5s unless paused, hovered, keyboard-focused, or the tab is hidden */
+    /* auto-advance every 5s unless hovered, keyboard-focused, or the tab is hidden */
     const schedule = () => {
       clearInterval(timer);
-      if (!paused && !hovering && !keyboardFocus && !document.hidden) timer = setInterval(() => go(index + 1), 5000);
+      if (!still && !hovering && !keyboardFocus && !document.hidden) timer = setInterval(() => go(index + 1), 5000);
     };
 
     track.addEventListener("scroll", () => {
-      const i = Math.round(track.scrollLeft / track.clientWidth);
-      if (i !== index) {
-        index = i;
-        paint();
-      }
+      index = Math.round(track.scrollLeft / track.clientWidth);
     }, { passive: true });
 
     host.addEventListener("click", (e) => {
       const step = e.target.closest("[data-step]");
-      const dot = e.target.closest("[data-go]");
-      if (step) go(index + Number(step.dataset.step));
-      else if (dot) go(Number(dot.dataset.go));
-      else if (e.target.closest(".car-pause")) {
-        paused = !paused;
-        paint();
-      } else return;
+      if (!step) return;
+      go(index + Number(step.dataset.step));
       schedule(); /* a manual move restarts the 5s countdown */
     });
     host.addEventListener("mouseenter", () => { hovering = true; schedule(); });
@@ -87,11 +81,10 @@
     document.addEventListener("visibilitychange", schedule);
     window.addEventListener("resize", () => track.scrollTo({ left: index * track.clientWidth }));
 
-    paint();
     schedule();
   }
 
-  carousel(document.getElementById("carousel"), promos);
+  carousel(document.getElementById("carousel"), HERO);
 
   /* ---------------- For You: recently played and favourites first, then a mix of top titles ---------------- */
   const personal = U.recent.all().concat(U.favs.all()).map(byId).filter(Boolean);

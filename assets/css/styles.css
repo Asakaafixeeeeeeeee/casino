@@ -247,19 +247,50 @@ p { margin: 0 0 1rem; color: var(--muted); }
     radial-gradient(45% 70% at 65% 0%, rgba(255, 204, 0, .4), transparent 70%),
     linear-gradient(110deg, #1a0508 35%, #3a0910);
 }
-.car-arrow, .car-pause {
-  position: absolute; z-index: 2; display: grid; place-items: center; padding: 0; cursor: pointer;
-  border: 0; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff;
+.car-arrow {
+  position: absolute; z-index: 3; display: grid; place-items: center; padding: 0; cursor: pointer;
+  border: 1px solid rgba(255, 200, 61, .35); border-radius: 50%; background: rgba(0, 0, 0, .6); color: var(--yellow);
 }
 .car-arrow { display: none; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; }
 .car-arrow.prev { left: 12px; }
 .car-arrow.next { right: 12px; }
-.car-pause { right: 10px; bottom: 8px; width: 26px; height: 26px; }
-.car-pause .ic { width: 14px; height: 14px; }
-.dots { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 2; display: flex; gap: 6px; }
-.dot { position: relative; width: 8px; height: 8px; padding: 0; border: 0; border-radius: var(--r-full); background: rgba(255, 255, 255, .4); cursor: pointer; transition: width .2s ease, background .2s ease; }
-.dot::before { content: ""; position: absolute; inset: -10px -4px; }
-.dot[aria-current="true"] { width: 20px; background: var(--yellow); }
+
+/* the home hero banners: black and gold, a game's artwork on the right melting into the dark */
+.hero-carousel:has(.hero-slide) { border-color: rgba(255, 200, 61, .35); background: #070707; }
+.hero-slide { padding: 18px 20px; min-height: 190px; isolation: isolate; }
+.hero-slide::before {
+  z-index: 1;
+  background:
+    linear-gradient(90deg, #070707 0%, rgba(7, 7, 7, .96) 34%, rgba(7, 7, 7, .55) 58%, rgba(7, 7, 7, .1) 78%, transparent),
+    linear-gradient(0deg, rgba(7, 7, 7, .7), transparent 45%);
+}
+.hero-slide::after {
+  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 200, 61, .9) 30%, #ffe08a 50%, rgba(255, 200, 61, .9) 70%, transparent) top / 100% 2px no-repeat;
+}
+.hero-gold { background: radial-gradient(60% 120% at 82% 50%, rgba(255, 190, 40, .35), transparent 70%), #070707; }
+.hero-red { background: radial-gradient(60% 120% at 82% 50%, rgba(214, 20, 40, .42), transparent 70%), #070707; }
+.hero-photo {
+  position: absolute; top: 0; right: 0; z-index: 0; width: 62%; height: 100%; object-fit: cover; object-position: center 35%;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 38%); mask-image: linear-gradient(90deg, transparent, #000 38%);
+}
+.hero-slide .slide-copy { max-width: 64%; gap: 7px; }
+.hero-slide .slide-kicker {
+  padding: 3px 9px; border-radius: var(--r-full); border: 1px solid rgba(255, 200, 61, .45); background: rgba(255, 200, 61, .08);
+}
+.hero-slide .slide-title { font-size: clamp(1.45rem, 1rem + 3.2vw, 3rem); letter-spacing: -.01em; text-shadow: 0 2px 18px rgba(0, 0, 0, .6); }
+.hero-slide .slide-title span {
+  background: linear-gradient(180deg, #fff3c4 0%, #ffd34d 45%, #e0a100 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero-red .slide-title span { background: linear-gradient(180deg, #ffe7a3 0%, #ffc83d 50%, #ff7a2a 100%); -webkit-background-clip: text; background-clip: text; }
+.hero-slide .slide-sub { color: #d9d9d9; text-shadow: 0 1px 8px rgba(0, 0, 0, .8); }
+.hero-slide .btn { box-shadow: 0 6px 20px rgba(255, 200, 61, .25); }
+@media (max-width: 420px) {
+  .hero-slide { min-height: 200px; padding: 16px; }
+  .hero-photo { width: 72%; opacity: .9; }
+  .hero-slide .slide-copy { max-width: 72%; }
+  .hero-slide .slide-sub { font-size: .76rem; }
+}
 
 /* ---------- section headers ---------- */
 .block { margin-top: 24px; }
@@ -706,6 +737,9 @@ a.provider:hover { border-color: var(--yellow); transform: translateY(-1px); }
   .mini-card .thumb-emoji { font-size: 2.4rem; }
   .mini-title { font-size: .72rem; }
   .slide { aspect-ratio: auto; height: 260px; padding: 32px 72px 40px; }
+  .hero-slide { height: 300px; padding: 36px 72px; }
+  .hero-photo { width: 55%; }
+  .hero-slide .slide-copy { max-width: 52%; }
   .slide-sub { font-size: .95rem; }
   .car-arrow { display: grid; }
   .game-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 18px 14px; }
