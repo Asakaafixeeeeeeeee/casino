@@ -57,6 +57,31 @@
   $("playTag").title = real ? "Bets come from your WIN B casino wallet" : "Every session starts with GHS 3,000 of free credits";
   $("playTag").classList.toggle("is-real", real);
 
+  /* the admin can turn Jet's free play off (Admin -> Games): then a signed-in player plays from the wallet and anyone
+     signed out is asked to sign in. Free play has the same odds as real money either way. */
+  if (!real) {
+    fetch(API + "/api/games/visibility", { cache: "no-store" }).then((r) => r.json()).then((v) => {
+      const off = (v && v.free_play_off) || [];
+      if (!off.includes("jet") && !off.includes("volta-jet")) return;
+      if (session && session.token) {
+        const url = new URL(location.href);
+        url.searchParams.set("mode", "real");
+        location.replace(url.href);
+        return;
+      }
+      const gate = document.createElement("div");
+      gate.className = "free-gate";
+      gate.setAttribute("role", "dialog");
+      gate.setAttribute("aria-modal", "true");
+      gate.innerHTML = '<div class="free-gate-card"><h2>Sign in to play</h2>' +
+        "<p>Free play isn't available on Jet right now. Sign in to play with your wallet.</p>" +
+        '<a class="free-gate-btn" href="../register.html#login">Sign in</a>' +
+        '<a class="free-gate-link" href="../games.html">Back to the lobby</a></div>';
+      document.body.appendChild(gate);
+      gate.querySelector("a").focus();
+    }).catch(() => { /* the switches couldn't be read: free play stays as it was */ });
+  }
+
   /* ---------------- state ---------------- */
   let balance = real ? 0 : START_CENTS;
   let phase = "WAITING";    /* WAITING (between rounds) | FLYING */

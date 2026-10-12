@@ -42,6 +42,9 @@
     const serverPlay = !!opts.server && signedIn;
     const realAllowed = serverPlay || U.testMode;
     let mode = realAllowed && params.get("mode") === "real" ? "real" : "fun";
+    /* the admin's per-game switches: free play can be off (Credits goes away), and real big wins can show */
+    U.freePlay.enforce(opts.gameId, { mode, canReal: serverPlay });
+    U.showcase.mount(opts.gameId);
     let fun = FUN_CREDITS;
     const balance = () => (mode === "real" ? U.wallet.balance() : fun);
 

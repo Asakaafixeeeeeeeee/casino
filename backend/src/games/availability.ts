@@ -85,10 +85,12 @@ export interface GameControls {
   max_bet: number | null;
   wait_ms: number | null;
   max_x: number | null;
+  free_play: boolean;   // the game offers free play (practice credits, the same odds)
+  showcase: boolean;    // the game page shows real big wins
   updated_by: string | null;
   updated_at: string | null;
 }
-const NONE: GameControls = { paused: false, paused_until: null, pause_note: null, min_bet: null, max_bet: null, wait_ms: null, max_x: null, updated_by: null, updated_at: null };
+const NONE: GameControls = { paused: false, paused_until: null, pause_note: null, min_bet: null, max_bet: null, wait_ms: null, max_x: null, free_play: true, showcase: false, updated_by: null, updated_at: null };
 let controlsCache: { at: number; byGame: Map<string, GameControls> } | null = null;
 
 /** Every game's controls (a few seconds' cache; a change made here clears it at once). */
@@ -99,6 +101,7 @@ export async function allGameControls(db: Pool): Promise<Map<string, GameControl
   const byGame = new Map(rows.map((r) => [String(r.game), {
     paused: !!r.paused, paused_until: r.paused_until ? new Date(r.paused_until).toISOString() : null, pause_note: r.pause_note ?? null,
     min_bet: n(r.min_bet), max_bet: n(r.max_bet), wait_ms: n(r.wait_ms), max_x: n(r.max_x),
+    free_play: r.free_play !== false, showcase: r.showcase === true,
     updated_by: r.updated_by ?? null, updated_at: r.updated_at ? new Date(r.updated_at).toISOString() : null,
   } as GameControls]));
   controlsCache = { at: Date.now(), byGame };

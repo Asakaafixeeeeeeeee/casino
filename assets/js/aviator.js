@@ -91,6 +91,9 @@
   const session = U.session.get();
   const signedIn = !!session;
   let mode = signedIn && params.get("mode") === "real" ? "real" : "fun";
+  /* the admin's per-game switches: free play can be off (Credits goes away), and real big wins can show */
+  U.freePlay.enforce("sky-rush", { mode, canReal: signedIn });
+  U.showcase.mount("sky-rush");
   const real = () => mode === "real";
   let fun = FUN_CREDITS;
   const balance = () => (real() ? U.wallet.balance() : fun);

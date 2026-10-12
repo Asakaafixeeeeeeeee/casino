@@ -1206,12 +1206,124 @@
     if (CONTACT.email) el.innerHTML = '<a href="mailto:' + esc(CONTACT.email) + '">' + esc(CONTACT.email) + "</a>";
   });
 
+  /* ---------------- per-game switches from Admin -> Games: free play and the big-wins showcase ---------------- */
+  /* The server's public catalogue (GET /api/games/visibility) lists, by lobby id AND server id, the games whose free
+     play an admin turned off and the games showing real big wins. The last answer is kept with the hidden games, so a
+     page can decide at once; the fresh answer follows and wins. Neither switch has anything to do with how results are
+     drawn — free play uses the same odds as real money. */
+  const CATALOG_KEY = "vb.catalog.hidden";
+  let catalogFetch = null;
+  function catalogNow() {
+    const h = read(CATALOG_KEY, null) || {};
+    return { freePlayOff: Array.isArray(h.free_play_off) ? h.free_play_off : [], showcase: Array.isArray(h.showcase) ? h.showcase : [] };
+  }
+  function catalogFresh() {
+    if (!catalogFetch) {
+      catalogFetch = paymentApi("/api/games/visibility", { timeout: 15000 }).then((r) => {
+        if (r.ok && r.data && Array.isArray(r.data.games)) {
+          write(CATALOG_KEY, {
+            games: r.data.games, providers: r.data.providers || [],
+            free_play_off: r.data.free_play_off || [], showcase: r.data.showcase || []
+          });
+        }
+        return catalogNow();
+      }).catch(() => catalogNow());
+    }
+    return catalogFetch;
+  }
+
+  /* Free play off for this game: the Credits choice goes away. A signed-in player moves to their wallet (the page
+     reloads with ?mode=real); someone signed out is asked to sign in. ids: the page's lobby and/or server id. */
+  const freePlay = {
+    ready: () => catalogFresh(),
+    allowed(ids) {
+      const off = catalogNow().freePlayOff;
+      return ![].concat(ids).some((id) => off.includes(id));
+    },
+    /* opts.mode: the page's current mode ("fun" / "real"); opts.canReal: real money is possible here (signed in) */
+    enforce(ids, opts) {
+      /* the last answer decides at once, but only in ways the fresh one can undo (the gate, the hidden Credits);
+         moving a player to the wallet waits for the fresh answer */
+      const apply = (fresh) => {
+        const on = freePlay.allowed(ids);
+        document.documentElement.classList.toggle("vb-no-free-play", !on);
+        const gate = document.getElementById("vbFreeGate");
+        if (on) {
+          if (gate) gate.remove();
+          return;
+        }
+        if (opts.mode !== "fun") return;
+        if (!opts.canReal) showFreePlayGate();
+        else if (fresh) {
+          const url = new URL(location.href);
+          url.searchParams.set("mode", "real");
+          location.replace(url.href);
+        }
+      };
+      apply(false);
+      catalogFresh().then(() => apply(true));
+    }
+  };
+  function showFreePlayGate() {
+    if (document.getElementById("vbFreeGate")) return;
+    const gate = document.createElement("div");
+    gate.className = "vb-free-gate";
+    gate.id = "vbFreeGate";
+    gate.setAttribute("role", "dialog");
+    gate.setAttribute("aria-modal", "true");
+    gate.setAttribute("aria-labelledby", "vbFreeGateTitle");
+    gate.innerHTML =
+      '<div class="vb-free-gate-card">' +
+        '<span class="vb-free-gate-ico">' + icon("user") + "</span>" +
+        '<h2 id="vbFreeGateTitle">Sign in to play</h2>' +
+        "<p>Free play isn't available on this game right now. Sign in to play with your wallet.</p>" +
+        '<a class="btn btn-primary btn-block" href="register.html#login">Sign in</a>' +
+        '<a class="btn btn-ghost btn-block" href="register.html#register">Create an account</a>' +
+        '<a class="vb-free-gate-back" href="games.html">Back to the lobby</a>' +
+      "</div>";
+    document.body.appendChild(gate);
+    const first = gate.querySelector("a");
+    if (first) first.focus();
+  }
+
+  /* The big-wins strip: under the page header, the highest multipliers players really won on this game in the last
+     7 days (masked numbers), when the admin has switched the showcase on. Nothing is shown when there are none. */
+  const showcase = {
+    mount(lobbyId, opts) {
+      opts = opts || {};
+      catalogFresh().then((c) => {
+        if (!c.showcase.includes(lobbyId)) return;
+        return paymentApi("/api/games/big-wins/" + encodeURIComponent(lobbyId), { timeout: 15000 }).then((r) => {
+          const wins = r.ok && r.data && r.data.showcase ? r.data.wins || [] : [];
+          if (!wins.length || document.getElementById("vbBigWins")) return;
+          const num2 = (n) => Number(n || 0).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          const ago = (t) => {
+            const m = Math.max(1, Math.round((Date.now() - new Date(t).getTime()) / 60000));
+            return m < 60 ? m + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " d ago";
+          };
+          const strip = document.createElement("section");
+          strip.className = "vb-bigwins";
+          strip.id = "vbBigWins";
+          strip.setAttribute("aria-label", "Big wins this week");
+          strip.innerHTML =
+            '<span class="vb-bigwins-label">' + icon("trend") + "<b>Big wins</b><small>this week</small></span>" +
+            '<ul class="vb-bigwins-list">' + wins.map((w) =>
+              "<li><b>" + num2(w.x) + "x</b><span>GHS " + num2(w.payout) + "</span><small>" + esc(w.player) + " · " + ago(w.at) + "</small></li>"
+            ).join("") + "</ul>";
+          const anchor = opts.after || document.querySelector("body > header");
+          if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(strip, anchor.nextSibling);
+          else document.body.prepend(strip);
+        });
+      }).catch(() => { /* no strip, the game plays as usual */ });
+    }
+  };
+
   global.VBUtil = {
     contact: CONTACT, telHref, faq: FAQ,
     wallet, session, api, paymentApi, refreshBalance, favs, recent, streak, toast, icon, gameCard, miniCard, markActiveNav, countdown, nextSundayEnd,
     format, money: format, esc, normalizePhone, isGhanaMobile, categoryIcon: (c) => CATEGORY_ICONS[c] || "grid", thumbFace,
     testMode, openChat: (topic) => chat.open(topic), openConvert, switchCurrency, moneyInDollars, attributeRef,
-    referral: { get: storedRef, setPromo: setRefPromo },
+    referral: { get: storedRef, setPromo: setRefPromo }, freePlay, showcase,
     paymentBase: PAYMENT_API
   };
 
@@ -1252,10 +1364,7 @@
 
   /* games and studios an admin has switched off: data.js leaves them out using the last answer, and this keeps it
      fresh for the next page (the server refuses real-money bets on them either way) */
-  paymentApi("/api/games/visibility", { timeout: 15000 }).then((r) => {
-    if (!r.ok || !r.data || !Array.isArray(r.data.games)) return;
-    write("vb.catalog.hidden", { games: r.data.games, providers: r.data.providers || [] });
-  });
+  catalogFresh();
 
   /* ---------------- partner links ---------------- */
   /* ?ref=CODE (and &sub=campaign) on any page: remembered for 30 days on this device, the visit counted once, and

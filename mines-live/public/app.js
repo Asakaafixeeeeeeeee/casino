@@ -43,6 +43,24 @@
   const realMode = params.get("mode") === "real" && !!token;
   const socket = io({ auth: realMode ? { mode: "real", token } : { playerId } });
 
+  /* the admin can turn Live Mines' free play off (WIN B casino Admin -> Games). Real money needs the sign-in the lobby
+     hands over, so a fun-credits visitor is sent back to the lobby to open it with their wallet. */
+  if (!realMode) {
+    fetch((/^(localhost|127.0.0.1)$/.test(location.hostname) ? "http://localhost:8781" : "https://asakaa-balance.onrender.com") + "/api/games/visibility", { cache: "no-store" }).then((r) => r.json()).then((v) => {
+      const off = (v && v.free_play_off) || [];
+      if (!off.includes("mines-live") && !off.includes("volta-mines-live")) return;
+      const gate = document.createElement("div");
+      gate.className = "free-gate";
+      gate.setAttribute("role", "dialog");
+      gate.setAttribute("aria-modal", "true");
+      gate.innerHTML = '<div class="free-gate-card"><h2>Play with your wallet</h2>' +
+        "<p>Free play isn't available on Live Mines right now. Open it from the WIN B casino lobby to play with your wallet.</p>" +
+        '<a class="free-gate-btn" href="https://winbcasino.com/game.html?game=mines-live">Open from the lobby</a></div>';
+      document.body.appendChild(gate);
+      gate.querySelector("a").focus();
+    }).catch(() => { /* the switches couldn't be read: free play stays as it was */ });
+  }
+
   /* leaving to the lobby replaces this page in history, so the browser Back button doesn't bounce back into the
      game (a plain link would push a lobby entry on top, trapping the player between the game and the lobby) */
   const backLink = document.querySelector("header .back");

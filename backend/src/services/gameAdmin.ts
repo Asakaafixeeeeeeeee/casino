@@ -54,6 +54,9 @@ const KIND_NOTE: Record<Kind, string> = {
   demo: "Demo credits only, on its own server: no real-money bets to show.",
 };
 
+/** The big-wins strip lives on the site's own game pages; Jet, Live Mines and the demo game have pages of their own. */
+export const showcaseFits = (id: string, kind: string) => kind !== "demo" && kind !== "live" && id !== "volta-jet";
+
 function controlsView(c: GameControls) {
   return { ...c, paused_now: isPaused(c) };
 }
@@ -83,6 +86,7 @@ export async function gamesOverview(db: Pool, now = new Date()) {
       id: serverId, lobby_id: c.id, name: c.name, studio: PROVIDERS[c.provider] ?? c.provider, kind: e.kind,
       enabled: !hidden.games.includes(c.id), studio_enabled: !hidden.providers.includes(c.provider),
       paused: ctl ? isPaused(ctl) : false, paused_until: ctl?.paused_until ?? null,
+      free_play: ctl ? ctl.free_play : true, showcase: ctl ? ctl.showcase : false, showcase_fits: showcaseFits(serverId, e.kind),
       rtp: e.rtp === null ? null : round2(e.rtp * 100),
       today: { bets: num(s?.bets), players: num(s?.players), staked: round2(staked), paid: round2(paid), ggr: round2(staked - paid) },
       live: { in_play: num(lv?.in_play), players: num(lv?.players) },
@@ -271,13 +275,22 @@ export async function saveGameControls(db: Pool, admin: string, serverId: unknow
     }
   }
 
+  for (const k of ["free_play", "showcase"] as const) {
+    if (input[k] === undefined) continue;
+    if (typeof input[k] !== "boolean") throw new AdminError("invalid_" + k, "Say whether " + (k === "free_play" ? "free play" : "the big-wins showcase") + " is on");
+    if (k === "free_play" && e.kind === "demo") throw new AdminError("not_supported", "This game is free play only");
+    if (k === "showcase" && !showcaseFits(id, e.kind)) throw new AdminError("not_supported", "This game's page can't show the big-wins strip");
+    next[k] = input[k] as boolean;
+  }
+
   await db.query(
-    `INSERT INTO game_settings (game, paused, paused_until, pause_note, min_bet, max_bet, wait_ms, max_x, updated_by, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+    `INSERT INTO game_settings (game, paused, paused_until, pause_note, min_bet, max_bet, wait_ms, max_x, free_play, showcase, updated_by, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
      ON CONFLICT (game) DO UPDATE SET paused = EXCLUDED.paused, paused_until = EXCLUDED.paused_until, pause_note = EXCLUDED.pause_note,
        min_bet = EXCLUDED.min_bet, max_bet = EXCLUDED.max_bet, wait_ms = EXCLUDED.wait_ms, max_x = EXCLUDED.max_x,
+       free_play = EXCLUDED.free_play, showcase = EXCLUDED.showcase,
        updated_by = EXCLUDED.updated_by, updated_at = now()`,
-    [id, next.paused, next.paused_until, next.pause_note, next.min_bet, next.max_bet, next.wait_ms, next.max_x, admin]);
+    [id, next.paused, next.paused_until, next.pause_note, next.min_bet, next.max_bet, next.wait_ms, next.max_x, next.free_play, next.showcase, admin]);
   clearGameControlsCache();
   const changed = Object.fromEntries(Object.entries(next).filter(([k, v]) => k !== "updated_by" && k !== "updated_at" && (cur as unknown as Record<string, unknown>)[k] !== v));
   await logAction(db, admin, "game.controls", `game:${id}`, { before: Object.fromEntries(Object.keys(changed).map((k) => [k, (cur as unknown as Record<string, unknown>)[k]])), after: changed });

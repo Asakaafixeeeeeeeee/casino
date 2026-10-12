@@ -65,6 +65,9 @@
   /* ---------------- balance: free credits, or real money run by the server ---------------- */
   const signedIn = !!U.session.get();
   let mode = signedIn && params.get("mode") === "real" ? "real" : "fun";
+  /* the admin's per-game switches: free play can be off (Credits goes away), and real big wins can show */
+  U.freePlay.enforce("volta-knockout", { mode, canReal: signedIn });
+  U.showcase.mount("volta-knockout");
   const real = () => mode === "real";
   document.querySelectorAll('[data-mode="real"]').forEach((b) => (b.hidden = !signedIn));
   if (!signedIn) {

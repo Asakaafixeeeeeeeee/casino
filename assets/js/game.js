@@ -55,6 +55,9 @@
     ["Support", "Mobile, tablet, desktop"],
     ["Free play", "Available without deposit"]
   ];
+  /* the admin can turn a game's free play off (Admin -> Games): then there's no "Try free" here */
+  const freeRow = info[info.length - 1];
+  if (!U.freePlay.allowed(game.id)) freeRow[1] = "Not available on this game";
   document.getElementById("info").innerHTML = info
     .map((r) => "<div class='line'><span>" + r[0] + "</span><span>" + r[1] + "</span></div>")
     .join("");
@@ -211,6 +214,14 @@
   const playReal = document.getElementById("playReal");
   playDemo.addEventListener("click", () => openDemo(false));
   playReal.addEventListener("click", () => openDemo(true));
+  const paintFree = () => {
+    const on = U.freePlay.allowed(game.id);
+    playDemo.hidden = !on;
+    const line = [...document.querySelectorAll("#info .line")].find((l) => l.firstChild.textContent === "Free play");
+    if (line) line.lastChild.textContent = on ? "Available without deposit" : "Not available on this game";
+  };
+  paintFree();
+  U.freePlay.ready().then(paintFree); /* the server's fresh answer */
   modal.addEventListener("click", (e) => {
     if (e.target === modal || e.target.closest("[data-close]")) closeDemo();
   });

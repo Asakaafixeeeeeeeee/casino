@@ -543,6 +543,21 @@
   const xSecs = (x) => Math.log(Math.max(1, x)) / 0.12;
   const secs = (s) => (s >= 60 ? Math.floor(s / 60) + " min " + Math.round(s % 60) + " s" : Math.round(s) + " s");
 
+  /* a game's own extras, each saved the moment it's switched: free play (practice credits, the same odds as real
+     money) and the big-wins strip (real wins of the last 7 days on its page). Neither changes how results are drawn. */
+  function gameFlags(g) {
+    const row = (key, label, hint, on, fits) =>
+      '<div class="agm-flag' + (fits ? "" : " is-na") + '"><div><b>' + label + "</b><small>" + hint + "</small></div>" +
+      (fits
+        ? '<label class="adm-switch"><input type="checkbox" data-gflag="' + key + '" data-game="' + esc(g.id) + '" data-label="' + esc(g.name) + '"' +
+          (on ? " checked" : "") + ' aria-label="' + esc(label + " on " + g.name) + '"><span aria-hidden="true"></span></label>'
+        : '<span class="adm-pill">n/a</span>') + "</div>";
+    return '<div class="agm-flags">' +
+      row("free_play", "Free play", g.kind === "demo" ? "This game is free play only" : "Practice credits · same odds", g.free_play, g.kind !== "demo") +
+      row("showcase", "Big wins strip", g.showcase_fits ? "Real wins on its page" : "Its page runs on its own", g.showcase, g.showcase_fits) +
+      "</div>";
+  }
+
   function gameCard(g) {
     const [cls, txt] = gmState(g);
     return '<article class="agm-card' + (cls === "ok" ? "" : " is-" + cls) + '">' +
@@ -555,8 +570,26 @@
         '<div class="apt-stat"><span>GGR today</span><b class="' + tone(g.today.ggr) + '">' + money(g.today.ggr) + "</b></div>" +
         '<div class="apt-stat"><span>In play</span><b' + (g.live.in_play ? ' class="warn"' : "") + ">" + count(g.live.in_play) + "</b></div>" +
       "</div>" +
-      '<div class="agm-card-foot">' + toggle("game", g.lobby_id, g.enabled, g.name) +
+      gameFlags(g) +
+      '<div class="agm-card-foot"><span class="agm-onoff">' + toggle("game", g.lobby_id, g.enabled, g.name) + "<small>" + (g.enabled ? "In the lobby" : "Switched off") + "</small></span>" +
         '<button class="btn btn-primary btn-sm" type="button" data-game-open="' + esc(g.id) + '">' + U.icon("settings") + "Manage</button></div></article>";
+  }
+
+  /* saves a game's free play or big-wins switch at once (and puts it back if the server says no) */
+  async function gameFlag(input) {
+    const key = input.dataset.gflag;
+    const on = input.checked;
+    const name = input.dataset.label;
+    input.disabled = true;
+    const r = await api("/game-control/" + encodeURIComponent(input.dataset.game), { [key]: on });
+    input.disabled = false;
+    if (!r.ok) {
+      input.checked = !on;
+      return flash("error", errText(r, "Couldn't save it."));
+    }
+    const g = (gm.list || []).find((x) => x.id === input.dataset.game);
+    if (g) g[key] = on;
+    flash("ok", (key === "free_play" ? "Free play" : "The big-wins strip") + " is now " + (on ? "on" : "off") + " for " + esc(name) + ".");
   }
 
   async function loadGames() {
@@ -2673,7 +2706,7 @@
     players: { title: "Players", lead: "Find a player by name, number or id to see their money, bets and account.", actions: ADD_MONEY },
     money: { title: "Money", lead: "Every deposit, withdrawal, bet and adjustment as it happens." },
     withdrawals: { title: "Withdrawals", lead: "Players' requests to cash out. Send the money by hand, then Approve marks it paid; Reject returns it to the player's balance." },
-    games: { title: "Games", lead: "Manage every game: switch it on or off, pause and resume it, set bet limits and round timing, and watch live play, statistics and players' wins and losses. Results are drawn by the server and can't be seen or changed before a round ends." },
+    games: { title: "Games", lead: "Manage every game: switch it on or off, choose whether it offers free play (same odds as real money) and a strip of real big wins, pause and resume it, set bet limits and round timing, and watch live play, statistics and players' wins and losses. Results are drawn by the server and can't be seen or changed before a round ends." },
     mines: { title: "Mines Signal", lead: "Admin only: where the hidden mines are in the rounds being played." },
     aviator: { title: "Aviator", lead: "Watch rounds and bets live, pause the game, and set its published RTP and bet limits." },
     partners: { title: "Partners", lead: "Add partners with a secure setup link, approve applications, pay commission and choose what partners can use.", actions: '<button class="btn btn-primary btn-sm" type="button" data-add-partner>' + U.icon("plus") + "Add partner</button>" },
@@ -2821,6 +2854,8 @@
   document.querySelector(".adm-wrap").addEventListener("change", async (e) => {
     const flsw = e.target.closest("input[data-fltpl-on], input[data-flcamp-on]");
     if (flsw) return flyerToggle(flsw);
+    const gf = e.target.closest("input[data-gflag]");
+    if (gf) return gameFlag(gf);
     const sw = e.target.closest(".adm-switch input[data-kind]");
     if (!sw) return;
     const on = sw.checked;

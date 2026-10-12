@@ -1669,3 +1669,28 @@ a, button, [role="button"], [data-cta] {
 .care-q[open] summary::after { content: "–"; }
 .care-q div { padding: 0 0 14px; color: var(--muted); line-height: 1.6; }
 .care-q a { color: var(--yellow); }
+
+/* ================= per-game switches from Admin -> Games ================= */
+/* free play off: no Credits choice and no credits top-up on the game page */
+.vb-no-free-play [data-mode="fun"], .vb-no-free-play [id$="TopUp"] { display: none !important; }
+.vb-free-gate { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 16px; background: rgba(5, 6, 8, .84); backdrop-filter: blur(4px); }
+.vb-free-gate-card { display: grid; gap: 12px; justify-items: center; width: min(380px, 100%); padding: 26px 20px 20px; border-radius: var(--r-lg); text-align: center; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.vb-free-gate-card h2 { margin: 0; font-size: 1.3rem; }
+.vb-free-gate-card p { margin: 0 0 4px; font-size: .92rem; line-height: 1.5; color: var(--muted); }
+.vb-free-gate-card .btn { width: 100%; }
+.vb-free-gate-ico { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px; background: rgba(255, 200, 61, .12); color: var(--yellow); }
+.vb-free-gate-ico .ic { width: 26px; height: 26px; }
+.vb-free-gate-back { margin-top: 4px; font-size: .86rem; color: var(--dim); }
+
+/* the big-wins strip: real wins on this game in the last 7 days */
+.vb-bigwins { display: flex; align-items: center; gap: 10px; max-width: 1400px; margin: 0 auto; padding: 8px 10px; overflow: hidden; }
+.vb-bigwins-label { display: inline-flex; flex: none; align-items: center; gap: 6px; padding: 6px 10px; border-radius: var(--r-full); background: rgba(255, 200, 61, .14); color: var(--yellow); font-size: .78rem; }
+.vb-bigwins-label .ic { width: 15px; height: 15px; }
+.vb-bigwins-label small { color: var(--dim); font-weight: 600; }
+.vb-bigwins-list { display: flex; gap: 8px; margin: 0; padding: 0 0 2px; list-style: none; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+.vb-bigwins-list::-webkit-scrollbar { display: none; }
+.vb-bigwins-list li { display: grid; flex: none; gap: 1px; padding: 5px 12px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line-soft); line-height: 1.2; }
+.vb-bigwins-list b { font-size: .92rem; color: var(--green); }
+.vb-bigwins-list span { font-size: .78rem; font-weight: 700; }
+.vb-bigwins-list small { font-size: .68rem; color: var(--dim); }
+@media (max-width: 520px) { .vb-bigwins-label small { display: none; } }

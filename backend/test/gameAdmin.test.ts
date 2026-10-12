@@ -7,6 +7,7 @@ import { GameError } from "../src/games/catalog.js";
 import { cashOutFlightBet, FLIGHT_GAMES, flightMs, nextFlight, placeFlightBet } from "../src/games/flights.js";
 import { playRound } from "../src/games/rounds.js";
 import { gameDetail, gamesOverview, saveGameControls } from "../src/services/gameAdmin.js";
+import { bigWins, publicCatalog } from "../src/games/showcase.js";
 import { setupWalletDb } from "./helpers/walletDb.js";
 
 const ADMIN = "0209999001";
@@ -153,4 +154,41 @@ test("Rewards and bonuses: recorded with their kind, who gave them and why; only
   assert.equal(u.games[0]!.name, "Flip Da' Coin");
   const log = (await auditLog(env.db, { target: env.userId })).actions.find((a) => (a.details as { kind?: string }).kind === "PROMO");
   assert.ok(log, "the audit log records the kind");
+});
+
+test("Free play and big-wins switches: saved per game, public, and the showcase lists only real wins", async () => {
+  const env = await funded();
+  /* defaults: free play on everywhere, no showcase */
+  let pub = await publicCatalog(env.db);
+  assert.deepEqual([pub.free_play_off, pub.showcase], [[], []]);
+  assert.deepEqual(await bigWins(env.db, "knockout"), { game: "knockout", showcase: false, wins: [] });
+
+  /* a real 40x Knockout win and a lost coin flip */
+  const t0 = Date.now() - 60_000;
+  const r = await nextFlight(env.db, env.userId, KO, { now: t0, rng: drawing(knockout.rtp, 100) });
+  const bet = await placeFlightBet(env.db, env.userId, KO, { flight_id: r.flight_id, panel: 0, stake: 2, auto: 40, idempotency_key: key() }, { now: t0 + 500 });
+  await cashOutFlightBet(env.db, env.userId, KO, { bet_id: bet.bet.bet_id, auto: true }, { now: t0 + knockout.waitMs + flightMs(40) + 5 });
+
+  await env.db.query("UPDATE users SET phone = '0244123456' WHERE id = $1", [env.userId]);
+  await saveGameControls(env.db, ADMIN, KO, { showcase: true });
+  await saveGameControls(env.db, ADMIN, "volta-coin", { free_play: false });
+  pub = await publicCatalog(env.db);
+  assert.deepEqual([pub.free_play_off, pub.showcase], [["coin", "volta-coin"], ["knockout", "volta-knockout"]], "lobby and server ids, so the pages can read them");
+  const shown = await bigWins(env.db, "knockout") as { showcase: boolean; wins: { player: string; x: number; payout: number }[] };
+  assert.equal(shown.showcase, true);
+  assert.equal(shown.wins.length, 1);
+  assert.deepEqual([shown.wins[0]!.x, shown.wins[0]!.payout], [40, 80], "exactly what the player won");
+  assert.equal(shown.wins[0]!.player, "024•••••56", "the number is masked");
+  assert.equal((await bigWins(env.db, "coin") as { showcase: boolean }).showcase, false, "the coin's showcase is off");
+
+  /* the overview carries both switches; turning them back is logged */
+  const o = await gamesOverview(env.db);
+  const ko = o.games.find((g) => g.id === KO)!;
+  const coin = o.games.find((g) => g.id === "volta-coin")!;
+  assert.deepEqual([ko.showcase, ko.free_play, coin.free_play], [true, true, false]);
+  await saveGameControls(env.db, ADMIN, "volta-coin", { free_play: true });
+  await assert.rejects(() => saveGameControls(env.db, ADMIN, KO, { showcase: "yes" }), isAdmin("invalid_showcase"));
+  const log = await auditLog(env.db, { target: "game:volta-coin" });
+  assert.deepEqual(log.actions.map((a) => [a.action, a.details?.after?.free_play]), [["game.controls", true], ["game.controls", false]]);
+  assert.deepEqual((await publicCatalog(env.db)).free_play_off, []);
 });

@@ -3,7 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import type { Pool } from "pg";
 import { authenticate, requireUser } from "../middleware/authenticate.js";
 import { GAMES, GameError } from "../games/catalog.js";
-import { hiddenCatalog } from "../games/availability.js";
+import { bigWins, publicCatalog } from "../games/showcase.js";
 import { playRound } from "../games/rounds.js";
 import { SESSION_GAMES } from "../games/sessionCatalog.js";
 import { cashOutSession, openSession, startSession, stepSession } from "../games/sessions.js";
@@ -31,11 +31,22 @@ export function gamesRouter(db: Pool): Router {
     });
   });
 
-  /* games and studios an admin has switched off, so the lobby can leave them out (public) */
+  /* games and studios an admin has switched off, so the lobby can leave them out, and each game's free play and
+     big-wins switches (public) */
   r.get("/visibility", async (_req: Request, res: Response, next: NextFunction) => {
     try {
       res.setHeader("Cache-Control", "no-store");
-      res.json(await hiddenCatalog(db));
+      res.json(await publicCatalog(db));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  /* a game's real big wins of the last 7 days, when its showcase is on (public; players' numbers are masked) */
+  r.get("/big-wins/:game", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await bigWins(db, req.params.game));
     } catch (e) {
       next(e);
     }

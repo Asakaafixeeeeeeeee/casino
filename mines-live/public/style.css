@@ -894,3 +894,10 @@ body::before {
 #soundBtn .cross { display: none; }
 #soundBtn[aria-pressed="false"] .wave { display: none; }
 #soundBtn[aria-pressed="false"] .cross { display: inline; stroke: #f87171; }
+
+/* free play switched off by an admin: back to the lobby to play with the wallet */
+.free-gate { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px; background: rgba(2, 6, 18, .84); backdrop-filter: blur(4px); }
+.free-gate-card { display: grid; gap: 12px; width: min(360px, 100%); padding: 24px 20px; border-radius: 18px; text-align: center; background: #0a1838; border: 1px solid var(--line); color: var(--ink); font-family: var(--ff); }
+.free-gate-card h2 { margin: 0; font-size: 1.25rem; }
+.free-gate-card p { margin: 0; font-size: .92rem; line-height: 1.5; color: var(--dim); }
+.free-gate-btn { display: block; padding: 12px; border-radius: 12px; background: var(--orange); color: #1a1204; font-weight: 800; text-decoration: none; }
