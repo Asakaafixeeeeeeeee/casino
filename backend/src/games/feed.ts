@@ -78,20 +78,32 @@ export async function gameFeed(db: Pool, rawId: unknown, now = new Date()) {
 }
 
 /**
- * The whole site: real players per game in the last 15 minutes (lobby ids), and the latest real wins on any game
- * (last 7 days), for the lobby's cards and the home page's winners banner.
+ * The whole site: real players per game in the last 15 minutes (lobby ids), and real wins for the home page's
+ * winners banner: the biggest of the last 30 days and the latest of the last 7 (each win once; the page shows them in
+ * a random order). `big` marks the biggest ones.
  */
 export async function siteActivity(db: Pool, now = new Date()) {
   return cached("site", async () => {
-    const [playing, wins] = await Promise.all([
+    const win = `SELECT b.source, b.bet_id, b.game, u.phone, b.stake, b.payout, b.settled_at AS at
+                   FROM settled_bets b JOIN users u ON u.id = b.user_id WHERE b.settled_at >= $1 AND b.payout > b.stake`;
+    const [playing, latest, biggest] = await Promise.all([
       db.query(`SELECT game, count(DISTINCT user_id) AS n FROM all_bets WHERE created_at >= $1 GROUP BY game`, [new Date(now.getTime() - 15 * 60e3)]),
-      db.query(`SELECT b.game, u.phone, b.stake, b.payout, b.settled_at AS at FROM settled_bets b JOIN users u ON u.id = b.user_id
-                 WHERE b.settled_at >= $1 AND b.payout > b.stake ORDER BY b.settled_at DESC LIMIT 20`, [new Date(now.getTime() - 7 * 864e5)]),
+      db.query(`${win} ORDER BY b.settled_at DESC LIMIT 12`, [new Date(now.getTime() - 7 * 864e5)]),
+      db.query(`${win} ORDER BY b.payout DESC, b.settled_at DESC LIMIT 12`, [new Date(now.getTime() - 30 * 864e5)]),
     ]);
+    const bigIds = new Set(biggest.rows.map((r) => r.source + ":" + r.bet_id));
+    const seen = new Set<string>();
+    const wins = [...biggest.rows, ...latest.rows].filter((r) => {
+      const k = r.source + ":" + r.bet_id;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
     return {
       playing: Object.fromEntries(playing.rows.filter((r) => CATALOG[r.game]).map((r) => [CATALOG[r.game]!.id, Number(r.n)])),
-      wins: wins.rows.filter((r) => CATALOG[r.game]).map((r) => ({
+      wins: wins.filter((r) => CATALOG[r.game]).map((r) => ({
         game: CATALOG[r.game]!.id, player: maskPhone(r.phone), stake: r2(r.stake), payout: r2(r.payout), at: new Date(r.at).toISOString(),
+        big: bigIds.has(r.source + ":" + r.bet_id),
       })),
     };
   });

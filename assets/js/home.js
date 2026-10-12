@@ -105,13 +105,25 @@
   forYou.forEach((g) => forYouRow.appendChild(U.miniCard(g)));
 
   /* ---------------- live winner banner ---------------- */
-  /* real wins only (the server's latest settled wins, masked numbers); with none yet, the banner stays hidden */
+  /* real wins only (masked numbers): the biggest of the month and the latest of the week, in a random order with a
+     big win first; with none yet, the banner stays hidden */
   const winnerHost = document.getElementById("winner");
   winnerHost.hidden = true;
-  U.activity.site().then((d) => winnerBanner(winnerHost, ((d && d.wins) || [])
-    .map((w) => ({ gameId: w.game, masked: w.player, amount: w.payout }))
-    /* only wins whose game is in the lobby: a game an admin switched off must never take the whole page down */
-    .filter((w) => byId(w.gameId))));
+  const shuffle = (list) => {
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    return list;
+  };
+  U.activity.site().then((d) => {
+    const all = ((d && d.wins) || [])
+      .map((w) => ({ gameId: w.game, masked: w.player, amount: w.payout, big: !!w.big }))
+      /* only wins whose game is in the lobby: a game an admin switched off must never take the whole page down */
+      .filter((w) => byId(w.gameId));
+    const big = shuffle(all.filter((w) => w.big));
+    winnerBanner(winnerHost, big.slice(0, 1).concat(shuffle(big.slice(1).concat(all.filter((w) => !w.big)))));
+  });
   function winnerBanner(host, wins) {
     if (!wins.length) return;
     host.hidden = false;
