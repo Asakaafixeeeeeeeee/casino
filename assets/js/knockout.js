@@ -7,8 +7,9 @@
        RTP ÷ its chance, rounded down, so it returns at most the RTP too.
    With free credits the rounds run in the browser. With real money the server runs the player's rounds (backend
    games/flights.ts): it draws the knockout point, takes the bets, judges every cash-out on its own clock and pays it,
-   and the page learns where a round ended only once it's over. The other players in the list are simulated. The
-   fight is drawn by knockout-art.js. */
+   and the page learns where a round ended only once it's over. Every player's rounds are their own, so there's no
+   crowd in a round: the lists show real players' settled bets and real wins on Knockout (masked numbers), and the
+   player count is the real number who bet in the last 5 minutes. The fight is drawn by knockout-art.js. */
 (function () {
   "use strict";
   const games = window.VB.allGames || window.VB.games;
@@ -97,64 +98,30 @@
     document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
   }
 
-  /* ---------------- simulated players ---------------- */
-  const LETTERS = "abcdefghijklmnoprstuvwyz";
-  const fakeName = () => LETTERS[Math.floor(Math.random() * LETTERS.length)] + "***" + Math.floor(Math.random() * 10);
-  const randomHue = () => Math.floor(Math.random() * 360);
-  const STAKES = [1, 1, 2, 2, 3, 5, 5, 5, 10, 10, 10, 15, 20, 20, 25, 50, 50, 100, 100, 200, 500];
-
-  function botStake() {
-    const s = STAKES[Math.floor(Math.random() * STAKES.length)];
-    /* a quarter of players type an amount instead of tapping a preset */
-    return Math.random() < 0.25 ? Math.max(1, round2(s * (0.5 + Math.random()))) : s;
+  /* ---------------- real players: the server's latest settled bets and biggest wins on Knockout ---------------- */
+  /* a steady colour per masked number, so the same player keeps the same avatar */
+  const hueOf = (name) => [...String(name)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+  const COLOR_KINDS = ["blue", "purple", "red"];
+  const asRow = (b) => ({ name: b.player, hue: hueOf(b.player), stake: b.stake, x: b.x, win: b.payout,
+    color: COLOR_KINDS.includes(b.pick) ? b.pick : null });
+  let feed = { recent: [], top: [], playing: 0 };
+  function loadFeed() {
+    U.activity.game("volta-knockout").then((d) => {
+      if (!d) return;
+      feed = { recent: d.recent.map(asRow), top: d.top.map(asRow), playing: d.playing };
+      paintOnline();
+      listDirty = true;
+    });
   }
-  /* cash-out targets: ~30% leave by 1.3x, ~60% by 2x, ~90% by 6x, and a few ride it far */
-  const botTarget = () => Math.min(1000, Math.max(1.01, round2(Math.pow(1 - Math.random(), -0.75))));
 
   let roundNo = 0;
   function newRound() {
-    const total = 2500 + Math.floor(Math.random() * 5500);
-    const bots = [];
-    for (let i = 0; i < total; i++) bots.push({ stake: botStake(), target: botTarget(), x: 0, win: 0 });
-    /* 30 random players get a name and a row in the list (biggest stakes first) — a sample looks like a
-       real crowd, where the top 30 stakes of thousands would all be near-identical big bets */
-    const picked = new Set();
-    while (picked.size < 30) picked.add(Math.floor(Math.random() * total));
-    const shown = Array.from(picked, (i) => bots[i]).sort((a, b) => b.stake - a.stake);
-    shown.forEach((b) => {
-      b.name = fakeName();
-      b.hue = randomHue();
-      if (Math.random() < 0.2) {
-        b.color = ["blue", "blue", "purple", "purple", "red"][Math.floor(Math.random() * 5)];
-        b.target = Infinity;   /* a colour bet doesn't cash out; it's settled at the knockout */
-      }
-    });
     return {
       no: ++roundNo,
       crash: real() ? Infinity : crashPoint(),   /* real money: unknown until the server says the round is over */
       flightId: null,
-      total,
-      shown,
-      queue: bots.sort((a, b) => a.target - b.target), /* cash-out order */
-      next: 0,
-      cashed: 0,
-      win: 0,
       mine: [] /* this player's bets */
     };
-  }
-
-  /* biggest wins of the session, for the Top tab */
-  const top = [];
-  function recordTop(b) {
-    if (top.length >= 20 && b.win <= top[top.length - 1].win) return;
-    if (!b.name) {
-      b.name = fakeName();
-      b.hue = randomHue();
-    }
-    top.push(b);
-    top.sort((a, c) => c.win - a.win);
-    top.length = Math.min(top.length, 20);
-    if (listTab === "stats") listDirty = true;
   }
 
   /* ---------------- round state machine ---------------- */
@@ -169,7 +136,8 @@
   let round = newRound();
   let previous = null;
   let shownX = 1;
-  const results = real() ? [] : Array.from({ length: 24 }, crashPoint);
+  /* rounds that really happened: the server's (real money) or this session's own (free play) */
+  const results = [];
   let listTab = "all";
   const myBets = [];   /* this session's own bets, newest first, for My Bets */
   let listDirty = true;
@@ -208,18 +176,8 @@
     sound.bell(1);
   }
 
-  /* pays every simulated player, and every auto cash-out, whose target has been reached */
+  /* pays every auto cash-out whose target has been reached */
   function settleUpTo(x) {
-    const q = round.queue;
-    while (round.next < q.length && q[round.next].target <= x) {
-      const b = q[round.next++];
-      b.x = b.target;
-      b.win = round2(b.stake * b.target);
-      round.cashed++;
-      round.win += b.win;
-      if (b.name) listDirty = true;
-      recordTop(b);
-    }
     panels.forEach((p) => {
       if (p.status !== "active") return;
       /* real money: the server confirms an auto cash-out or an early Red (only it knows whether the round got there) */
@@ -239,12 +197,6 @@
     /* colour bets settle on the knockout's colour */
     panels.forEach((p) => {
       if (!real() && p.status === "active" && p.bet.color) settleColor(p, COLORS[p.bet.color].test(round.crash));
-    });
-    round.shown.forEach((b) => {
-      if (b.color && COLORS[b.color].test(round.crash)) {
-        b.x = COLORS[b.color].pay;
-        b.win = round2(b.stake * b.x);
-      }
     });
     const lost = panels.filter((p) => p.status === "active");
     lost.forEach((p) => {
@@ -333,14 +285,13 @@
     showWin(p, x, win);
   }
 
-  /* a win: the bet's row, the session's top list and the celebration */
+  /* a win: the bet's row and the celebration */
   function showWin(p, x, win) {
     const b = p.bet;
     b.x = x;
     b.win = win;
     p.status = "idle";
     p.bet = null;
-    recordTop(b);
     listDirty = panelsDirty = true;
     celebrate(p, b);
   }
@@ -358,7 +309,6 @@
     b.x = COLORS[b.color].pay;
     b.win = round2(b.stake * b.x);
     move(b.win);
-    recordTop(b);
     celebrate(p, b);
   }
 
@@ -699,8 +649,8 @@
   /* ---------------- live bets list ---------------- */
   function rowHtml(b) {
     return '<div class="cg-row' + (b.win ? " won" : "") + (b.mine ? " mine" : "") + '">' +
-      '<span class="cg-user"><span class="cg-ava" style="--h:' + b.hue + '" aria-hidden="true">' + b.name.charAt(0) + "</span>" +
-      '<span class="cg-name">' + b.name + "</span>" +
+      '<span class="cg-user"><span class="cg-ava" style="--h:' + b.hue + '" aria-hidden="true">' + U.esc(String(b.name).charAt(0)) + "</span>" +
+      '<span class="cg-name">' + U.esc(b.name) + "</span>" +
       (b.color ? '<span class="ko-tag ko-' + b.color + '">ColorGo ' + COLORS[b.color].pay.toFixed(2) + "x</span>" : "") + "</span>" +
       '<span class="cg-num">' + money(b.stake) + "</span>" +
       '<span class="cg-xcell">' + (b.x ? pill(b.x) : "") + "</span>" +
@@ -710,15 +660,15 @@
   function renderList() {
     $("cgPrev").hidden = true;
     if (listTab === "stats") return renderStats();
-    const rows = listTab === "all" ? round.mine.concat(round.shown) : myBets;
+    const rows = listTab === "all" ? round.mine.concat(feed.recent) : myBets;
     $("cgList").innerHTML = rows.length
       ? rows.map(rowHtml).join("")
-      : '<p class="cg-empty">' + (listTab === "my" ? "Your bets this session will appear here." : "No bets yet.") + "</p>";
+      : '<p class="cg-empty">' + (listTab === "my" ? "Your bets this session will appear here." : "No real-money bets on Knockout today yet.") + "</p>";
   }
 
-  /* Stats: how the recent rounds ended, by colour, and the biggest wins of the session */
+  /* Stats: how the recent rounds ended, by colour, and the biggest real wins of the week */
   function renderStats() {
-    const n = results.length;
+    const n = Math.max(1, results.length);
     const c = { blue: 0, purple: 0, red: 0 };
     results.forEach((x) => c[colorOf(x)]++);
     const best = results.reduce((a, b) => Math.max(a, b), 0);
@@ -726,21 +676,22 @@
       '<div class="ko-stats">' +
       Object.keys(COLORS).map((k) => '<div class="ko-stat ko-' + k + '"><b>' + Math.round((c[k] / n) * 100) + "%</b><span>" + COLORS[k].name + " · " +
         COLORS[k].range + "</span><em>expected " + Math.round(COLORS[k].p * 100) + "%</em></div>").join("") +
-      '<p class="ko-stat-note">Last ' + n + " rounds · highest " + xText(best) + ". Each round is independent — past results don't change the next one.</p></div>" +
-      '<h3 class="ko-sub">Biggest wins this session</h3>' +
-      (top.length ? top.map(rowHtml).join("") : '<p class="cg-empty">The biggest wins of this session will appear here.</p>');
+      '<p class="ko-stat-note">' + (results.length ? "Last " + results.length + " rounds · highest " + xText(best) + "." : "No rounds yet.") +
+        " Each round is independent — past results don't change the next one.</p></div>" +
+      '<h3 class="ko-sub">Biggest real wins this week</h3>' +
+      (feed.top.length ? feed.top.map(rowHtml).join("") : '<p class="cg-empty">No real-money wins on Knockout this week yet.</p>');
   }
 
-  /* footer: bets cashed out / bets placed this round, and the total paid out so far */
+  /* footer and ring: this player's own bets in the round (every player's rounds are their own) — how many, how many
+     are still riding, how many won, and what they won */
   function paintSummary() {
-    const total = round.total + round.mine.length;
-    const left = state !== "WAITING" ? total - round.cashed - round.mine.filter((b) => b.win).length : total;
+    const total = round.mine.length;
+    const won = round.mine.filter((b) => b.win).length;
+    const left = state === "WAITING" ? total : panels.filter((p) => p.status === "active").length;
     $("koTotal").textContent = count(total);
     $("koLeft").textContent = count(left);
-    const won = round.mine.filter((b) => b.win).length;
-    const myWin = round.mine.reduce((s, b) => s + b.win, 0);
-    $("cgCount").textContent = count(round.cashed + won) + "/" + count(round.total + round.mine.length) + " Bets";
-    $("cgTotal").textContent = money(round.win + myWin);
+    $("cgCount").textContent = count(won) + "/" + count(total) + " Bets";
+    $("cgTotal").textContent = money(round.mine.reduce((s, b) => s + b.win, 0));
   }
 
   document.querySelector(".cg-tabs").addEventListener("click", (e) => {
@@ -900,16 +851,14 @@
   window.addEventListener("storage", paintBalance); /* the wallet may change in another tab */
   document.addEventListener("vb:balance", paintBalance);
 
-  /* simulated "players online" count that drifts every couple of seconds */
-  let online = 3200 + Math.floor(Math.random() * 600);
-  const paintOnline = () => ($("cgOnline").textContent = count(online));
-  setInterval(() => {
-    online = Math.min(4200, Math.max(2800, online + Math.round((Math.random() - 0.5) * 120)));
-    paintOnline();
-  }, 2000);
+  /* the real number of players who bet on Knockout in the last 5 minutes, and the real bets lists */
+  function paintOnline() {
+    $("cgOnline").textContent = count(feed.playing);
+  }
+  loadFeed();
+  setInterval(() => { if (!document.hidden) loadFeed(); }, 15000);
 
   /* ---------------- frame loop ---------------- */
-  let paintedCashed = -1;
   let artState = "WAITING"; /* while the next real round is being fetched, the ring stays as it was */
   function frame(now) {
     advance(now);
@@ -920,15 +869,12 @@
       renderResults();
       resultsDirty = false;
     }
+    const summaryDue = listDirty || panelsDirty;
     if (listDirty) {
       renderList();
       listDirty = false;
-      paintedCashed = -1;
     }
-    if (round.cashed !== paintedCashed) {
-      paintSummary();
-      paintedCashed = round.cashed;
-    }
+    if (summaryDue) paintSummary();
     if (panelsDirty) {
       panels.forEach(paintPanel);
       panelsDirty = false;

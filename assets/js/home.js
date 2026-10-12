@@ -1,7 +1,7 @@
 /* Home page: promo carousel, For You row, live winner banner, game sections and payments */
 (function () {
   "use strict";
-  const { games, payments, recentWins, promos, categories } = window.VB;
+  const { games, payments, promos, categories } = window.VB;
   const U = window.VBUtil;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const byId = (id) => games.find((g) => g.id === id);
@@ -105,13 +105,16 @@
   forYou.forEach((g) => forYouRow.appendChild(U.miniCard(g)));
 
   /* ---------------- live winner banner ---------------- */
-  (function winnerBanner(host) {
+  /* real wins only (the server's latest settled wins, masked numbers); with none yet, the banner stays hidden */
+  const winnerHost = document.getElementById("winner");
+  winnerHost.hidden = true;
+  U.activity.site().then((d) => winnerBanner(winnerHost, ((d && d.wins) || [])
+    .map((w) => ({ gameId: w.game, masked: w.player, amount: w.payout }))
     /* only wins whose game is in the lobby: a game an admin switched off must never take the whole page down */
-    const wins = recentWins.filter((w) => byId(w.gameId));
-    if (!wins.length) {
-      host.hidden = true;
-      return;
-    }
+    .filter((w) => byId(w.gameId))));
+  function winnerBanner(host, wins) {
+    if (!wins.length) return;
+    host.hidden = false;
     const thumb = host.querySelector(".winner-thumb");
     const body = host.querySelector(".winner-body");
     const play = host.querySelector(".winner-play");
@@ -126,7 +129,7 @@
       thumb.innerHTML = U.thumbFace(g);
       body.innerHTML =
         '<strong class="winner-game">' + g.name + "</strong>" +
-        '<span class="winner-line">Congrats <b>' + w.masked + "</b> won <em>" +
+        '<span class="winner-line">Congrats <b>' + U.esc(w.masked) + "</b> won <em>" +
         w.amount.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " GHS</em></span>";
       play.href = "game.html?game=" + encodeURIComponent(g.id);
       play.setAttribute("aria-label", "Play " + g.name);
@@ -148,7 +151,7 @@
         paint();
       }, 3500);
     }
-  })(document.getElementById("winner"));
+  }
 
   /* ---------------- game sections ---------------- */
   const byCategory = (c) => games.filter((g) => g.category === c);

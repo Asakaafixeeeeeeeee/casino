@@ -4,6 +4,7 @@ import type { Pool } from "pg";
 import { authenticate, requireUser } from "../middleware/authenticate.js";
 import { GAMES, GameError } from "../games/catalog.js";
 import { bigWins, publicCatalog } from "../games/showcase.js";
+import { gameFeed, siteActivity } from "../games/feed.js";
 import { playRound } from "../games/rounds.js";
 import { SESSION_GAMES } from "../games/sessionCatalog.js";
 import { cashOutSession, openSession, startSession, stepSession } from "../games/sessions.js";
@@ -37,6 +38,25 @@ export function gamesRouter(db: Pool): Router {
     try {
       res.setHeader("Cache-Control", "no-store");
       res.json(await publicCatalog(db));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  /* real activity: a game's latest settled bets, biggest wins and players now; and the whole site's (public; players'
+     numbers are masked) */
+  r.get("/feed/:game", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await gameFeed(db, req.params.game));
+    } catch (e) {
+      next(e);
+    }
+  });
+  r.get("/activity", async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await siteActivity(db));
     } catch (e) {
       next(e);
     }

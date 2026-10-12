@@ -1,12 +1,22 @@
 /* An admin switching a game off: only that game leaves the home page; every other game, the sections and the winner
-   banner stay, with no errors. (The banner used to name switched-off games and crash the page, emptying it.) */
+   banner stay, with no errors. (The banner used to name switched-off games and crash the page, emptying it.) The
+   banner shows real wins only, so a player wins a real coin flip first. */
 import { expect, test } from "@playwright/test";
-import { adminSession, API, settle, trackErrors } from "./helpers";
+import { adminSession, API, fundedPlayer, play, settle, trackErrors } from "./helpers";
 
 const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 
 test("switching one game off leaves every other game on the home page", async ({ page, request }) => {
   const token = await adminSession(request);
+  /* a real win for the banner */
+  const player = await fundedPlayer(page, 50);
+  let won = false;
+  for (let i = 0; i < 30 && !won; i++) {
+    won = (await play(request, player.token, "volta-coin", { stake: 1, choice: { pick: "HEADS" }, idempotency_key: `round:cat-${Date.now()}-${i}` })).body.payout > 0;
+  }
+  expect(won).toBe(true);
+  /* the site's activity is kept 5 seconds */
+  await expect.poll(async () => (await (await request.get(`${API}/api/games/activity`)).json()).wins.length, { timeout: 15_000 }).toBeGreaterThan(0);
   const errors = trackErrors(page);
   await page.goto("/index.html");
   await settle(page);

@@ -513,7 +513,7 @@
     card.innerHTML =
       '<a class="game-link" href="game.html?game=' + encodeURIComponent(game.id) + '" aria-label="' +
       game.name + " — " + game.category + '">' +
-      art(game, cardTag(game) + '<span class="players">' + icon("flame") + game.players + "</span>") +
+      art(game, cardTag(game) + (game.players > 0 ? '<span class="players" title="Players in the last 15 minutes">' + icon("flame") + game.players + "</span>" : "")) +
       '<span class="game-title">' + game.name + "</span>" +
       "</a>" +
       '<button class="fav-btn' + (on ? " on" : "") + '" type="button" data-fav="' + game.id +
@@ -1232,6 +1232,23 @@
     return catalogFetch;
   }
 
+  /* Real activity, in place of made-up players: per game, the latest settled bets, biggest wins and players now
+     (GET /api/games/feed/:id); for the site, players per game and the latest wins (GET /api/games/activity, kept for
+     the lobby cards' next draw). Players are shown by a masked number only. */
+  const activity = {
+    site() {
+      return paymentApi("/api/games/activity", { timeout: 15000 }).then((r) => {
+        if (!r.ok || !r.data || !r.data.playing) return null;
+        write("vb.live.activity", { playing: r.data.playing, at: Date.now() });
+        return r.data;
+      }).catch(() => null);
+    },
+    game(id) {
+      return paymentApi("/api/games/feed/" + encodeURIComponent(id), { timeout: 15000 })
+        .then((r) => (r.ok && r.data && Array.isArray(r.data.recent) ? r.data : null)).catch(() => null);
+    }
+  };
+
   /* Free play off for this game: the Credits choice goes away. A signed-in player moves to their wallet (the page
      reloads with ?mode=real); someone signed out is asked to sign in. ids: the page's lobby and/or server id. */
   const freePlay = {
@@ -1323,7 +1340,7 @@
     wallet, session, api, paymentApi, refreshBalance, favs, recent, streak, toast, icon, gameCard, miniCard, markActiveNav, countdown, nextSundayEnd,
     format, money: format, esc, normalizePhone, isGhanaMobile, categoryIcon: (c) => CATEGORY_ICONS[c] || "grid", thumbFace,
     testMode, openChat: (topic) => chat.open(topic), openConvert, switchCurrency, moneyInDollars, attributeRef,
-    referral: { get: storedRef, setPromo: setRefPromo }, freePlay, showcase,
+    referral: { get: storedRef, setPromo: setRefPromo }, freePlay, showcase, activity,
     paymentBase: PAYMENT_API
   };
 
@@ -1365,6 +1382,8 @@
   /* games and studios an admin has switched off: data.js leaves them out using the last answer, and this keeps it
      fresh for the next page (the server refuses real-money bets on them either way) */
   catalogFresh();
+  /* real players per game, for the lobby cards on the next page */
+  if (!document.getElementById("winner")) activity.site();
 
   /* ---------------- partner links ---------------- */
   /* ?ref=CODE (and &sub=campaign) on any page: remembered for 30 days on this device, the visit counted once, and

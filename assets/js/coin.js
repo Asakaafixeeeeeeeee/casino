@@ -4,7 +4,8 @@
    payouts) → WAITING …
    Fairness: the outcome is drawn when the bets lock — heads 48.5%, tails 48.5%, edge 3% — so a call returns
    2 × 48.5% = 97%. The coin is a 3D stack (two faces painted on canvases, a reeded edge of thin layers) and the
-   toss only plays out the result already drawn. Other players are simulated.
+   toss only plays out the result already drawn. The bets lists show real players' settled bets (masked numbers), never
+   made-up players; for real money the results ribbon shows the server's real flips.
    The balance, menu, sounds and confetti come from the shared mini-game kit (minigame.js). */
 (function () {
   "use strict";
@@ -238,26 +239,29 @@
   /* ---------------- sounds (themed, from the kit) ---------------- */
   const sfx = (n, a) => kit.play(n, a);
 
-  /* ---------------- simulated players ---------------- */
-  const DIGITS = "0123456789";
-  const mask = () => DIGITS[Math.floor(Math.random() * 10)] + "***" + DIGITS[Math.floor(Math.random() * 10)];
-  const STAKES = [0.2, 0.2, 0.5, 1, 1, 2, 2, 5, 5, 10, 10, 20, 50, 100, 200];
-  function bots() {
-    const n = 14 + Math.floor(Math.random() * 18);
-    return Array.from({ length: n }, () => ({
-      name: mask(), stake: STAKES[Math.floor(Math.random() * STAKES.length)], pick: Math.random() < 0.5 ? "HEADS" : "TAILS",
-      at: Math.random() * WAIT_MS * 0.9, win: null
-    })).sort((a, b) => a.at - b.at);
+  /* ---------------- real players: the server's latest settled bets and biggest wins on this game ---------------- */
+  let feed = { recent: [], top: [] };
+  const asRow = (b) => ({ name: b.player, stake: b.stake, pick: b.pick || "", win: b.payout });
+  function loadFeed() {
+    U.activity.game("volta-coin").then((d) => {
+      if (!d) return;
+      feed = { recent: d.recent.map(asRow), top: d.top.map(asRow) };
+      /* real money: the ribbon is the server's real flips (everyone's, newest first) */
+      if (kit.isReal() && Array.isArray(d.results) && d.results.length) {
+        history.splice(0, history.length, ...d.results.map((o) => String((o && o.result) || "")[0]).filter(Boolean));
+        paintHistory();
+      }
+      rowsDirty = true;
+    });
   }
 
   /* ---------------- the round ---------------- */
   let phase = "WAITING";
   let phaseStart = performance.now();
-  let crowd = bots();
   let mine = null;               /* { name: "You", stake, pick, win } */
   const myBets = [];
-  const topWins = [];
-  const history = Array.from({ length: 12 }, () => (Math.random() < P_EDGE ? "E" : Math.random() < 0.5 ? "H" : "T"));
+  /* the flips that really happened: the server's, or (free play) this session's own */
+  const history = [];
   let outcome = null;            /* "HEADS" | "TAILS" | "EDGE" */
   let tab = "all";
   let rowsDirty = true;
@@ -339,10 +343,11 @@
 
   function settle() {
     outcome = outcomeNext;
-    history.unshift(outcome[0]);
-    history.length = Math.min(history.length, 30);
-    crowd.forEach((b) => (b.win = b.pick === outcome ? round2(b.stake * 2) : 0));
-    crowd.filter((b) => b.win).forEach(recordTop);
+    /* a toss with no real bet behind it isn't a real flip: real money records only the player's own */
+    if (!kit.isReal() || mine) {
+      history.unshift(outcome[0]);
+      history.length = Math.min(history.length, 30);
+    }
     const side = $("fcResultSide"), msg = $("fcResultMsg"), box = $("fcResult");
     side.textContent = outcome === "EDGE" ? "EDGE!" : outcome;
     box.className = "fc-result";
@@ -350,7 +355,6 @@
       if (mine.pick === outcome) {
         mine.win = mine.round ? mine.round.payout : round2(mine.stake * 2);
         kit.collect(mine.win);
-        recordTop(mine);
         box.classList.add("is-win");
         msg.innerHTML = "You Won 🏆 " + ghs(mine.win);
         kit.celebrate();
@@ -369,11 +373,6 @@
     rowsDirty = true;
   }
 
-  function recordTop(b) {
-    topWins.push({ ...b });
-    topWins.sort((a, c) => c.win - a.win);
-    topWins.length = Math.min(topWins.length, 20);
-  }
 
   let outcomeNext = null;
   let awaitingServer = false;
@@ -381,15 +380,9 @@
     const t = now - phaseStart;
     if (phase === "WAITING") {
       $("fcTimer").style.transform = "scaleX(" + Math.max(0, 1 - t / WAIT_MS).toFixed(3) + ")";
-      /* the other players' bets come in through the countdown */
-      if (crowd.some((b) => !b.shown && b.at <= t)) {
-        crowd.forEach((b) => { if (b.at <= t) b.shown = true; });
-        rowsDirty = true;
-      }
       if (t >= WAIT_MS) {
         phase = "FLIPPING";
         phaseStart = now;
-        crowd.forEach((b) => (b.shown = true));
         $("fcStatus").textContent = "Flipping Coin...";
         $("fcTimer").style.transform = "scaleX(0)";
         paint();
@@ -432,7 +425,7 @@
       phase = "WAITING";
       phaseStart = now;
       mine = null;
-      crowd = bots();
+      loadFeed();
       $("fcResult").hidden = true;
       $("fcStatus").textContent = "Waiting for Next Round...";
       /* the coin lies as it landed; between rounds it shows the idle face */
@@ -475,16 +468,15 @@
   function row(b) {
     const settled = b.win !== null;
     return '<div class="fc-row' + (b.mine ? " mine" : "") + (settled && b.win ? " won" : "") + (settled && !b.win ? " lost" : "") + '">' +
-      "<span>" + b.name + "</span>" +
+      "<span>" + U.esc(b.name) + "</span>" +
       "<span>" + money(b.stake) + (settled ? "/" + (b.win ? money(b.win) : "0") : "") + "</span>" +
-      '<span><i class="fc-pickbadge fc-p-' + b.pick[0] + '">' + b.pick + "</i></span></div>";
+      (b.pick ? '<span><i class="fc-pickbadge fc-p-' + U.esc(b.pick[0]) + '">' + U.esc(b.pick) + "</i></span>" : "<span></span>") + "</div>";
   }
   function renderRows() {
     rowsDirty = false;
-    const list = tab === "all" ? (mine ? [mine] : []).concat(crowd.filter((b) => b.shown).slice().reverse())
-      : tab === "my" ? myBets : topWins;
+    const list = tab === "all" ? (mine ? [mine] : []).concat(feed.recent) : tab === "my" ? myBets : feed.top;
     $("fcRows").innerHTML = list.length ? list.slice(0, 40).map(row).join("")
-      : '<p class="fc-empty">' + (tab === "my" ? "Your bets this session will show here." : tab === "top" ? "The biggest wins of this session will show here." : "Bets are coming in…") + "</p>";
+      : '<p class="fc-empty">' + (tab === "my" ? "Your bets this session will show here." : tab === "top" ? "No real-money wins on this game this week yet." : "No real-money bets on this game today yet.") + "</p>";
   }
 
   /* ---------------- controls ---------------- */
@@ -512,6 +504,8 @@
   $("fcHowTo").addEventListener("click", () => $("fcRules").showModal());
 
   kit.setBet(MIN_BET);
+  loadFeed();
+  setInterval(() => { if (!document.hidden) loadFeed(); }, 15000);
   paintHistory();
   paint();
   requestAnimationFrame(tick);

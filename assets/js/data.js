@@ -14,16 +14,7 @@
   /* artwork base hue per category; each title drifts up to ±25° from it */
   const hues = { Crash: 355, "Instant Win": 90, Slots: 45 };
 
-  /* Deterministic pseudo-random so every page load renders the same recent winners. */
-  function seeded(seed) {
-    let s = seed >>> 0;
-    return function () {
-      s = (s * 1664525 + 1013904223) >>> 0;
-      return s / 4294967296;
-    };
-  }
-
-  /* stable string hash — per-game artwork and player counts */
+  /* stable string hash — per-game artwork */
   function hash(str) {
     let h = 2166136261;
     for (let i = 0; i < str.length; i++) {
@@ -33,7 +24,12 @@
     return h >>> 0;
   }
 
-  const rand = seeded(20260419);
+  /* real players per game in the last 15 minutes, from the server's last answer (site.js keeps it fresh) */
+  let playing = {};
+  try {
+    const a = JSON.parse(localStorage.getItem("vb.live.activity") || "null");
+    if (a && a.playing && typeof a.playing === "object") playing = a.playing;
+  } catch (e) { /* storage unavailable */ }
 
   /* the lobby: WIN B casino's own games, each played on its own full-screen page */
   const games = [
@@ -110,8 +106,8 @@
       provider: provider.name,
       providerShort: provider.short,
       hue: (hues[o.category] + (h % 51) - 25 + 360) % 360,
-      /* simulated "playing now" count */
-      players: 1890 + (h % 2400)
+      /* real players in the last 15 minutes (0 until the server has answered) */
+      players: Number(playing[id]) || 0
     });
   });
 
@@ -175,16 +171,8 @@
   const isHidden = (g) => hidden.games.includes(g.id) || hidden.providers.includes(g.providerId);
   const visible = games.filter((g) => !isHidden(g));
 
-  /* deterministic recent wins for the winner banner, taking the lobby's games in turn — never a game that's switched
-     off, which the home page couldn't show; player numbers are masked like a phone */
-  const recentWins = !visible.length ? [] : Array.from({ length: 14 }, (_, i) => {
-    const g = visible[i % visible.length];
-    return {
-      gameId: g.id,
-      masked: "****" + String(1000 + Math.floor(rand() * 9000)),
-      amount: Math.round((120 + rand() * 3800) * 100) / 100
-    };
-  });
+  /* the winners banner shows real wins only: the home page asks the server (GET /api/games/activity) */
+  const recentWins = [];
 
   /* customer care: live chat is on every page; the email and the numbers to call go HERE, in one place, and show up on
      the Customer care page, in the footer, in the chat and on the legal pages. Leave a field empty and it's not shown. */

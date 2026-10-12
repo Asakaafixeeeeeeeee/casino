@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { allGameControls, CATALOG, hiddenCatalog } from "./availability.js";
+import { maskPhone } from "./feed.js";
 
 /*
  * What the game pages may ask about a game's extras, set per game in Admin -> Games:
@@ -25,12 +26,6 @@ const LIMIT = 12;
 const TTL_MS = 30_000;
 const cache = new Map<string, { at: number; body: unknown }>();
 
-/* "0244123456" -> "024•••••56": enough to feel real, never enough to identify anyone */
-const mask = (phone: string | null) => {
-  const p = String(phone ?? "");
-  return p.length >= 6 ? p.slice(0, 3) + "•".repeat(Math.max(3, p.length - 5)) + p.slice(-2) : "Player";
-};
-
 /**
  * A game's (lobby or server id) biggest real wins of the last 7 days, by multiplier (payout / stake, at least 2x). Empty (showcase: false)
  * when the game is unknown or its showcase is off.
@@ -52,7 +47,7 @@ export async function bigWins(db: Pool, lobbyId: unknown, now = new Date()) {
   const body = {
     game: id, showcase: true, days: SHOW_DAYS,
     wins: rows.map((r) => ({
-      player: mask(r.phone),
+      player: maskPhone(r.phone),
       x: Math.floor((Number(r.payout) / Number(r.stake)) * 100) / 100,
       stake: Math.round(Number(r.stake) * 100) / 100,
       payout: Math.round(Number(r.payout) * 100) / 100,
