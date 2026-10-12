@@ -23,6 +23,7 @@ import { listAdminMinesSignals } from "../services/minesSignal.js";
 import { DepositError, recheckDeposit, waitingDeposits } from "../services/depositRecheck.js";
 import { aviatorOverview, saveAviatorSettings } from "../services/aviatorAdmin.js";
 import { gameDetail, gamesOverview, saveGameControls } from "../services/gameAdmin.js";
+import { getPlayerRisk, playerMoney, playersWithLimits, recentDeposits, riskOverview, savePlayerRisk, saveRiskSettings } from "../services/risk.js";
 import {
   adminFlyers, createCampaign, createPartnerAccount, createTemplate, deleteAsset, deleteTemplate, globalPermissions, PERMISSIONS,
   permissionsOf, saveGlobalPermissions, savePartnerPermissions, saveTemplate, updateCampaign, uploadAsset,
@@ -109,6 +110,16 @@ export function adminRouter(db: Pool): Router {
   r.get("/game-control", send(() => gamesOverview(db)));
   r.get("/game-control/:id", send((req) => gameDetail(db, req.params.id)));
   r.post("/game-control/:id", send((req) => saveGameControls(db, adminOf(req), req.params.id, req.body ?? {})));
+
+  /* recent deposits: every attempt (successful, pending, failed), searchable; separate from withdrawals */
+  r.get("/deposits/recent", send((req) => recentDeposits(db, query(req))));
+  /* risk management: the alert thresholds and what trips them, players' money, and per-player deposit and bet limits */
+  r.get("/risk", send(() => riskOverview(db)));
+  r.post("/risk/settings", send((req) => saveRiskSettings(db, adminOf(req), req.body ?? {})));
+  r.get("/risk/players", send((req) => playerMoney(db, query(req))));
+  r.get("/risk/limits", send(() => playersWithLimits(db)));
+  r.get("/risk/player/:id", send((req) => getPlayerRisk(db, req.params.id)));
+  r.post("/risk/player/:id", send((req) => savePlayerRisk(db, adminOf(req), req.params.id, req.body ?? {})));
 
   /* partners: the programme's settings and numbers, find a player to add, each partner, and payout requests */
   r.get("/partner-settings", send(async () => ({ settings: await getSettings(db), deductionHistory: await deductionHistory(db) })));

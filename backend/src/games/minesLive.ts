@@ -248,7 +248,7 @@ export async function placeLiveBet(
   if (!Number.isFinite(stake) || stake < LIVE_MIN_BET || stake > LIVE_MAX_BET) {
     throw new GameError("invalid_stake", `Bets are GHS ${LIVE_MIN_BET.toFixed(2)} – ${LIVE_MAX_BET.toFixed(2)}.`);
   }
-  await assertStakeAllowed(db, "volta-mines-live", stake);
+  await assertStakeAllowed(db, "volta-mines-live", stake, userId);
   if ((await getLimits(db, userId)).excludedUntil) {
     throw new GameError("self_excluded", "You're taking a break, so real-money play is paused until it ends.", 403);
   }

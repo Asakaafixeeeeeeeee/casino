@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { GameError } from "./catalog.js";
 
 /*
@@ -124,8 +124,33 @@ export async function assertNotPaused(db: Pool, serverGameId: string): Promise<v
   }
 }
 
-/** An admin's tighter bet limits for a game (the game's own limits are checked by the game itself). */
-export async function assertStakeAllowed(db: Pool, serverGameId: string, stake: number): Promise<void> {
+/* ---------------- one player's limits (player_risk), set by an admin in Risk management ---------------- */
+export interface PlayerRisk { min_deposit: number | null; max_deposit: number | null; max_bet: number | null; note: string | null; updated_by: string | null; updated_at: string | null }
+const NO_RISK: PlayerRisk = { min_deposit: null, max_deposit: null, max_bet: null, note: null, updated_by: null, updated_at: null };
+const riskCache = new Map<string, { at: number; risk: PlayerRisk }>();
+export async function playerRisk(db: Pool | PoolClient, userId: string): Promise<PlayerRisk> {
+  const hit = riskCache.get(userId);
+  if (hit && Date.now() - hit.at < TTL_MS) return hit.risk;
+  const r = (await db.query(`SELECT * FROM player_risk WHERE user_id = $1`, [userId])).rows[0];
+  const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+  const risk: PlayerRisk = r ? {
+    min_deposit: n(r.min_deposit), max_deposit: n(r.max_deposit), max_bet: n(r.max_bet), note: r.note ?? null,
+    updated_by: r.updated_by ?? null, updated_at: r.updated_at ? new Date(r.updated_at).toISOString() : null,
+  } : NO_RISK;
+  riskCache.set(userId, { at: Date.now(), risk });
+  return risk;
+}
+export const clearPlayerRiskCache = (userId?: string) => (userId ? riskCache.delete(userId) : riskCache.clear());
+
+/** An admin's tighter bet limits for a game (the game's own limits are checked by the game itself), and the player's
+ *  own maximum bet if an admin set one. Either way the player is told the limit. */
+export async function assertStakeAllowed(db: Pool, serverGameId: string, stake: number, userId?: string): Promise<void> {
+  if (userId) {
+    const risk = await playerRisk(db, userId);
+    if (risk.max_bet !== null && stake > risk.max_bet) {
+      throw new GameError("invalid_stake", `Your maximum bet is GHS ${risk.max_bet.toLocaleString("en-GH", { minimumFractionDigits: 2 })}. Contact support if you'd like it changed.`);
+    }
+  }
   const c = await gameControls(db, serverGameId);
   if ((c.min_bet !== null && stake < c.min_bet) || (c.max_bet !== null && stake > c.max_bet)) {
     const lo = (c.min_bet ?? 0).toFixed(2);

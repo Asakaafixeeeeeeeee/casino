@@ -361,6 +361,14 @@
             ? '<button class="btn btn-ghost btn-sm" type="button" data-act="partner">Open partner account</button>'
             : '<button class="btn btn-ghost btn-sm" type="button" data-act="make-partner">Make partner</button>') +
         "</div>" +
+        '<h3 class="me-sheet-sub">Deposit and bet limits</h3>' +
+        '<form class="adm-adjust agm-reward" data-act="limits">' +
+          '<div class="field"><label for="rkMinDep">Smallest deposit (GHS)</label><input id="rkMinDep" type="number" step="0.01" min="5" inputmode="decimal" placeholder="no minimum"></div>' +
+          '<div class="field"><label for="rkMaxDep">Largest single deposit (GHS)</label><input id="rkMaxDep" type="number" step="0.01" min="5" inputmode="decimal" placeholder="no maximum"></div>' +
+          '<div class="field"><label for="rkMaxBet">Largest bet (GHS)</label><input id="rkMaxBet" type="number" step="0.01" min="0.1" inputmode="decimal" placeholder="no maximum"></div>' +
+          '<div class="field"><label for="rkNote">Note (admin only)</label><input id="rkNote" type="text" maxlength="160" placeholder="why, for the record"></div>' +
+          '<button class="btn btn-primary btn-sm" type="submit">Save limits</button></form>' +
+        '<p class="hint">The player is told the limit when a deposit or bet is outside it. Limits never touch their balance, their winnings or how any result is drawn. Leave a field empty for no limit.</p>' +
         '<h3 class="me-sheet-sub">Wins and losses by game</h3>' +
           (games.length
             ? table(["Game", "Bets", "Staked", "Paid", "Net for player", "Biggest payout", "Last bet"], games.map((g) =>
@@ -392,6 +400,13 @@
           (actions.length
             ? '<div class="adm-log">' + actions.map((a) => "<div><b>" + esc(a.action) + "</b> " + esc(JSON.stringify(a.details)) + "<small>" + esc(a.admin) + " · " + when(a.at) + "</small></div>").join("") + "</div>"
             : '<p class="me-sheet-note">Nothing yet.</p>'));
+      /* fill the limit fields with whatever is set for this player */
+      const rk = await api("/risk/player/" + encodeURIComponent(id));
+      if (rk.ok && rk.data.risk) {
+        const put = (sel, v) => { const el = s.body.querySelector(sel); if (el && v !== null && v !== undefined) el.value = v; };
+        put("#rkMinDep", rk.data.risk.min_deposit); put("#rkMaxDep", rk.data.risk.max_deposit);
+        put("#rkMaxBet", rk.data.risk.max_bet); put("#rkNote", rk.data.risk.note);
+      }
     };
     s.body.addEventListener("click", async (e) => {
       const b = e.target.closest("button[data-act]");
@@ -419,6 +434,17 @@
       }
       draw();
       if (state.tab === "players") loadPlayers();
+    });
+    s.body.addEventListener("submit", async (e) => {
+      if (!e.target.matches("form[data-act=limits]")) return;
+      e.preventDefault();
+      const num = (sel) => { const v = s.body.querySelector(sel).value.trim(); return v === "" ? null : Number(v); };
+      const r = await api("/risk/player/" + id, {
+        min_deposit: num("#rkMinDep"), max_deposit: num("#rkMaxDep"), max_bet: num("#rkMaxBet"),
+        note: s.body.querySelector("#rkNote").value.trim(),
+      });
+      flash(r.ok ? "ok" : "error", r.ok ? "Limits saved for this player." : errText(r, "Couldn't save the limits."));
+      if (r.ok && state.tab === "risk") loadRisk();
     });
     s.body.addEventListener("submit", async (e) => {
       if (!e.target.matches("form[data-act=adjust]")) return;
@@ -2698,15 +2724,117 @@
   }
 
   /* ================= sections, menu, events, badges ================= */
-  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), partners: loadPartners, withdrawals: loadWithdrawals, support: () => loadSupport() };
+  /* ================= Recent deposits ================= */
+  const dep = { status: "all", q: "", timer: 0 };
+  const DEP_STATUS = [["all", "All"], ["successful", "Successful"], ["pending", "Pending"], ["failed", "Failed"]];
+  const DEP_TONE = { successful: "in", pending: "warn", failed: "bad", reversed: "bad" };
+  function depositsShell() {
+    const panel = panelOf("deposits");
+    if (panel.querySelector("#dpQ")) return;
+    panel.innerHTML = '<div class="adm-feed-head">' + chips("dstatus", DEP_STATUS, dep.status) +
+      '<span class="adm-live-dot" title="Updates every 10 seconds">Live</span></div>' +
+      '<div class="adm-toolbar"><label class="searchbar adm-search">' + U.icon("search") +
+      '<input id="dpQ" type="search" placeholder="Find a player by name or number" autocomplete="off" aria-label="Find a player"></label></div>' +
+      '<div id="dpList"></div>';
+    $("dpQ").addEventListener("input", () => {
+      clearTimeout(dep.timer);
+      dep.timer = setTimeout(() => { dep.q = $("dpQ").value.trim(); loadDeposits(); }, 300);
+    });
+  }
+  async function loadDeposits(quiet) {
+    depositsShell();
+    if (!quiet) $("dpList").innerHTML = loading;
+    const r = await api("/deposits/recent?" + new URLSearchParams({ status: dep.status, q: dep.q }));
+    if (state.tab !== "deposits") return;
+    if (!r.ok) { $("dpList").innerHTML = ""; return flash("error", errText(r, "Couldn't load deposits.")); }
+    const items = r.data.deposits;
+    $("dpList").innerHTML = items.length
+      ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Player</th><th>Amount</th><th>Status</th><th>Paid from</th><th>Reference</th><th>When</th></tr></thead><tbody>' +
+        items.map((d) =>
+          "<tr>" +
+          "<td><b>" + esc(d.name) + "</b>" + (d.phone ? "<small>" + esc(d.phone) + "</small>" : "") + "</td>" +
+          "<td>" + money(d.amount) + "</td>" +
+          '<td>' + pill(d.status, DEP_TONE[d.status] || "") + (d.note ? "<small class='adm-wrapcell'>" + esc(d.note) + "</small>" : "") + "</td>" +
+          "<td>" + (d.payer ? esc(d.payer) : "—") + "</td>" +
+          "<td>" + (d.reference ? esc(d.reference) : "—") + "</td>" +
+          "<td>" + when(d.at) + "</td></tr>").join("") +
+        "</tbody></table></div>"
+      : empty(dep.q ? "No deposits match." : "No deposits yet.", "stack");
+  }
+
+  /* ================= Risk management ================= */
+  const rk = { range: "30d", q: "", timer: 0 };
+  const RK_RANGE = [["today", "Today"], ["7d", "7 days"], ["30d", "30 days"], ["all", "All time"]];
+  async function loadRisk(quiet) {
+    const panel = panelOf("risk");
+    if (!quiet) panel.innerHTML = loading;
+    const [r, pl, lim] = await Promise.all([api("/risk"), api("/risk/players?" + new URLSearchParams({ range: rk.range, q: rk.q })), api("/risk/limits")]);
+    if (state.tab !== "risk") return;
+    if (!r.ok || !pl.ok || !lim.ok) { panel.innerHTML = ""; return flash("error", errText(r.ok ? (pl.ok ? lim : pl) : r, "Couldn't load risk management.")); }
+    const s = r.data.settings;
+    const a = r.data.alerts;
+    const alertCount = a.payouts.length + a.winners.length + a.failedDeposits.length;
+    const section = (title, n, html) => '<h3 class="me-sheet-sub">' + title + (n ? ' <span class="adm-chip-count">' + count(n) + "</span>" : "") + "</h3>" + html;
+    panel.innerHTML =
+      /* alert thresholds */
+      '<form class="adm-adjust agm-reward" data-act="risk-settings">' +
+        '<div class="field"><label for="rsPayout">Alert on a payout of (GHS)</label><input id="rsPayout" type="number" step="0.01" min="1" value="' + s.big_payout + '"></div>' +
+        '<div class="field"><label for="rsMult">Alert on a multiplier of (x)</label><input id="rsMult" type="number" step="0.01" min="2" value="' + s.big_multiplier + '"></div>' +
+        '<div class="field"><label for="rsNet">Alert on a player up in a day (GHS)</label><input id="rsNet" type="number" step="0.01" min="1" value="' + s.daily_net_win + '"></div>' +
+        '<div class="field"><label for="rsFail">Alert on failed deposits in an hour</label><input id="rsFail" type="number" step="1" min="2" value="' + s.failed_deposits + '"></div>' +
+        '<button class="btn btn-primary btn-sm" type="submit">Save alert settings</button></form>' +
+      '<p class="hint">Alerts only flag activity for you to look at. They never block a player or touch a balance, a win or a result.</p>' +
+      /* live alerts */
+      (alertCount ? "" : '<div class="alert alert-info">Nothing is over your alert thresholds right now.</div>') +
+      (a.payouts.length ? section("Big payouts (last 24 hours)", a.payouts.length,
+        table(["Game", "Player", "Stake", "Payout", "Multiplier", "When"], a.payouts.map((p) =>
+          "<tr><td>" + esc(p.game) + "</td><td>" + esc(p.player) + "</td><td>" + money(p.stake) + '</td><td class="in"><b>' + money(p.payout) + "</b></td><td>" + p.x + "x</td><td>" + when(p.at) + "</td></tr>"))) : "") +
+      (a.winners.length ? section("Players up a lot today", a.winners.length,
+        table(["Player", "Net up", "Bets", ""], a.winners.map((w) =>
+          '<tr class="adm-rowlink" data-user="' + esc(w.user_id) + '" tabindex="0" role="button"><td>' + esc(w.name) + "</td><td class='in'><b>" + money(w.net) + "</b></td><td>" + count(w.bets) + "</td><td>Open</td></tr>"))) : "") +
+      (a.failedDeposits.length ? section("Failed-deposit bursts (last hour)", a.failedDeposits.length,
+        table(["Player", "Failed", "Tried", ""], a.failedDeposits.map((f) =>
+          '<tr class="adm-rowlink" data-user="' + esc(f.user_id) + '" tabindex="0" role="button"><td>' + esc(f.name) + "</td><td class='bad'><b>" + count(f.fails) + "</b></td><td>" + money(f.amount) + "</td><td>Open</td></tr>"))) : "") +
+      /* players' money */
+      section("Players' money", null,
+        '<div class="adm-feed-head">' + chips("rrange", RK_RANGE, rk.range) + "</div>" +
+        '<div class="adm-toolbar"><label class="searchbar adm-search">' + U.icon("search") +
+        '<input id="rkQ" type="search" placeholder="Find a player by name or number" autocomplete="off" aria-label="Find a player" value="' + esc(rk.q) + '"></label></div>' +
+        (pl.data.players.length
+          ? table(["Player", "Deposited", "Withdrawn", "Staked", "Won", "Player net", "House net"], pl.data.players.map((p) =>
+              '<tr class="adm-rowlink" data-user="' + esc(p.id) + '" tabindex="0" role="button"><td><b>' + esc(p.name) + "</b>" + (p.phone ? "<small>" + esc(p.phone) + "</small>" : "") + "</td><td>" + money(p.deposited) +
+              "</td><td>" + money(p.withdrawn) + "</td><td>" + money(p.staked) + "</td><td>" + money(p.won) + '</td><td class="' + tone(p.playerNet) + '"><b>' + money(p.playerNet) + '</b></td><td class="' + tone(p.houseNet) + '">' + money(p.houseNet) + "</td></tr>"))
+          : empty(rk.q ? "No players match." : "No player money activity in this period.", "users"))) +
+      /* players with limits set */
+      section("Players with limits set", lim.data.players.length,
+        lim.data.players.length
+          ? table(["Player", "Type", "Min deposit", "Max deposit", "Max bet", "Set by", "When"], lim.data.players.map((p) =>
+              '<tr class="adm-rowlink" data-user="' + esc(p.id) + '" tabindex="0" role="button"><td><b>' + esc(p.name) + "</b>" + (p.phone ? "<small>" + esc(p.phone) + "</small>" : "") + "</td><td>" + esc(p.type) +
+              "</td><td>" + (p.min_deposit === null ? "—" : money(p.min_deposit)) + "</td><td>" + (p.max_deposit === null ? "—" : money(p.max_deposit)) + "</td><td>" + (p.max_bet === null ? "—" : money(p.max_bet)) +
+              "</td><td>" + esc(p.updated_by || "") + "</td><td>" + when(p.updated_at) + "</td></tr>"))
+          : '<p class="me-sheet-note">No player has a deposit or bet limit set. Open a player to set one.</p>');
+    const q = $("rkQ");
+    q.addEventListener("input", () => { clearTimeout(rk.timer); rk.timer = setTimeout(() => { rk.q = q.value.trim(); loadRisk(true); }, 300); });
+  }
+
+  async function saveRiskSettings(form) {
+    const n = (sel) => Number(form.querySelector(sel).value);
+    const r = await api("/risk/settings", { big_payout: n("#rsPayout"), big_multiplier: n("#rsMult"), daily_net_win: n("#rsNet"), failed_deposits: n("#rsFail") });
+    flash(r.ok ? "ok" : "error", r.ok ? "Alert settings saved." : errText(r, "Couldn't save the settings."));
+    if (r.ok) loadRisk(true);
+  }
+
+  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, deposits: loadDeposits, games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), partners: loadPartners, withdrawals: loadWithdrawals, risk: loadRisk, support: () => loadSupport() };
   const ADD_MONEY = '<button class="btn btn-primary btn-sm" type="button" data-credit>' + U.icon("plus") + "Add money</button>";
   /* each section's title, a line on what it's for, and its buttons */
   const SECTIONS = {
     overview: { title: "Overview", lead: "How the casino is doing, and anything waiting for you.", actions: ADD_MONEY },
     players: { title: "Players", lead: "Find a player by name, number or id to see their money, bets and account.", actions: ADD_MONEY },
     money: { title: "Money", lead: "Every deposit, withdrawal, bet and adjustment as it happens." },
+    deposits: { title: "Recent deposits", lead: "Every deposit attempt — successful, pending and failed — newest first. Search by player, and filter by status. Separate from withdrawals." },
     withdrawals: { title: "Withdrawals", lead: "Players' requests to cash out. Send the money by hand, then Approve marks it paid; Reject returns it to the player's balance." },
     games: { title: "Games", lead: "Manage every game: switch it on or off, choose whether it offers free play (same odds as real money) and a strip of real big wins, pause and resume it, set bet limits and round timing, and watch live play, statistics and players' wins and losses. Results are drawn by the server and can't be seen or changed before a round ends." },
+    risk: { title: "Risk management", lead: "Each player's deposits, winnings, withdrawals and net; per-player deposit tiers and bet limits (set from a player's profile); and alerts for big payouts, big winners and failed-deposit bursts. Limits are told to the player and never touch a balance, a win or a result." },
     mines: { title: "Mines Signal", lead: "Admin only: where the hidden mines are in the rounds being played." },
     aviator: { title: "Aviator", lead: "Watch rounds and bets live, pause the game, and set its published RTP and bet limits." },
     partners: { title: "Partners", lead: "Add partners with a secure setup link, approve applications, pay commission and choose what partners can use.", actions: '<button class="btn btn-primary btn-sm" type="button" data-add-partner>' + U.icon("plus") + "Add partner</button>" },
@@ -2771,6 +2899,7 @@
   $("admReload").addEventListener("click", () => { flash("", ""); refreshBadges(); LOADERS[state.tab](); });
 
   document.querySelector(".adm-wrap").addEventListener("submit", (e) => {
+    if (e.target.matches('form[data-act="risk-settings"]')) { e.preventDefault(); saveRiskSettings(e.target); }
     if (e.target.matches('form[data-form="aviator"]')) { e.preventDefault(); saveAviator(e.target); }
     if (e.target.matches('form[data-form="psettings"]')) { e.preventDefault(); savePartnerSettings(e.target); }
     if (e.target.matches('form[data-form="pperms"]')) { e.preventDefault(); savePartnerPermissions(e.target); }
@@ -2817,6 +2946,8 @@
       if (group === "ppay") { pt.pay = v; return loadPartners(); }
       if (group === "prange") { pt.range = v; return loadPartners(); }
       if (group === "wstatus") { wd.status = v; return loadWithdrawals(); }
+      if (group === "dstatus") { dep.status = v; return loadDeposits(); }
+      if (group === "rrange") { rk.range = v; return loadRisk(true); }
       if (group === "sview") { sp.view = v; return loadSupport(); }
     }
     /* the overview's "needs your attention" cards open their section, on the right view */
@@ -2887,6 +3018,8 @@
     state.timers.push(
       setInterval(pollMoney, 10000),
       setInterval(refreshBadges, 20000),
+      setInterval(() => { if (state.tab === "deposits" && !document.hidden) loadDeposits(true); }, 10000),
+      setInterval(() => { if (state.tab === "risk" && !document.hidden && !document.querySelector(".adm-sheet")) loadRisk(true); }, 20000),
       setInterval(() => { if (state.tab === "support" && !document.hidden && !document.querySelector(".adm-sheet")) loadSupport(true); }, 15000),
       setInterval(() => { if (state.tab === "mines" && !document.hidden) loadMinesSignals(); }, 2000),
       setInterval(() => { if (state.tab === "aviator" && !document.hidden && !document.querySelector(".adm-sheet")) loadAviator(false); }, 2000));

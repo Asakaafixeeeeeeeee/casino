@@ -354,7 +354,7 @@ export async function placeFlightBet(
       throw new GameError("invalid_auto", `Auto cash-out between 1.01x and ${MAX_CRASH}x`);
     }
   }
-  await assertStakeAllowed(db, gameId, stake);
+  await assertStakeAllowed(db, gameId, stake, userId);
   if ((await getLimits(db, userId)).excludedUntil) {
     throw new GameError("self_excluded", "You're taking a break, so real-money play is paused until it ends.", 403);
   }

@@ -38,6 +38,7 @@ const MIGRATIONS = [
   "029_partner_invites.sql",
   "030_game_management.sql",
   "031_free_play_showcase.sql",
+  "032_risk_management.sql",
 ];
 
 // The production code takes a pg Pool; PGlite is one in-process Postgres connection.

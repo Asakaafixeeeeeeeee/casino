@@ -105,7 +105,7 @@ export async function startSession(
   if (!Number.isFinite(stake) || stake < game.minBet || stake > game.maxBet) {
     throw new GameError("invalid_stake", `Bet between GHS ${game.minBet} and GHS ${game.maxBet.toLocaleString("en-GH")}`);
   }
-  await assertStakeAllowed(db, gameId, stake);
+  await assertStakeAllowed(db, gameId, stake, userId);
   if ((await getLimits(db, userId)).excludedUntil) {
     throw new GameError("self_excluded", "You're taking a break, so real-money play is paused until it ends.", 403);
   }

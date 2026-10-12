@@ -543,3 +543,9 @@
 .agm-flag.is-na { opacity: .7; }
 .agm-onoff { display: inline-flex; align-items: center; gap: 8px; }
 .agm-onoff small { font-size: .78rem; font-weight: 700; color: var(--dim); }
+
+/* risk management and recent deposits: clickable table rows and the small count next to a heading */
+.adm-rowlink { cursor: pointer; }
+.adm-rowlink:hover { background: var(--surface-2); }
+.adm-rowlink td small, .adm-table td small { display: block; font-size: .72rem; color: var(--dim); }
+.adm-chip-count { display: inline-block; min-width: 20px; padding: 1px 7px; border-radius: var(--r-full); background: rgba(255, 200, 61, .14); color: var(--yellow); font-size: .74rem; font-weight: 800; vertical-align: middle; }

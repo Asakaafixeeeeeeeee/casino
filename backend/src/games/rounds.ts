@@ -57,7 +57,7 @@ export async function playRound(
   if (!Number.isFinite(stake) || stake < game.minBet || stake > game.maxBet) {
     throw new GameError("invalid_stake", `Bet between GHS ${game.minBet} and GHS ${game.maxBet.toLocaleString("en-GH")}`);
   }
-  await assertStakeAllowed(db, gameId, stake);
+  await assertStakeAllowed(db, gameId, stake, userId);
 
   const limits = await getLimits(db, userId);
   if (limits.excludedUntil) {

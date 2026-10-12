@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from "pg";
+import { playerRisk } from "../games/availability.js";
 
 export type Period = "daily" | "weekly" | "monthly";
 export const PERIODS: readonly Period[] = ["daily", "weekly", "monthly"];
@@ -136,6 +137,14 @@ export async function selfExclude(db: Pool, userId: string, days: unknown): Prom
 
 /** Throws a LimitError if this deposit is blocked by a break or would go over a limit. */
 export async function checkDeposit(db: Pool | PoolClient, userId: string, amountMajor: number): Promise<void> {
+  /* an admin's per-player deposit tier (player_risk): the player is told the limit, their money is never touched */
+  const risk = await playerRisk(db, userId);
+  if (risk.min_deposit !== null && amountMajor < risk.min_deposit - 1e-9) {
+    throw new LimitError("below_min_deposit", `The minimum deposit on your account is ${ghs(risk.min_deposit)}.`);
+  }
+  if (risk.max_deposit !== null && amountMajor > risk.max_deposit + 1e-9) {
+    throw new LimitError("above_max_deposit", `The maximum single deposit on your account is ${ghs(risk.max_deposit)}. Contact support if you'd like it changed.`);
+  }
   const v = await getLimits(db, userId);
   if (v.excludedUntil) {
     throw new LimitError("self_excluded", `You're taking a break until ${when(v.excludedUntil)}. Deposits are paused until then.`, 403);

@@ -3,7 +3,7 @@ import type { Pool, PoolClient } from "pg";
 import { postMovement, SystemAccount } from "../services/balanceService.js";
 import { getLimits } from "../services/responsibleGaming.js";
 import { GameError } from "./catalog.js";
-import { assertGameOpen } from "./availability.js";
+import { assertGameOpen, assertStakeAllowed } from "./availability.js";
 import { capOf, judge, MAX_WIN, type FlightGame, type Verdict } from "./flights.js";
 
 /*
@@ -319,6 +319,7 @@ export async function placeSkyBet(
   if (!Number.isFinite(stake) || stake < limits.min_bet || stake > limits.max_bet) {
     throw new GameError("invalid_stake", `Bet between GHS ${limits.min_bet.toFixed(2)} and GHS ${limits.max_bet.toLocaleString("en-GH")}`);
   }
+  await assertStakeAllowed(db, SKY_ID, stake, userId);
   let auto: number | null = null;
   if (input.auto !== undefined && input.auto !== null) {
     auto = Math.round(numeric(input.auto) * 100) / 100;
