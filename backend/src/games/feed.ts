@@ -80,7 +80,7 @@ export async function gameFeed(db: Pool, rawId: unknown, now = new Date()) {
 /**
  * The whole site: real players per game in the last 15 minutes (lobby ids), and real wins for the home page's
  * winners banner: the biggest of the last 30 days and the latest of the last 7 (each win once; the page shows them in
- * a random order). `big` marks the biggest ones.
+ * a random order), at most 2 per player so the banner isn't one player over and over. `big` marks the biggest ones.
  */
 export async function siteActivity(db: Pool, now = new Date()) {
   return cached("site", async () => {
@@ -93,10 +93,13 @@ export async function siteActivity(db: Pool, now = new Date()) {
     ]);
     const bigIds = new Set(biggest.rows.map((r) => r.source + ":" + r.bet_id));
     const seen = new Set<string>();
+    const perPlayer = new Map<string, number>();
     const wins = [...biggest.rows, ...latest.rows].filter((r) => {
       const k = r.source + ":" + r.bet_id;
-      if (seen.has(k)) return false;
+      const n = perPlayer.get(r.phone) ?? 0;
+      if (seen.has(k) || n >= 2) return false;
       seen.add(k);
+      perPlayer.set(r.phone, n + 1);
       return true;
     });
     return {

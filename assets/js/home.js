@@ -105,8 +105,8 @@
   forYou.forEach((g) => forYouRow.appendChild(U.miniCard(g)));
 
   /* ---------------- live winner banner ---------------- */
-  /* real wins only (masked numbers): the biggest of the month and the latest of the week, in a random order with a
-     big win first; with none yet, the banner stays hidden */
+  /* real wins (masked numbers: the biggest of the month and the latest of the week, at most 2 per player) mixed with
+     each game's real top prize ("Win up to ₵ 250,000"), in a random order with a big win first. Nothing is made up. */
   const winnerHost = document.getElementById("winner");
   winnerHost.hidden = true;
   const shuffle = (list) => {
@@ -121,8 +121,11 @@
       .map((w) => ({ gameId: w.game, masked: w.player, amount: w.payout, big: !!w.big }))
       /* only wins whose game is in the lobby: a game an admin switched off must never take the whole page down */
       .filter((w) => byId(w.gameId));
+    /* the games' top prizes: amounts in cedis, or multipliers of 100x and more */
+    const prizes = games.filter((g) => g.maxWin && (/₵/.test(g.maxWin) || parseFloat(g.maxWin.replace(/,/g, "")) >= 100))
+      .map((g) => ({ gameId: g.id, prize: g.maxWin }));
     const big = shuffle(all.filter((w) => w.big));
-    winnerBanner(winnerHost, big.slice(0, 1).concat(shuffle(big.slice(1).concat(all.filter((w) => !w.big)))));
+    winnerBanner(winnerHost, big.slice(0, 1).concat(shuffle(big.slice(1).concat(all.filter((w) => !w.big), prizes))));
   });
   function winnerBanner(host, wins) {
     if (!wins.length) return;
@@ -141,8 +144,10 @@
       thumb.innerHTML = U.thumbFace(g);
       body.innerHTML =
         '<strong class="winner-game">' + g.name + "</strong>" +
-        '<span class="winner-line">Congrats <b>' + U.esc(w.masked) + "</b> won <em>" +
-        w.amount.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " GHS</em></span>";
+        (w.prize
+          ? '<span class="winner-line">Win up to <em>' + U.esc(w.prize) + "</em></span>"
+          : '<span class="winner-line">Congrats <b>' + U.esc(w.masked) + "</b> won <em>" +
+            w.amount.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " GHS</em></span>");
       play.href = "game.html?game=" + encodeURIComponent(g.id);
       play.setAttribute("aria-label", "Play " + g.name);
       /* restart the slide-in animation */

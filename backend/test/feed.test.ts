@@ -58,7 +58,7 @@ test("The public feed shows only real settled bets: masked players, real calls a
   /* the banner's wins: each real win once, the biggest marked */
   assert.equal(new Set(site.wins.map((w) => w.at + w.payout + w.game)).size, site.wins.length, "no win twice");
   assert.equal(site.wins.find((w) => w.payout === 36)!.big, true, "the 36 GHS Knockout win is one of the biggest");
-  assert.equal(site.wins.length, 1 + flips.filter((f) => f.payout > f.stake).length, "every real win, nothing else");
+  assert.equal(site.wins.length, Math.min(2, 1 + flips.filter((f) => f.payout > f.stake).length), "real wins only, at most 2 per player");
 
   /* an unknown game: empty, never an error */
   assert.deepEqual((await gameFeed(env.db, "nope")).recent, []);
