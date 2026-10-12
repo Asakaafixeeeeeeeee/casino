@@ -171,7 +171,7 @@
   const isHidden = (g) => hidden.games.includes(g.id) || hidden.providers.includes(g.providerId);
   const visible = games.filter((g) => !isHidden(g));
 
-  /* the winners banner shows real wins only: the home page asks the server (GET /api/games/activity) */
+  /* verified home-page wins come from the server (GET /api/games/activity); no sample player activity is generated */
   const recentWins = [];
 
   /* customer care: live chat is on every page; the email and the numbers to call go HERE, in one place, and show up on

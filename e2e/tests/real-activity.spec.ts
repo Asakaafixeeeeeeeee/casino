@@ -1,13 +1,28 @@
-/* Real players only: the game pages' bets lists, top wins, player counts, the lobby cards' "playing now" and the home
-   page's winners banner come from real settled bets (masked numbers), never made-up players. With no real play there
-   is nothing to show; after a real player's bets, those exact bets appear. */
+/* Game feeds, lobby player counts and home-banner player wins reflect real settled bets only. */
 import { expect, test } from "@playwright/test";
 import { API, fundedPlayer, play, settle, trackErrors } from "./helpers";
 
 const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 const masked = (phone: string) => phone.slice(0, 3) + "•".repeat(phone.length - 5) + phone.slice(-2);
 
-test("game pages, the lobby and the home page show real players' bets and wins only", async ({ browser, request }) => {
+test("home banner shows top prizes without inventing player wins", async ({ page }) => {
+  await page.route(`${API}/api/games/activity`, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ playing: {}, wins: [] })
+  }));
+
+  await page.goto("/index.html");
+  await settle(page);
+  await expect(page.locator("#winner")).toBeVisible();
+  const line = page.locator("#winner .winner-line");
+  await expect(line).toContainText("Win up to");
+  await expect(page.locator("#winner")).not.toContainText("DEMO");
+  await expect(page.locator("#winner")).not.toContainText("SAMPLE");
+  await expect(page.locator("#winner")).not.toContainText("Sample player");
+});
+
+test("game feeds show real activity and the home page preserves real wins", async ({ browser, request }) => {
   test.setTimeout(300_000);
   const ctx = await browser.newContext();
   const p = await ctx.newPage();

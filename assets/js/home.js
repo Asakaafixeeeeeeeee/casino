@@ -105,8 +105,7 @@
   forYou.forEach((g) => forYouRow.appendChild(U.miniCard(g)));
 
   /* ---------------- live winner banner ---------------- */
-  /* real wins (masked numbers: the biggest of the month and the latest of the week, at most 2 per player) mixed with
-     each game's real top prize ("Win up to ₵ 250,000"), in a random order with a big win first. Nothing is made up. */
+  /* Show verified wins and published top prizes; never invent player activity. */
   const winnerHost = document.getElementById("winner");
   winnerHost.hidden = true;
   const shuffle = (list) => {
@@ -125,7 +124,8 @@
     const prizes = games.filter((g) => g.maxWin && (/₵/.test(g.maxWin) || parseFloat(g.maxWin.replace(/,/g, "")) >= 100))
       .map((g) => ({ gameId: g.id, prize: g.maxWin }));
     const big = shuffle(all.filter((w) => w.big));
-    winnerBanner(winnerHost, big.slice(0, 1).concat(shuffle(big.slice(1).concat(all.filter((w) => !w.big), prizes))));
+    const realWins = big.slice(0, 1).concat(shuffle(big.slice(1).concat(all.filter((w) => !w.big))));
+    winnerBanner(winnerHost, realWins.concat(shuffle(prizes)));
   });
   function winnerBanner(host, wins) {
     if (!wins.length) return;

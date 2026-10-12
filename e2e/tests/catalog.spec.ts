@@ -1,6 +1,6 @@
 /* An admin switching a game off: only that game leaves the home page; every other game, the sections and the winner
    banner stay, with no errors. (The banner used to name switched-off games and crash the page, emptying it.) The
-   banner shows real wins only, so a player wins a real coin flip first. */
+   banner shows real wins (and the games' top prizes), so a player wins a real coin flip first. */
 import { expect, test } from "@playwright/test";
 import { adminSession, API, fundedPlayer, play, settle, trackErrors } from "./helpers";
 
