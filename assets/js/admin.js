@@ -2748,18 +2748,22 @@
     if (state.tab !== "deposits") return;
     if (!r.ok) { $("dpList").innerHTML = ""; return flash("error", errText(r, "Couldn't load deposits.")); }
     const items = r.data.deposits;
-    $("dpList").innerHTML = items.length
-      ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Player</th><th>Amount</th><th>Status</th><th>Paid from</th><th>Reference</th><th>When</th></tr></thead><tbody>' +
+    const today = r.data.today || { total: 0, count: 0 };
+    const banner = '<div class="apt-overview" style="margin-bottom:12px"><div class="apt-ov in"><i class="apt-ov-ico">' + U.icon("stack") +
+      '</i><span>Deposits received today</span><strong>' + money(today.total) + "</strong><small>" + count(today.count) + " successful deposit" + (today.count === 1 ? "" : "s") + "</small></div></div>";
+    $("dpList").innerHTML = banner + (items.length
+      ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Player</th><th>Amount</th><th>Network</th><th>Status</th><th>Paid from</th><th>Reference</th><th>When</th></tr></thead><tbody>' +
         items.map((d) =>
           "<tr>" +
           "<td><b>" + esc(d.name) + "</b>" + (d.phone ? "<small>" + esc(d.phone) + "</small>" : "") + "</td>" +
           "<td>" + money(d.amount) + "</td>" +
+          "<td>" + (d.network ? esc(d.network) : "—") + "</td>" +
           '<td>' + pill(d.status, DEP_TONE[d.status] || "") + (d.note ? "<small class='adm-wrapcell'>" + esc(d.note) + "</small>" : "") + "</td>" +
           "<td>" + (d.payer ? esc(d.payer) : "—") + "</td>" +
           "<td>" + (d.reference ? esc(d.reference) : "—") + "</td>" +
           "<td>" + when(d.at) + "</td></tr>").join("") +
         "</tbody></table></div>"
-      : empty(dep.q ? "No deposits match." : "No deposits yet.", "stack");
+      : empty(dep.q ? "No deposits match." : "No deposits yet.", "stack"));
   }
 
   /* ================= Risk management ================= */
@@ -2817,6 +2821,52 @@
     q.addEventListener("input", () => { clearTimeout(rk.timer); rk.timer = setTimeout(() => { rk.q = q.value.trim(); loadRisk(true); }, 300); });
   }
 
+  /* ================= Withdrawal reviews ================= */
+  const rv = { status: "pending" };
+  const RV_STATUS = [["pending", "Waiting"], ["approved", "Approved"], ["published", "Published"], ["rejected", "Rejected"], ["all", "All"]];
+  const stars = (n) => '<span class="rv-stars" aria-label="' + n + ' out of 5 stars">' + "★".repeat(n) + "☆".repeat(5 - n) + "</span>";
+  const RV_TONE = { pending: "warn", approved: "", published: "in", rejected: "bad" };
+  async function loadReviews(quiet) {
+    const panel = panelOf("reviews");
+    if (!quiet) panel.innerHTML = chips("rvstatus", RV_STATUS, rv.status) + loading;
+    const r = await api("/reviews?status=" + rv.status);
+    if (state.tab !== "reviews") return;
+    if (!r.ok) { panel.innerHTML = chips("rvstatus", RV_STATUS, rv.status); return flash("error", errText(r, "Couldn't load reviews.")); }
+    const items = r.data.reviews;
+    panel.innerHTML = chips("rvstatus", RV_STATUS, rv.status) +
+      (items.length
+        ? '<div class="rv-list">' + items.map((v) => {
+          const can = (a) =>
+            (a === "approve" && v.status === "pending") ||
+            (a === "publish" && (v.status === "pending" || v.status === "approved")) ||
+            (a === "reject" && v.status !== "rejected");
+          const btn = (a, label, cls) => can(a) ? '<button class="btn ' + cls + ' btn-sm" type="button" data-review="' + a + '" data-id="' + esc(v.id) + '">' + label + "</button>" : "";
+          return '<article class="rv-card">' +
+            '<div class="rv-top">' + stars(v.rating) + pill(v.status, RV_TONE[v.status] || "") + "</div>" +
+            (v.feedback ? '<p class="rv-text">' + esc(v.feedback) + "</p>" : '<p class="rv-text rv-none">No written feedback.</p>') +
+            '<div class="rv-who"><b>' + esc(v.name) + "</b>" + (v.phone ? " · " + esc(v.phone) : "") + " · withdrawal " + money(v.amount) + " · " + when(v.at) +
+              (v.decided_by ? " · by " + esc(v.decided_by) : "") + "</div>" +
+            '<div class="rv-actions">' + btn("approve", "Approve", "btn-ghost") + btn("publish", "Publish", "btn-primary") + btn("reject", "Reject", "btn-danger") + "</div>" +
+          "</article>";
+        }).join("") + "</div>"
+        : empty(rv.status === "pending" ? "No reviews waiting." : "No reviews here.", "star"));
+  }
+  async function reviewAction(btn) {
+    const action = btn.dataset.review;
+    if (action === "reject") {
+      const ok = await ask({ title: "Reject this review?", text: "It won't be shown to anyone.", yes: "Reject", danger: true });
+      if (ok === null) return;
+    } else if (action === "publish") {
+      const ok = await ask({ title: "Publish this review?", text: "It will show on players' profile pages with the reviewer's username, stars and feedback.", yes: "Publish" });
+      if (ok === null) return;
+    }
+    btn.disabled = true;
+    const r = await api("/reviews/" + encodeURIComponent(btn.dataset.id), { action });
+    flash(r.ok ? "ok" : "error", r.ok ? "Review " + (action === "approve" ? "approved" : action === "publish" ? "published" : "rejected") + "." : errText(r, "Couldn't update the review."));
+    loadReviews();
+    refreshBadges();
+  }
+
   async function saveRiskSettings(form) {
     const n = (sel) => Number(form.querySelector(sel).value);
     const r = await api("/risk/settings", { big_payout: n("#rsPayout"), big_multiplier: n("#rsMult"), daily_net_win: n("#rsNet"), failed_deposits: n("#rsFail") });
@@ -2824,7 +2874,7 @@
     if (r.ok) loadRisk(true);
   }
 
-  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, deposits: loadDeposits, games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), partners: loadPartners, withdrawals: loadWithdrawals, risk: loadRisk, support: () => loadSupport() };
+  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, deposits: loadDeposits, games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), partners: loadPartners, withdrawals: loadWithdrawals, risk: loadRisk, reviews: loadReviews, support: () => loadSupport() };
   const ADD_MONEY = '<button class="btn btn-primary btn-sm" type="button" data-credit>' + U.icon("plus") + "Add money</button>";
   /* each section's title, a line on what it's for, and its buttons */
   const SECTIONS = {
@@ -2835,6 +2885,7 @@
     withdrawals: { title: "Withdrawals", lead: "Players' requests to cash out. Send the money by hand, then Approve marks it paid; Reject returns it to the player's balance." },
     games: { title: "Games", lead: "Manage every game: switch it on or off, choose whether it offers free play (same odds as real money) and a strip of real big wins, pause and resume it, set bet limits and round timing, and watch live play, statistics and players' wins and losses. Results are drawn by the server and can't be seen or changed before a round ends." },
     risk: { title: "Risk management", lead: "Each player's deposits, winnings, withdrawals and net; per-player deposit tiers and bet limits (set from a player's profile); and alerts for big payouts, big winners and failed-deposit bursts. Limits are told to the player and never touch a balance, a win or a result." },
+    reviews: { title: "Withdrawal reviews", lead: "What players said about their withdrawals, after an admin approved them. Approve a review, then Publish it to show it on players' profile pages (username, stars and feedback). Only genuine reviews players chose to submit appear here." },
     mines: { title: "Mines Signal", lead: "Admin only: where the hidden mines are in the rounds being played." },
     aviator: { title: "Aviator", lead: "Watch rounds and bets live, pause the game, and set its published RTP and bet limits." },
     partners: { title: "Partners", lead: "Add partners with a secure setup link, approve applications, pay commission and choose what partners can use.", actions: '<button class="btn btn-primary btn-sm" type="button" data-add-partner>' + U.icon("plus") + "Add partner</button>" },
@@ -2865,6 +2916,7 @@
     };
     set("withdrawals", w.withdrawals || 0);
     set("partners", (w.partners || 0) + (w.partnerPayouts || 0));
+    set("reviews", w.reviews || 0);
     set("support", w.support || 0);
     /* on a phone the menu button carries a dot while anything is waiting */
     $("admMenuDot").hidden = !((w.withdrawals || 0) + (w.partners || 0) + (w.partnerPayouts || 0) + (w.support || 0));
@@ -2948,6 +3000,7 @@
       if (group === "wstatus") { wd.status = v; return loadWithdrawals(); }
       if (group === "dstatus") { dep.status = v; return loadDeposits(); }
       if (group === "rrange") { rk.range = v; return loadRisk(true); }
+      if (group === "rvstatus") { rv.status = v; return loadReviews(); }
       if (group === "sview") { sp.view = v; return loadSupport(); }
     }
     /* the overview's "needs your attention" cards open their section, on the right view */
@@ -2970,6 +3023,8 @@
     if (partner) return openPartner(partner.dataset.partner);
     const w = e.target.closest("[data-pay], [data-reject], [data-recheck]");
     if (w) return withdrawalAction(w);
+    const rvb = e.target.closest("[data-review]");
+    if (rvb) return reviewAction(rvb);
     const payout = e.target.closest("[data-payout]");
     if (payout) return decidePayout(payout);
     const thread = e.target.closest("[data-thread]");
@@ -3020,6 +3075,7 @@
       setInterval(refreshBadges, 20000),
       setInterval(() => { if (state.tab === "deposits" && !document.hidden) loadDeposits(true); }, 10000),
       setInterval(() => { if (state.tab === "risk" && !document.hidden && !document.querySelector(".adm-sheet")) loadRisk(true); }, 20000),
+      setInterval(() => { if (state.tab === "reviews" && !document.hidden) loadReviews(true); }, 20000),
       setInterval(() => { if (state.tab === "support" && !document.hidden && !document.querySelector(".adm-sheet")) loadSupport(true); }, 15000),
       setInterval(() => { if (state.tab === "mines" && !document.hidden) loadMinesSignals(); }, 2000),
       setInterval(() => { if (state.tab === "aviator" && !document.hidden && !document.querySelector(".adm-sheet")) loadAviator(false); }, 2000));

@@ -549,3 +549,13 @@
 .adm-rowlink:hover { background: var(--surface-2); }
 .adm-rowlink td small, .adm-table td small { display: block; font-size: .72rem; color: var(--dim); }
 .adm-chip-count { display: inline-block; min-width: 20px; padding: 1px 7px; border-radius: var(--r-full); background: rgba(255, 200, 61, .14); color: var(--yellow); font-size: .74rem; font-weight: 800; vertical-align: middle; }
+
+/* withdrawal reviews */
+.rv-list { display: grid; gap: 12px; }
+.rv-card { display: grid; gap: 8px; padding: 14px 16px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line-soft); }
+.rv-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.rv-stars { color: var(--yellow); font-size: 1.1rem; letter-spacing: 2px; }
+.rv-text { margin: 0; font-size: .92rem; line-height: 1.45; }
+.rv-text.rv-none { color: var(--dim); font-style: italic; }
+.rv-who { font-size: .76rem; color: var(--dim); }
+.rv-actions { display: flex; flex-wrap: wrap; gap: 8px; }

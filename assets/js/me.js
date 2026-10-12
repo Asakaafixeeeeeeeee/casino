@@ -94,6 +94,17 @@
     $("mStreak").textContent = days === 1 ? "1 day" : days + " days";
 
     U.paymentApi("/api/admin/me").then((r) => { if (r.ok && r.data.admin) $("meAdmin").hidden = false; });
+
+    /* published withdrawal reviews: the reviewer's username, stars and feedback */
+    U.paymentApi("/api/user/reviews/published").then((r) => {
+      const list = r.ok && r.data && Array.isArray(r.data.reviews) ? r.data.reviews : [];
+      if (!list.length) return;
+      const star = (n) => '<span class="me-stars" aria-label="' + n + ' out of 5">' + "★".repeat(n) + "☆".repeat(5 - n) + "</span>";
+      $("meReviewsList").innerHTML = list.map((v) =>
+        '<article class="me-review"><div class="me-review-top">' + star(v.rating) + "<b>" + U.esc(v.name) + "</b></div>" +
+        (v.feedback ? "<p>" + U.esc(v.feedback) + "</p>" : "") + "</article>").join("");
+      $("meReviews").hidden = false;
+    });
     U.paymentApi("/api/user/limits").then((r) => { if (r.ok) paintLimitsRow(r.data); });
 
     U.paymentApi("/api/user/transactions").then((r) => {

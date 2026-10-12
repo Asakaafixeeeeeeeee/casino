@@ -73,27 +73,29 @@ test("An admin's rejection can't refund a withdrawal another admin's Pay has alr
   assert.equal((await db.query(`SELECT count(*)::int AS n FROM ledger_journal WHERE idempotency_key = $1`, [`refund:${w.id}`])).rows[0].n, 0);
 });
 
-test("Nobody approves, rejects or credits their own money; withdrawal decisions are audit-logged", async () => {
+test("An admin can self-approve a withdrawal (logged as such) but can't reject or credit their own; decisions are audit-logged", async () => {
   const { db, userId } = await funded();
   const own = await requestWithdrawal(db, { id: userId, phone: "0241234567" }, 30, key());
   const gw = await gateway(200, { status: "approved", code: "000", reason: "ok" });
   try {
-    /* the admin's number is the player's own, in another format */
-    await assert.rejects(payWithdrawal(db, own.id, "+233 24 123 4567"), (e: unknown) => e instanceof WithdrawalError && e.code === "own_withdrawal");
+    /* the admin's number is the player's own, in another format: rejecting your own and crediting your own stay blocked */
     await assert.rejects(rejectWithdrawal(db, own.id, "mine", "233241234567"), (e: unknown) => e instanceof WithdrawalError && e.code === "own_withdrawal");
     await assert.rejects(adjustBalance(db, "0241234567", userId, { amount: 500, reason: "my own goodwill", idempotency_key: key() }), /your own balance/);
     await assert.rejects(creditByPhone(db, "+233241234567", { phone: "0241234567", amount: 500, reason: "my own goodwill", idempotency_key: key() }), /your own balance/);
-    assert.equal(await balanceOf(db, userId), 70);
-    assert.equal(gw.seen.length, 0, "no payout was sent");
 
-    /* another admin decides it, and the decision is logged */
-    const paid = await payWithdrawal(db, own.id, "0209999001");
+    /* the main admin may approve their own withdrawal; it is marked as a self-approval and never calls the gateway */
+    const paid = await payWithdrawal(db, own.id, "+233 24 123 4567");
     assert.equal(paid.status, "PAID");
+    assert.match(paid.note, /Self-approved by the main admin/);
     assert.equal(gw.seen.length, 0, "approving never calls the gateway");
+
+    /* another admin decides a different one, and every decision is logged */
     const other = await requestWithdrawal(db, { id: userId, phone: "0241234567" }, 10, key());
     await rejectWithdrawal(db, other.id, "Duplicate request", "0209999001");
-    const log = (await db.query(`SELECT action FROM admin_actions WHERE admin = '0209999001' ORDER BY id`)).rows.map((r) => r.action);
-    assert.deepEqual(log, ["withdrawal.approve", "withdrawal.reject"]);
+    const selfLog = (await db.query(`SELECT action FROM admin_actions WHERE action = 'withdrawal.self_approve'`)).rows.length;
+    assert.equal(selfLog, 1, "the self-approval is logged distinctly");
+    const otherLog = (await db.query(`SELECT action FROM admin_actions WHERE admin = '0209999001' ORDER BY id`)).rows.map((r) => r.action);
+    assert.deepEqual(otherLog, ["withdrawal.reject"]);
   } finally {
     gw.close();
   }

@@ -167,11 +167,12 @@ export async function payWithdrawal(
 ): Promise<{ status: "PAID"; note: string }> {
   const owner = (await db.query<{ phone: string }>(`SELECT phone FROM withdrawals WHERE id = $1`, [id])).rows[0];
   if (!owner) throw new WithdrawalError("not_found", "No such withdrawal", 404);
-  if (samePhone(owner.phone, admin)) throw new WithdrawalError("own_withdrawal", "Another admin has to approve your own withdrawal", 403);
-  const note = "Approved by an admin (paid manually)";
+  /* the main admin may approve their own withdrawal; it is marked as a self-approval in the records */
+  const self = samePhone(owner.phone, admin);
+  const note = self ? "Self-approved by the main admin (paid manually)" : "Approved by an admin (paid manually)";
   const w = await settleWithdrawal(db, id, "paid", note, admin, ["REQUESTED"]);
   if (!w) throw new WithdrawalError("already_decided", "This withdrawal isn't waiting for approval", 409);
-  await logAction(db, admin, "withdrawal.approve", w.user_id, { withdrawal: id, amount: Number(w.amount) });
+  await logAction(db, admin, self ? "withdrawal.self_approve" : "withdrawal.approve", w.user_id, { withdrawal: id, amount: Number(w.amount), self_approved: self });
   return { status: "PAID", note };
 }
 

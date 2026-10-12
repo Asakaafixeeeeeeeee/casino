@@ -38,6 +38,7 @@ const migrationFiles = [
   "030_game_management.sql",
   "031_free_play_showcase.sql",
   "032_risk_management.sql",
+  "033_deposit_network_reviews.sql",
 ];
 
 if (!process.env.DATABASE_URL) {

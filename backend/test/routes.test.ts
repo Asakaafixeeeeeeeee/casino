@@ -14,6 +14,7 @@ test("No player endpoint credits a balance directly or moves money between playe
   assert.ok(!routes.some((r) => /\/(deposit|transfer|credit|adjust)$/.test(r)), routes.join(", "));
   // every write a player can make here; adding one should be a deliberate change to this list
   assert.deepEqual(routes.filter((r) => r.startsWith("POST")).sort(),
-    ["POST /convert", "POST /feedback", "POST /limits", "POST /self-exclusion", "POST /withdraw"]);
+    ["POST /convert", "POST /feedback", "POST /limits", "POST /self-exclusion", "POST /withdraw",
+     "POST /withdraw/:id/review", "POST /withdraw/:id/review/dismiss"]);
   // a conversion moves money between one player's own accounts only (services/conversions.ts); it's listed here on purpose
 });

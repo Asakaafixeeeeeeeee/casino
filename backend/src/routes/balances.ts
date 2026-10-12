@@ -24,6 +24,7 @@ import { FeedbackError, listTransactions, saveFeedback } from "../services/accou
 import { requestWithdrawal, withdrawableOf, WithdrawalError } from "../services/withdrawals.js";
 import { getLimits, LimitError, selfExclude, setLimits } from "../services/responsibleGaming.js";
 import { convert } from "../services/conversions.js";
+import { dismissReview, publishedReviews, reviewPrompt, ReviewError, submitReview } from "../services/reviews.js";
 import { FxError, quoteConversion } from "../services/fxRates.js";
 
 export function balancesRouter(db: Pool): Router {
@@ -99,6 +100,38 @@ export function balancesRouter(db: Pool): Router {
       }
       next(e);
     }
+  });
+
+  /* ------------------------------------------------------------------- */
+  /* Withdrawal reviews: after an admin approves a withdrawal, the player */
+  /* is asked to rate it. One prompt per withdrawal.                      */
+  /* ------------------------------------------------------------------- */
+  const reviewErr = (e: unknown, res: Response) => {
+    if (e instanceof ReviewError) { res.status(e.status).json({ error: e.code, message: e.message }); return true; }
+    return false;
+  };
+  r.get("/withdraw/review-prompt", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ prompt: await reviewPrompt(db, requireUser(req).id) });
+    } catch (e) { next(e); }
+  });
+  r.post("/withdraw/:id/review", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json(await submitReview(db, requireUser(req).id, String(req.params.id), req.body ?? {}));
+    } catch (e) { if (!reviewErr(e, res)) next(e); }
+  });
+  r.post("/withdraw/:id/review/dismiss", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json(await dismissReview(db, requireUser(req).id, String(req.params.id)));
+    } catch (e) { if (!reviewErr(e, res)) next(e); }
+  });
+  /* published reviews shown in the profile's reviews section */
+  r.get("/reviews/published", async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await publishedReviews(db));
+    } catch (e) { next(e); }
   });
 
   /* ------------------------------------------------------------------- */

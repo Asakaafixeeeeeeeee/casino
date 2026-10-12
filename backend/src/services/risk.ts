@@ -29,29 +29,36 @@ const statusLabel = (s: string) => (s === "CONFIRMED" ? "successful" : s === "PE
 
 /** Deposit attempts, newest first: the status filter (all/successful/pending/failed), a search by name or number, and
  *  `before` for the next page. Each row has the player, the amount, the status, the reference and the paying number. */
-export async function recentDeposits(db: Pool, input: { status?: unknown; q?: unknown; before?: unknown }) {
+const NETWORK_NAME: Record<string, string> = { MTN: "MTN MoMo", VDF: "Telecel Cash", ATL: "AirtelTigo", TGO: "AirtelTigo" };
+export async function recentDeposits(db: Pool, input: { status?: unknown; q?: unknown; before?: unknown }, now = new Date()) {
   const statuses = STATUS_IN[String(input.status ?? "all")] ?? STATUS_IN.all!;
   const raw = String(input.q ?? "").trim().toLowerCase().replace(/[%_\\]/g, "").slice(0, 60);
   const phone = raw.replace(/\D/g, "");
   const before = input.before ? new Date(String(input.before)) : null;
   const beforeOk = before && !Number.isNaN(before.getTime());
-  const { rows } = await db.query(
-    `SELECT p.id, p.amount, p.currency, p.status, p.transaction_id, p.gateway_note, p.payer_phone, p.created_at,
-            u.username, u.full_name, u.phone
-       FROM payment_intents p JOIN users u ON u.id = p.user_id
-      WHERE p.status = ANY($1)
-        AND ($2 = '' OR lower(coalesce(u.username, '')) LIKE '%' || $2 || '%' OR lower(coalesce(u.full_name, '')) LIKE '%' || $2 || '%'
-             OR ($3 <> '' AND coalesce(u.phone, '') LIKE '%' || $3 || '%'))
-        AND ($4::timestamptz IS NULL OR p.created_at < $4)
-      ORDER BY p.created_at DESC LIMIT 60`,
-    [statuses, raw, phone.length >= 3 ? phone : "", beforeOk ? before!.toISOString() : null]);
-  const deposits = rows.map((r) => ({
+  const midnight = new Date(now); midnight.setUTCHours(0, 0, 0, 0);
+  const [list, today] = await Promise.all([
+    db.query(
+      `SELECT p.id, p.amount, p.currency, p.status, p.transaction_id, p.gateway_note, p.payer_phone, p.network, p.created_at,
+              u.username, u.full_name, u.phone
+         FROM payment_intents p JOIN users u ON u.id = p.user_id
+        WHERE p.status = ANY($1)
+          AND ($2 = '' OR lower(coalesce(u.username, '')) LIKE '%' || $2 || '%' OR lower(coalesce(u.full_name, '')) LIKE '%' || $2 || '%'
+               OR ($3 <> '' AND coalesce(u.phone, '') LIKE '%' || $3 || '%'))
+          AND ($4::timestamptz IS NULL OR p.created_at < $4)
+        ORDER BY p.created_at DESC LIMIT 60`,
+      [statuses, raw, phone.length >= 3 ? phone : "", beforeOk ? before!.toISOString() : null]),
+    /* today's confirmed deposits: how much really arrived and how many */
+    db.query(`SELECT coalesce(sum(amount), 0) AS total, count(*) AS n FROM payment_intents WHERE status = 'CONFIRMED' AND created_at >= $1`, [midnight.toISOString()]),
+  ]);
+  const deposits = list.rows.map((r) => ({
     id: r.id, name: nameOf(r), username: r.username ?? null, phone: r.phone ?? null,
     amount: r2(r.amount), currency: r.currency, status: statusLabel(r.status),
+    network: r.network ? (NETWORK_NAME[r.network] ?? r.network) : null,
     reference: r.transaction_id ? "DES" + r.transaction_id : null, note: r.gateway_note ?? null,
     payer: r.payer_phone ?? null, at: iso(r.created_at),
   }));
-  return { deposits, next: deposits.length === 60 ? deposits[deposits.length - 1]!.at : null };
+  return { deposits, today: { total: r2(today.rows[0]?.total), count: num(today.rows[0]?.n) }, next: deposits.length === 60 ? deposits[deposits.length - 1]!.at : null };
 }
 
 /* ---------------- players' money (deposits, withdrawals, staked, won, net) ---------------- */

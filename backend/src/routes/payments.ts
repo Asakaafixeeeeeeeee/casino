@@ -63,7 +63,7 @@ export function paymentsRouter(db: Pool): Router {
      a limit only one of them fits (each now sees the others), and no player can have more than MAX_OPEN_PROMPTS
      payments waiting at once (a PIN prompt goes to whatever number is given). A retried key returns its intent. */
   const MAX_OPEN_PROMPTS = 3;
-  async function openIntent(userId: string, amount: number, key: string, redirectUrl: string, res: Response) {
+  async function openIntent(userId: string, amount: number, key: string, redirectUrl: string, res: Response, network: string | null = null) {
     const client = await db.connect();
     try {
       await client.query("BEGIN");
@@ -86,7 +86,7 @@ export function paymentsRouter(db: Pool): Router {
           return null;
         }
       }
-      const intent = await createPaymentIntent(client, userId, amount, "GHS", key, redirectUrl);
+      const intent = await createPaymentIntent(client, userId, amount, "GHS", key, redirectUrl, network);
       await client.query("COMMIT");
       return intent;
     } catch (e) {
@@ -213,7 +213,7 @@ export function paymentsRouter(db: Pool): Router {
       if (!/^233[235]\d{8}$/.test(subscriber)) return badRequest(res, "invalid_account", "Enter a valid Ghanaian mobile money number");
       if (!NETWORKS.includes(network as MomoNetwork)) return badRequest(res, "invalid_network", "Choose MTN, Telecel or AirtelTigo");
       const config = loadTellerConfig(process.env);
-      const intent = await openIntent(user.id, amt, idempotency_key, `${siteUrl()}/wallet.html`, res);
+      const intent = await openIntent(user.id, amt, idempotency_key, `${siteUrl()}/wallet.html`, res, network as string);
       if (!intent) return;
       if (intent.transactionId) {
         res.json({ transaction_id: intent.transactionId, reference: depositReference(intent.transactionId), status: clientStatus(intent.status) });

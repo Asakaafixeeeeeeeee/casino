@@ -1728,3 +1728,27 @@ a, button, [role="button"], [data-cta] {
 .vb-bigwins-list span { font-size: .78rem; font-weight: 700; }
 .vb-bigwins-list small { font-size: .68rem; color: var(--dim); }
 @media (max-width: 520px) { .vb-bigwins-label small { display: none; } }
+
+/* ================= withdrawal review popup and profile reviews ================= */
+.vb-review { position: fixed; inset: 0; z-index: 220; display: grid; place-items: center; padding: 16px; background: rgba(5, 6, 8, .78); backdrop-filter: blur(4px); }
+.vb-review-card { position: relative; display: grid; gap: 12px; width: min(400px, 100%); padding: 24px 20px 20px; border-radius: var(--r-lg); text-align: center; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.vb-review-card h2 { margin: 0; font-size: 1.25rem; }
+.vb-review-card p { margin: 0; font-size: .9rem; color: var(--muted); }
+.vb-review-x { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--muted); cursor: pointer; }
+.vb-review-x .ic { width: 16px; height: 16px; }
+.vb-stars { display: flex; justify-content: center; gap: 6px; }
+.vb-star { padding: 2px 4px; border: 0; background: none; font-size: 2.1rem; line-height: 1; color: var(--line); cursor: pointer; transition: color .12s ease, transform .12s ease; }
+.vb-star:hover, .vb-star.on { color: var(--yellow); }
+.vb-star:active { transform: scale(1.15); }
+.vb-review-text { width: 100%; padding: 10px 12px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface-2); color: var(--text); font: inherit; resize: vertical; }
+.vb-review-foot { display: flex; justify-content: center; gap: 18px; }
+.vb-review-link { border: 0; background: none; color: var(--dim); font-size: .86rem; cursor: pointer; text-decoration: underline; }
+
+.me-reviews { margin: 18px 0; padding: 0 var(--gutter); }
+.me-reviews h2 { font-size: 1.05rem; margin: 0 0 12px; }
+.me-reviews-list { display: grid; gap: 10px; }
+.me-review { padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line-soft); }
+.me-review-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.me-review-top b { font-size: .86rem; }
+.me-review p { margin: 0; font-size: .9rem; line-height: 1.45; color: var(--muted); }
+.me-stars, .vb-review .me-stars { color: var(--yellow); letter-spacing: 1px; }

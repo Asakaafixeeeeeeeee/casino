@@ -24,6 +24,7 @@ import { DepositError, recheckDeposit, waitingDeposits } from "../services/depos
 import { aviatorOverview, saveAviatorSettings } from "../services/aviatorAdmin.js";
 import { gameDetail, gamesOverview, saveGameControls } from "../services/gameAdmin.js";
 import { getPlayerRisk, playerMoney, playersWithLimits, recentDeposits, riskOverview, savePlayerRisk, saveRiskSettings } from "../services/risk.js";
+import { adminReviews, decideReview } from "../services/reviews.js";
 import {
   adminFlyers, createCampaign, createPartnerAccount, createTemplate, deleteAsset, deleteTemplate, globalPermissions, PERMISSIONS,
   permissionsOf, saveGlobalPermissions, savePartnerPermissions, saveTemplate, updateCampaign, uploadAsset,
@@ -63,12 +64,14 @@ export function adminRouter(db: Pool): Router {
     const { rows } = await db.query(
       `SELECT (SELECT count(*) FROM withdrawals WHERE status = 'REQUESTED') AS withdrawals,
               (SELECT count(*) FROM affiliates WHERE status = 'PENDING') AS partners,
-              (SELECT count(*) FROM affiliate_payouts WHERE status IN ('REQUESTED', 'APPROVED')) AS partner_payouts`);
+              (SELECT count(*) FROM affiliate_payouts WHERE status IN ('REQUESTED', 'APPROVED')) AS partner_payouts,
+              (SELECT count(*) FROM withdrawal_reviews WHERE status = 'PENDING') AS reviews`);
     res.setHeader("Cache-Control", "no-store");
     res.json({
       admin: true, payoutsEnabled: payouts, phone: requireUser(_req).phone,
       waiting: {
         withdrawals: Number(rows[0].withdrawals), partners: Number(rows[0].partners), partnerPayouts: Number(rows[0].partner_payouts),
+        reviews: Number(rows[0].reviews),
         support: await unreadThreads(db),
       },
     });
@@ -120,6 +123,10 @@ export function adminRouter(db: Pool): Router {
   r.get("/risk/limits", send(() => playersWithLimits(db)));
   r.get("/risk/player/:id", send((req) => getPlayerRisk(db, req.params.id)));
   r.post("/risk/player/:id", send((req) => savePlayerRisk(db, adminOf(req), req.params.id, req.body ?? {})));
+
+  /* withdrawal reviews: moderate what players submit, and publish the genuine ones to profiles */
+  r.get("/reviews", send((req) => adminReviews(db, query(req))));
+  r.post("/reviews/:id", send((req) => decideReview(db, adminOf(req), String(req.params.id), (req.body ?? {}).action)));
 
   /* partners: the programme's settings and numbers, find a player to add, each partner, and payout requests */
   r.get("/partner-settings", send(async () => ({ settings: await getSettings(db), deductionHistory: await deductionHistory(db) })));

@@ -282,7 +282,8 @@ export async function createPaymentIntent(
   amountMajor: number,
   currency: string,
   idempotencyKey: string,
-  redirectUrl: string
+  redirectUrl: string,
+  network: string | null = null
 ): Promise<{ id: string; transactionId: string | null; checkoutUrl: string | null; status: string }> {
   const existing = await client.query<{ id: string; user_id: string; transaction_id: string | null; checkout_url: string | null; status: string }>(
     `SELECT id, user_id, transaction_id, checkout_url, status FROM payment_intents WHERE idempotency_key = $1`,
@@ -295,9 +296,9 @@ export async function createPaymentIntent(
     return { id: current.id, transactionId: current.transaction_id, checkoutUrl: current.checkout_url, status: current.status };
   }
   const result = await client.query<{ id: string }>(
-    `INSERT INTO payment_intents (user_id, amount, currency, idempotency_key, redirect_url, status)
-     VALUES ($1, $2, $3, $4, $5, 'PENDING') RETURNING id`,
-    [userId, amountMajor, currency, idempotencyKey, redirectUrl]
+    `INSERT INTO payment_intents (user_id, amount, currency, idempotency_key, redirect_url, status, network)
+     VALUES ($1, $2, $3, $4, $5, 'PENDING', $6) RETURNING id`,
+    [userId, amountMajor, currency, idempotencyKey, redirectUrl, network]
   );
   return { id: result.rows[0]!.id, transactionId: null, checkoutUrl: null, status: "PENDING" };
 }

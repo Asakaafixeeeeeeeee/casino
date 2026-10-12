@@ -1385,6 +1385,61 @@
   /* real players per game, for the lobby cards on the next page */
   if (!document.getElementById("winner")) activity.site();
 
+  /* ---------------- withdrawal review popup ---------------- */
+  /* after an admin approves a withdrawal, ask the player to rate it. The server gives at most one pending prompt per
+     withdrawal, and records a submit or a dismissal, so the popup never returns for that withdrawal. */
+  function askWithdrawalReview() {
+    if (!session.get() || document.getElementById("vbReview")) return;
+    paymentApi("/api/user/withdraw/review-prompt", { timeout: 15000 }).then((r) => {
+      const p = r.ok && r.data ? r.data.prompt : null;
+      if (!p) return;
+      let rating = 0;
+      const el = document.createElement("div");
+      el.className = "vb-review";
+      el.id = "vbReview";
+      el.setAttribute("role", "dialog");
+      el.setAttribute("aria-modal", "true");
+      el.setAttribute("aria-label", "Rate your withdrawal");
+      el.innerHTML =
+        '<div class="vb-review-card">' +
+          '<button class="vb-review-x" type="button" data-rv="close" aria-label="Close">' + icon("close") + "</button>" +
+          "<h2>How was your withdrawal?</h2>" +
+          "<p>Your " + format(p.amount) + " withdrawal was approved. Tell us how it went.</p>" +
+          '<div class="vb-stars" role="radiogroup" aria-label="Stars">' +
+            [1, 2, 3, 4, 5].map((n) => '<button type="button" class="vb-star" data-star="' + n + '" role="radio" aria-checked="false" aria-label="' + n + ' star' + (n > 1 ? "s" : "") + '">★</button>').join("") + "</div>" +
+          '<textarea class="vb-review-text" maxlength="500" rows="3" placeholder="Describe your experience (optional)"></textarea>' +
+          '<button class="btn btn-primary btn-block" type="button" data-rv="submit" disabled>Submit review</button>' +
+          '<div class="vb-review-foot"><button type="button" class="vb-review-link" data-rv="close">Satisfied</button>' +
+            '<button type="button" class="vb-review-link" data-rv="close">Close</button></div>' +
+        "</div>";
+      document.body.appendChild(el);
+      const stars = [...el.querySelectorAll(".vb-star")];
+      const submit = el.querySelector('[data-rv="submit"]');
+      const paint = () => stars.forEach((s, i) => {
+        s.classList.toggle("on", i < rating);
+        s.setAttribute("aria-checked", String(i + 1 === rating));
+      });
+      el.addEventListener("click", async (e) => {
+        const star = e.target.closest("[data-star]");
+        if (star) { rating = Number(star.dataset.star); submit.disabled = rating < 1; return paint(); }
+        const act = e.target.closest("[data-rv]");
+        if (!act) return;
+        if (act.dataset.rv === "close") {
+          paymentApi("/api/user/withdraw/" + encodeURIComponent(p.withdrawal_id) + "/review/dismiss", { body: { idempotency_key: "rvd:" + p.withdrawal_id }, timeout: 15000 });
+          el.remove();
+          return;
+        }
+        if (rating < 1) return;
+        act.disabled = true;
+        const res = await paymentApi("/api/user/withdraw/" + encodeURIComponent(p.withdrawal_id) + "/review",
+          { body: { rating, feedback: el.querySelector(".vb-review-text").value.trim(), idempotency_key: "rv:" + p.withdrawal_id }, timeout: 15000 });
+        el.remove();
+        toast(res.ok ? "Thanks for your review!" : "Couldn't send your review.", res.ok ? "ok" : "err");
+      });
+    }).catch(() => { /* no popup if it can't be fetched */ });
+  }
+  setTimeout(askWithdrawalReview, 1500);
+
   /* ---------------- partner links ---------------- */
   /* ?ref=CODE (and &sub=campaign) on any page: remembered for 30 days on this device, the visit counted once, and
      kept while the visitor moves between pages. A promo code typed at sign-up is stored with it. Once someone is
