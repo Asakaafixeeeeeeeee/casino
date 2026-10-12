@@ -22,6 +22,7 @@ import { adminReply, adminThread, adminThreads, setThreadStatus, SupportError, u
 import { listAdminMinesSignals } from "../services/minesSignal.js";
 import { DepositError, recheckDeposit, waitingDeposits } from "../services/depositRecheck.js";
 import { aviatorOverview, saveAviatorSettings } from "../services/aviatorAdmin.js";
+import { gameDetail, gamesOverview, saveGameControls } from "../services/gameAdmin.js";
 import {
   adminFlyers, createCampaign, createPartnerAccount, createTemplate, deleteAsset, deleteTemplate, globalPermissions, PERMISSIONS,
   permissionsOf, saveGlobalPermissions, savePartnerPermissions, saveTemplate, updateCampaign, uploadAsset,
@@ -104,6 +105,10 @@ export function adminRouter(db: Pool): Router {
   /* games and studios */
   r.get("/catalog", send((req) => catalogAdmin(db, String(req.query.range ?? "30d"))));
   r.post("/catalog/:kind/:id", send((req) => setCatalog(db, adminOf(req), req.params.kind, req.params.id, req.body ?? {})));
+  /* game management: every game's controls (pause, limits, round timing) and numbers (live, statistics, history, players) */
+  r.get("/game-control", send(() => gamesOverview(db)));
+  r.get("/game-control/:id", send((req) => gameDetail(db, req.params.id)));
+  r.post("/game-control/:id", send((req) => saveGameControls(db, adminOf(req), req.params.id, req.body ?? {})));
 
   /* partners: the programme's settings and numbers, find a player to add, each partner, and payout requests */
   r.get("/partner-settings", send(async () => ({ settings: await getSettings(db), deductionHistory: await deductionHistory(db) })));

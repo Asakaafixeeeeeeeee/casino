@@ -327,6 +327,8 @@
       const r = await api("/users/" + encodeURIComponent(id));
       if (!r.ok) return s.set("<div class='alert alert-err'>" + errText(r, "Couldn't load this player.") + "</div>");
       const { profile: p, totals: t, transactions, bets, actions } = r.data;
+      const games = r.data.games || [];
+      const rewards = r.data.rewards || [];
       s.set(
         '<div class="adm-who">' + avatar(p.full_name || p.username) + "<div><strong>" + esc(p.full_name || p.username || "Player") + "</strong>" +
           "<small>" + (p.full_name && p.username ? esc(p.username) + " · " : "") +
@@ -359,17 +361,32 @@
             ? '<button class="btn btn-ghost btn-sm" type="button" data-act="partner">Open partner account</button>'
             : '<button class="btn btn-ghost btn-sm" type="button" data-act="make-partner">Make partner</button>') +
         "</div>" +
-        '<h3 class="me-sheet-sub">Adjust balance</h3><form class="adm-adjust" data-act="adjust">' +
-          '<div class="field"><label for="adjAmt">Amount (GHS) — negative to take money off</label><input id="adjAmt" type="number" step="0.01" inputmode="decimal" placeholder="e.g. 20 or -5" required></div>' +
+        '<h3 class="me-sheet-sub">Wins and losses by game</h3>' +
+          (games.length
+            ? table(["Game", "Bets", "Staked", "Paid", "Net for player", "Biggest payout", "Last bet"], games.map((g) =>
+                "<tr><td>" + esc(g.name) + "</td><td>" + count(g.bets) + "</td><td>" + money(g.staked) + "</td><td>" + money(g.paid) + '</td><td class="' + tone(g.net) + '"><b>' + money(g.net) +
+                "</b></td><td>" + money(g.top_win) + "</td><td>" + when(g.last_bet) + "</td></tr>"))
+            : '<p class="me-sheet-note">No real-money bets yet.</p>') +
+        '<h3 class="me-sheet-sub">Rewards and adjustments</h3><form class="adm-adjust agm-reward" data-act="adjust">' +
+          '<div class="field"><label for="adjKind">Type</label><select class="select" id="adjKind">' +
+            '<option value="PROMO">Promotional reward</option><option value="BONUS">Bonus</option><option value="CORRECTION">Correction (add or take off)</option></select></div>' +
+          '<div class="field"><label for="adjAmt">Amount (GHS) — negative only for a correction</label><input id="adjAmt" type="number" step="0.01" inputmode="decimal" placeholder="e.g. 20" required></div>' +
           '<div class="field"><label for="adjWhy">Reason (goes in the ledger)</label><input id="adjWhy" type="text" maxlength="200" minlength="8" placeholder="e.g. Goodwill for a delayed payout" required></div>' +
-          '<button class="btn btn-primary btn-sm" type="submit">Apply adjustment</button></form>' +
+          '<button class="btn btn-primary btn-sm" type="submit">Give / apply</button></form>' +
+        '<p class="hint">Recorded in the ledger and the audit log with its type, the reason and your number. Rewards never change a bet or its result.</p>' +
+        (rewards.length
+          ? fold("Rewards and adjustments given", rewards.length, table(["When", "Type", "Amount", "Reason", "By"], rewards.map((x) =>
+              "<tr><td>" + when(x.at) + "</td><td>" + esc(x.description || "Adjustment") + '</td><td class="' + tone(x.amount) + '"><b>' + money(x.amount) + "</b></td><td class='adm-wrapcell'>" + esc(x.reason || "") +
+              "</td><td>" + esc(x.by || "") + "</td></tr>")), true)
+          : '<p class="me-sheet-note">No rewards or adjustments yet.</p>') +
         '<h3 class="me-sheet-sub">Recent money</h3>' +
           (transactions.length ? '<div class="txr-group">' + transactions.map((x) => moveRow(x, false, p.phone)).join("") + "</div>" : '<p class="me-sheet-note">No money movements yet.</p>') +
-        '<h3 class="me-sheet-sub">Recent bets</h3>' +
+        '<h3 class="me-sheet-sub">Bets</h3>' +
           (bets.length
-            ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Game</th><th>Stake</th><th>Paid</th><th>When</th></tr></thead><tbody>' +
-              bets.map((b) => "<tr><td>" + esc(b.name) + "</td><td>" + money(b.stake) + '</td><td class="' + (b.payout > 0 ? "in" : "") + '">' + (b.settled ? money(b.payout) : "in play") + "</td><td>" + when(b.at) + "</td></tr>").join("") +
-              "</tbody></table></div>"
+            ? fold("Latest " + count(bets.length) + " bets", null, '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Game</th><th>Stake</th><th>Paid</th><th>Net</th><th>When</th></tr></thead><tbody>' +
+              bets.map((b) => "<tr><td>" + esc(b.name) + "</td><td>" + money(b.stake) + '</td><td class="' + (b.payout > 0 ? "in" : "") + '">' + (b.settled ? money(b.payout) : "in play") +
+                '</td><td class="' + (b.settled ? tone(b.payout - b.stake) : "") + '">' + (b.settled ? money(b.payout - b.stake) : "—") + "</td><td>" + when(b.at) + "</td></tr>").join("") +
+              "</tbody></table></div>", true)
             : '<p class="me-sheet-note">No real-money bets yet.</p>') +
         '<h3 class="me-sheet-sub">Admin history</h3>' +
           (actions.length
@@ -408,11 +425,14 @@
       e.preventDefault();
       const amount = Number(s.body.querySelector("#adjAmt").value);
       const reason = s.body.querySelector("#adjWhy").value.trim();
+      const kind = s.body.querySelector("#adjKind").value;
+      const KIND = { PROMO: "promotional reward", BONUS: "bonus", CORRECTION: "correction" };
       if (!amount || reason.length < 8) return flash("error", "Enter an amount and a reason of at least 8 characters.");
-      const yes = await ask({ title: (amount > 0 ? "Credit " : "Take ") + money(Math.abs(amount)) + (amount > 0 ? "?" : " off?"),
-        text: "This goes in the ledger as an adjustment, with your number and the reason.", yes: "Apply", danger: amount < 0 });
+      if (kind !== "CORRECTION" && amount < 0) return flash("error", "Rewards and bonuses add money. Use a correction to take money off.");
+      const yes = await ask({ title: (amount > 0 ? "Give " : "Take ") + money(Math.abs(amount)) + (amount > 0 ? " as a " + KIND[kind] + "?" : " off?"),
+        text: "This goes in the ledger as a " + KIND[kind] + ", with your number and the reason. It doesn't change any bet.", yes: "Apply", danger: amount < 0 });
       if (yes === null) return;
-      const r = await api("/users/" + id + "/adjust", { amount, reason, idempotency_key: newKey() });
+      const r = await api("/users/" + id + "/adjust", { amount, reason, kind, idempotency_key: newKey() });
       flash(r.ok ? "ok" : "error", r.ok ? "Adjusted — their balance is now " + money(r.data.balance) + "." : errText(r, "Couldn't adjust."));
       if (r.ok) draw();
     });
@@ -507,27 +527,318 @@
   }
 
   /* ================= Games & studios ================= */
-  const gm = { range: "30d" };
+  const gm = { range: "30d", filter: "all", q: "", list: null };
   const toggle = (kind, id, on, label) =>
     '<label class="adm-switch"><input type="checkbox" data-kind="' + kind + '" data-id="' + esc(id) + '" data-label="' + esc(label) + '"' + (on ? " checked" : "") +
     ' aria-label="' + esc(label) + ' on or off"><span aria-hidden="true"></span></label>';
+  /* Game management: every game as a card (on/off, paused, today's numbers, live play), the studios' switches, and
+     a control sheet per game (pause and resume, bet limits, round timing, live activity, statistics, history and
+     players' wins and losses). Results are drawn by the server; nothing here can see or change one before it's over. */
+  const GM_KIND = { flight: "Rounds", aviator: "Shared rounds", live: "Live", instant: "Instant", session: "Step by step", demo: "Demo" };
+  const GM_FILTERS = [["all", "All games"], ["rounds", "Round games"], ["instant", "Instant & step"], ["paused", "Paused"], ["off", "Off"]];
+  const GAME_PAGE = { aviator: "aviator.html", knockout: "knockout.html", crash: "crash.html", mines: "mines.html", "hi-lo": "hilo.html",
+    roulette: "roulette.html", olympus: "olympus.html", "blaze-fruits": "fruits.html", "magic-ball": "magicball.html", "red-black": "redblack.html",
+    "even-odd": "evenodd.html", bottle: "bottle.html", coin: "coin.html", goal: "goal.html", crossing: "crossing.html", wings: "wings.html", jet: "volta-jet/index.html" };
+  const gmState = (g) => (!g.enabled || !g.studio_enabled ? ["bad", g.studio_enabled ? "Off" : "Studio off"] : g.paused ? ["warn", "Paused"] : ["ok", "On"]);
+  const xSecs = (x) => Math.log(Math.max(1, x)) / 0.12;
+  const secs = (s) => (s >= 60 ? Math.floor(s / 60) + " min " + Math.round(s % 60) + " s" : Math.round(s) + " s");
+
+  function gameCard(g) {
+    const [cls, txt] = gmState(g);
+    return '<article class="agm-card' + (cls === "ok" ? "" : " is-" + cls) + '">' +
+      '<div class="agm-card-top"><span class="agm-ico" aria-hidden="true">' + U.icon(g.kind === "flight" || g.kind === "aviator" ? "crash" : g.kind === "live" ? "live" : "slots") + "</span>" +
+        '<div class="agm-card-who"><strong>' + esc(g.name) + "</strong><small>" + esc(g.studio) + " · " + esc(GM_KIND[g.kind] || g.kind) + (g.rtp ? " · RTP " + g.rtp + "%" : "") + "</small></div>" +
+        '<span class="adm-pill ' + cls + '">' + txt + "</span></div>" +
+      '<div class="apt-stats">' +
+        '<div class="apt-stat"><span>Bets today</span><b>' + count(g.today.bets) + "</b></div>" +
+        '<div class="apt-stat"><span>Players</span><b>' + count(g.today.players) + "</b></div>" +
+        '<div class="apt-stat"><span>GGR today</span><b class="' + tone(g.today.ggr) + '">' + money(g.today.ggr) + "</b></div>" +
+        '<div class="apt-stat"><span>In play</span><b' + (g.live.in_play ? ' class="warn"' : "") + ">" + count(g.live.in_play) + "</b></div>" +
+      "</div>" +
+      '<div class="agm-card-foot">' + toggle("game", g.lobby_id, g.enabled, g.name) +
+        '<button class="btn btn-primary btn-sm" type="button" data-game-open="' + esc(g.id) + '">' + U.icon("settings") + "Manage</button></div></article>";
+  }
+
   async function loadGames() {
     const panel = panelOf("games");
-    panel.innerHTML = chips("grange", [["7d", "7 days"], ["30d", "30 days"], ["all", "All time"]], gm.range) + loading;
-    const r = await api("/catalog?range=" + gm.range);
+    if (!panel.innerHTML.trim()) panel.innerHTML = loading;
+    const [r, cat] = await Promise.all([api("/game-control"), api("/catalog?range=today")]);
     if (state.tab !== "games") return;
-    if (!r.ok) return flash("error", errText(r, "Couldn't load the games."));
-    const { providers, games } = r.data;
-    panel.innerHTML = chips("grange", [["7d", "7 days"], ["30d", "30 days"], ["all", "All time"]], gm.range) +
-      providers.map((p) => {
-        const list = games.filter((g) => g.provider === p.id);
-        return '<div class="adm-studio' + (p.enabled ? "" : " off") + '"><div class="adm-studio-head"><div><strong>' + esc(p.name) + "</strong><small>" +
-          list.length + " games · " + (p.enabled ? "on" : "switched off") + "</small></div>" + toggle("provider", p.id, p.enabled, p.name) + "</div>" +
-          '<div class="txr-group">' + list.map((g) => '<div class="txr-row adm-game' + (g.enabled && p.enabled ? "" : " off") + '">' +
-            '<span class="txr-main"><strong>' + esc(g.name) + (g.enabled ? "" : " " + pill("Off", "bad")) + "</strong>" +
-            "<small>" + count(g.bets) + " bets · " + count(g.players) + " players · stakes " + money(g.stakes) + ' · GGR <b class="' + (g.ggr >= 0 ? "in" : "bad") + '">' + money(g.ggr) + "</b></small></span>" +
-            toggle("game", g.id, g.enabled, g.name) + "</div>").join("") + "</div></div>";
-      }).join("");
+    if (!r.ok || !cat.ok) {
+      panel.innerHTML = "";
+      return flash("error", errText(r.ok ? cat : r, "Couldn't load the games."));
+    }
+    gm.list = r.data.games;
+    const all = gm.list;
+    const live = all.filter((g) => g.enabled && g.studio_enabled && !g.paused).length;
+    const totals = all.reduce((t, g) => ({ bets: t.bets + g.today.bets, ggr: t.ggr + g.today.ggr, inPlay: t.inPlay + g.live.in_play, players: t.players + g.live.players }),
+      { bets: 0, ggr: 0, inPlay: 0, players: 0 });
+    panel.innerHTML =
+      '<div class="apt-overview agm-overview">' +
+        '<div class="apt-ov"><i class="apt-ov-ico">' + U.icon("slots") + "</i><span>Games running</span><strong>" + count(live) + " / " + count(all.length) + "</strong><small>" +
+          count(all.filter((g) => g.paused).length) + " paused · " + count(all.filter((g) => !g.enabled || !g.studio_enabled).length) + " off</small></div>" +
+        '<div class="apt-ov"><i class="apt-ov-ico">' + U.icon("users") + "</i><span>Playing now</span><strong>" + count(totals.players) + "</strong><small>players in the last 5 minutes</small></div>" +
+        '<div class="apt-ov' + (totals.inPlay ? " warn" : "") + '"><i class="apt-ov-ico">' + U.icon("history") + "</i><span>Bets in play</span><strong>" + count(totals.inPlay) + "</strong><small>not settled yet</small></div>" +
+        '<div class="apt-ov ' + (totals.ggr >= 0 ? "in" : "bad") + '"><i class="apt-ov-ico">' + U.icon("trend") + "</i><span>GGR today</span><strong>" + money(totals.ggr) + "</strong><small>" + count(totals.bets) + " bets settled</small></div>" +
+      "</div>" +
+      '<div class="agm-studios">' + cat.data.providers.map((p) => '<div class="agm-studio"><div><strong>' + esc(p.name) + "</strong><small>Studio · " +
+          count(all.filter((g) => g.studio === p.name).length) + " games</small></div>" + toggle("provider", p.id, p.enabled, p.name) + "</div>").join("") + "</div>" +
+      '<div class="apt-toolbar">' + chips("gfilter", GM_FILTERS, gm.filter) +
+        '<label class="searchbar adm-search apt-search">' + U.icon("search") + '<input id="gmQ" type="search" placeholder="Find a game" autocomplete="off" aria-label="Find a game" value="' + esc(gm.q) + '"></label></div>' +
+      '<div id="gmList"></div>';
+    drawGameList();
+    $("gmQ").addEventListener("input", () => { gm.q = $("gmQ").value.trim(); drawGameList(); });
+  }
+  function drawGameList() {
+    const q = gm.q.toLowerCase();
+    const list = (gm.list || []).filter((g) =>
+      (gm.filter === "all" || (gm.filter === "rounds" && ["flight", "aviator", "live"].includes(g.kind)) || (gm.filter === "instant" && ["instant", "session"].includes(g.kind)) ||
+        (gm.filter === "paused" && g.paused) || (gm.filter === "off" && (!g.enabled || !g.studio_enabled))) &&
+      (!q || g.name.toLowerCase().includes(q) || g.studio.toLowerCase().includes(q)));
+    $("gmList").innerHTML = list.length ? '<div class="apt-grid agm-grid">' + list.map(gameCard).join("") + "</div>" : empty("No games here.", "slots");
+  }
+
+  /* ---- one game's control sheet ---- */
+  async function openGame(id) {
+    const s = sheet("Game");
+    let d = null;
+    let timer = 0;
+    const isOpen = () => s.el.isConnected;
+
+    const liveHtml = () => {
+      const l = d.live;
+      const rounds = d.rounds;
+      return '<div class="apt-overview agm-mini">' +
+          '<div class="apt-ov"><i class="apt-ov-ico">' + U.icon("users") + "</i><span>Players now</span><strong>" + count(l.last5.players) + "</strong><small>last 5 minutes · " + count(l.last5.bets) + " bets</small></div>" +
+          '<div class="apt-ov' + (l.in_play.bets ? " warn" : "") + '"><i class="apt-ov-ico">' + U.icon("history") + "</i><span>Bets in play</span><strong>" + count(l.in_play.bets) + "</strong><small>" + money(l.in_play.staked) + " staked · " + count(l.in_play.players) + " players</small></div>" +
+        "</div>" +
+        (rounds
+          ? '<h4 class="agm-sub">Rounds open now <small>(results stay hidden until each round ends)</small></h4>' +
+            (rounds.open.length
+              ? table(["Player", "Phase", "Bets", "Still riding", "Staked"], rounds.open.map((o) =>
+                  '<tr class="adm-trow" data-user="' + esc(o.user_id) + '" role="button" tabindex="0"><td>' + esc(o.player) + (o.phone ? " <small>" + esc(o.phone) + "</small>" : "") + "</td><td>" +
+                  (o.phase === "betting" ? pill("Betting · " + Math.max(0, Math.ceil(o.starts_in_ms / 1000)) + " s", "warn") : pill("In play", "brand")) + "</td><td>" + count(o.bets) + "</td><td>" + count(o.riding) +
+                  "</td><td>" + money(o.staked) + "</td></tr>"))
+              : '<p class="me-sheet-note">Nobody has a round open right now.</p>')
+          : "") +
+        '<h4 class="agm-sub">Latest bets</h4>' +
+        (l.recent.length
+          ? table(["When", "Player", "Stake", "Paid", "Result"], l.recent.slice(0, 25).map((b) =>
+              '<tr class="adm-trow" data-user="' + esc(b.user_id) + '" role="button" tabindex="0"><td>' + when(b.at) + "</td><td>" + esc(b.name) + (b.phone ? " <small>" + esc(b.phone) + "</small>" : "") +
+              "</td><td>" + money(b.stake) + "</td><td>" + (b.settled ? money(b.payout) : "—") + "</td><td>" +
+              (!b.settled ? pill("In play", "warn") : b.payout > b.stake ? pill("Won " + money(b.payout - b.stake), "ok") : b.payout > 0 ? pill("Part back", "") : pill("Lost", "bad")) + "</td></tr>"))
+          : '<p class="me-sheet-note">No bets yet.</p>');
+    };
+
+    function html() {
+      const g = d.game;
+      const c = d.controls;
+      const st = d.stats;
+      const [cls, txt] = gmState({ enabled: g.enabled, studio_enabled: g.studio_enabled, paused: c.paused_now });
+      const page = GAME_PAGE[g.lobby_id] ? GAME_PAGE[g.lobby_id] : "game.html?game=" + encodeURIComponent(g.lobby_id);
+      const statTable = (ts) => table(["", "Today", "7 days", "30 days"], [
+        ["Bets", (t) => count(t.bets)], ["Players", (t) => count(t.players)], ["Staked", (t) => money(t.staked)], ["Paid out", (t) => money(t.paid)],
+        ["GGR (stakes − payouts)", (t) => '<b class="' + tone(t.ggr) + '">' + money(t.ggr) + "</b>"], ["Actual RTP", (t) => (t.actual_rtp === null ? "—" : t.actual_rtp + "%")],
+        ["Winning bets", (t) => (t.win_rate === null ? "—" : t.win_rate + "%")], ["Biggest payout", (t) => money(t.top_win)],
+      ].map(([label, fn]) => "<tr><td>" + label + "</td>" + ts.map((t) => "<td>" + fn(t) + "</td>").join("") + "</tr>"));
+      const maxDay = Math.max(1, ...st.daily.map((x) => Math.abs(x.ggr)));
+      const playerRows = (list) => list.length
+        ? table(["Player", "Bets", "Staked", "Paid", "Net"], list.map((p) => '<tr class="adm-trow" data-user="' + esc(p.user_id) + '" role="button" tabindex="0"><td>' + esc(p.name) +
+            (p.phone ? " <small>" + esc(p.phone) + "</small>" : "") + "</td><td>" + count(p.bets) + "</td><td>" + money(p.staked) + "</td><td>" + money(p.paid) +
+            '</td><td class="' + tone(p.net) + '"><b>' + money(p.net) + "</b></td></tr>"))
+        : '<p class="me-sheet-note">Nobody yet.</p>';
+      const fin = d.rounds ? d.rounds.finished : [];
+      const wk = d.rounds ? d.rounds.week : null;
+      const lim = (v, base) => (v === null || v === undefined ? "" : String(v)) ;
+      return (
+        '<div class="agm-head"><span class="agm-ico agm-ico-lg" aria-hidden="true">' + U.icon(g.kind === "flight" || g.kind === "aviator" ? "crash" : "slots") + "</span>" +
+          '<div><strong>' + esc(g.name) + "</strong><small>" + esc(g.studio) + " · " + esc(g.note) + "</small>" +
+          '<span class="adm-pills">' + '<span class="adm-pill ' + cls + '">' + txt + "</span>" + (g.rtp ? pill("RTP " + g.rtp + "%", "brand") : "") +
+            (g.min_bet !== null ? pill("Bets " + money(Math.max(g.min_bet, c.min_bet || 0)) + " – " + money(Math.min(g.max_bet, c.max_bet || Infinity)), "") : "") + "</span></div></div>" +
+        (c.paused_now
+          ? '<div class="alert alert-info agm-paused"><b>Paused</b> — no new rounds or bets' + (c.paused_until ? " until " + when(c.paused_until) : " until you resume it") +
+            (c.pause_note ? " · “" + esc(c.pause_note) + "”" : "") + ". Rounds already in play still finish.</div>" : "") +
+        '<div class="adm-actions-box agm-actions">' +
+          (g.enabled ? '<button class="btn btn-ghost btn-sm" type="button" data-gm="power" data-on="0">' + U.icon("close") + "Switch off</button>"
+                     : '<button class="btn btn-success btn-sm" type="button" data-gm="power" data-on="1">' + U.icon("play") + "Switch on</button>") +
+          (g.kind === "demo" ? "" : c.paused_now
+            ? '<button class="btn btn-success btn-sm" type="button" data-gm="resume">' + U.icon("play") + "Resume now</button>"
+            : '<button class="btn btn-ghost btn-sm" type="button" data-gm="pause">' + U.icon("pause") + "Pause</button>") +
+          '<a class="btn btn-ghost btn-sm" href="' + esc(page) + '" target="_blank" rel="noopener">' + U.icon("play") + "Open game</a>" +
+          (g.kind === "aviator" ? '<button class="btn btn-ghost btn-sm" type="button" data-gm="aviator">' + U.icon("bolt") + "Aviator tab</button>" : "") +
+          '<button class="btn btn-ghost btn-sm" type="button" data-gm="refresh">' + U.icon("refresh") + "Refresh</button>" +
+        "</div>" +
+
+        '<section class="agm-sec"><h3 class="me-sheet-sub">Live now <small class="agm-live">● updates every 10 s</small></h3><div id="gmLive">' + liveHtml() + "</div></section>" +
+
+        (g.kind === "demo" ? "" :
+        '<section class="agm-sec"><h3 class="me-sheet-sub">Controls</h3>' +
+        '<form class="agm-form" data-gf="controls">' +
+          (g.kind !== "aviator" ? '<fieldset><legend>Bet limits</legend><div class="agm-row">' +
+            '<div class="field"><label for="gmMin">Minimum bet (GHS)</label><input id="gmMin" type="number" inputmode="decimal" step="0.01" min="' + g.min_bet + '" max="' + g.max_bet + '" value="' + lim(c.min_bet) + '" placeholder="' + g.min_bet + ' (game\'s own)"></div>' +
+            '<div class="field"><label for="gmMax">Maximum bet (GHS)</label><input id="gmMax" type="number" inputmode="decimal" step="0.01" min="' + g.min_bet + '" max="' + g.max_bet + '" value="' + lim(c.max_bet) + '" placeholder="' + g.max_bet + ' (game\'s own)"></div>' +
+            '</div><p class="hint">Within the game\'s own ' + money(g.min_bet) + " – " + money(g.max_bet) + ". Empty = the game's own limit. Applies to the next bet.</p></fieldset>" : "") +
+          (g.kind === "flight" ? '<fieldset><legend>Round timing</legend><div class="agm-row">' +
+            '<div class="field"><label for="gmWait">Betting time before each round (seconds)</label><input id="gmWait" type="number" inputmode="numeric" min="3" max="60" step="1" value="' + Math.round((c.wait_ms || g.wait_ms) / 1000) + '"></div>' +
+            (g.max_x_settable ? '<div class="field"><label for="gmMaxX">Longest round: top multiplier (x)</label><input id="gmMaxX" type="number" inputmode="decimal" min="2" max="' + g.max_x + '" step="0.01" value="' + (c.max_x || g.max_x) + '">' +
+              '<small class="hint" id="gmMaxXHint">A round lasts at most ' + secs(xSecs(c.max_x || g.max_x)) + ".</small></div>" : "") +
+            '</div><p class="hint">The betting time is also the wait between rounds. A round\'s length comes from its random result; the top multiplier caps it, and bets still riding there are paid at it, so the published RTP stays the same. Changes apply from each player\'s next round — never to a round already open.</p></fieldset>' : "") +
+          (g.kind === "aviator" ? '<p class="hint">Aviator\'s RTP and bet limits are in the Aviator tab. Pause and switch it off here.</p>' : "") +
+          (g.kind !== "aviator" ? '<button class="btn btn-primary btn-sm" type="submit">Save controls</button>' : "") +
+        "</form>" +
+        (c.updated_by ? '<p class="hint">Last changed ' + when(c.updated_at) + " by " + esc(c.updated_by) + ".</p>" : "") + "</section>") +
+
+        '<section class="agm-sec"><h3 class="me-sheet-sub">Betting statistics</h3>' + statTable([st.today, st.week, st.month]) +
+          (st.daily.length ? '<div class="agm-bars" aria-label="GGR per day, last 14 days">' + st.daily.map((x) => '<div class="agm-bar" title="' + esc(x.day) + ": GGR " + esc(money(x.ggr)) + ", " + x.bets + ' bets">' +
+              '<i class="' + (x.ggr >= 0 ? "pos" : "neg") + '" style="height:' + Math.max(3, (100 * Math.abs(x.ggr)) / maxDay).toFixed(1) + '%"></i><small>' + esc(x.day.slice(8)) + "</small></div>").join("") + "</div>" +
+            '<p class="hint">GGR per day (stakes − payouts), last 14 days, UTC.</p>' : "") +
+        "</section>" +
+
+        (d.rounds ? '<section class="agm-sec"><h3 class="me-sheet-sub">Round results</h3>' +
+          (wk && wk.rounds ? '<div class="adm-minis">' + mini("Rounds with bets (7 days)", count(wk.rounds)) + mini("Median result", wk.median + "x") + mini("Highest", wk.highest + "x") +
+            mini("Reached 2x", wk.at_least_2x + "%") + mini("Reached 10x", wk.at_least_10x + "%") + "</div>" : "") +
+          (fin.length ? '<div class="prt-hist agm-hist">' + fin.map((f) => '<span class="' + (f.crash >= 10 ? "hi" : f.crash >= 2 ? "mid" : "lo") + '" title="' + esc(f.player) + " · " + esc(when(f.at)) + '">' + f.crash.toFixed(2) + "x</span>").join("") + "</div>" +
+            fold("Finished rounds with bets", fin.length, table(["Ended", "Player", "Result", "Bets", "Staked", "Paid", "Best cash-out"], fin.map((f) =>
+              "<tr><td>" + when(f.at) + "</td><td>" + esc(f.player) + "</td><td><b>" + f.crash.toFixed(2) + "x</b></td><td>" + count(f.bets) + "</td><td>" + money(f.staked) + "</td><td>" + money(f.paid) +
+              "</td><td>" + (f.best_x ? f.best_x + "x" : "—") + "</td></tr>")))
+            : '<p class="me-sheet-note">No finished rounds with bets yet.</p>') + "</section>" : "") +
+
+        '<section class="agm-sec"><h3 class="me-sheet-sub">Players\' wins and losses <small>(last 30 days)</small></h3>' +
+          '<div class="agm-cols"><div><h4 class="agm-sub">Biggest winners</h4>' + playerRows(d.players.winners) + "</div>" +
+          '<div><h4 class="agm-sub">Biggest losers</h4>' + playerRows(d.players.losers) + "</div></div>" +
+          '<p class="hint">Open a player to see all their bets and to give a promotional reward, a bonus or a correction.</p></section>' +
+
+        '<section class="agm-sec"><h3 class="me-sheet-sub">Game history</h3>' +
+          fold("All recent bets", d.live.recent.length, table(["When", "Player", "Stake", "Paid", "Net"], d.live.recent.map((b) =>
+            '<tr class="adm-trow" data-user="' + esc(b.user_id) + '" role="button" tabindex="0"><td>' + when(b.at) + "</td><td>" + esc(b.name) + "</td><td>" + money(b.stake) + "</td><td>" +
+            (b.settled ? money(b.payout) : "in play") + '</td><td class="' + (b.settled ? tone(b.payout - b.stake) : "") + '">' + (b.settled ? money(b.payout - b.stake) : "—") + "</td></tr>"))) +
+          '<p class="hint">Every admin change to this game is in the audit log.</p></section>'
+      );
+    }
+
+    const draw = async (quiet) => {
+      const r = await api("/game-control/" + encodeURIComponent(id));
+      if (!isOpen()) return;
+      if (!r.ok) return quiet ? null : s.set("<div class='alert alert-err'>" + errText(r, "Couldn't load this game.") + "</div>");
+      d = r.data;
+      if (quiet && $("gmLive")) {
+        $("gmLive").innerHTML = liveHtml();
+        return;
+      }
+      const scroller = s.el.querySelector(".adm-sheet-panel");
+      const y = scroller ? scroller.scrollTop : 0;
+      s.set(html());
+      if (scroller) scroller.scrollTop = y;
+      const mx = s.body.querySelector("#gmMaxX");
+      if (mx) mx.addEventListener("input", () => { const h = s.body.querySelector("#gmMaxXHint"); if (h) h.textContent = "A round lasts at most " + secs(xSecs(Number(mx.value) || 2)) + "."; });
+    };
+    const save = async (body, done, b) => {
+      if (b) b.disabled = true;
+      const r = await api("/game-control/" + encodeURIComponent(id), body);
+      if (b) b.disabled = false;
+      flash(r.ok ? "ok" : "error", r.ok ? done : errText(r, "Couldn't save."));
+      if (r.ok) {
+        await draw(false);
+        if (state.tab === "games") loadGames();
+      }
+      return r.ok;
+    };
+
+    s.body.addEventListener("click", async (e) => {
+      const u = e.target.closest("[data-user]");
+      if (u) return openPlayer(u.dataset.user);
+      const b = e.target.closest("[data-gm]");
+      if (!b || !d) return;
+      const g = d.game;
+      const act = b.dataset.gm;
+      if (act === "refresh") return draw(false);
+      if (act === "aviator") { s.close(); return showTab("aviator"); }
+      if (act === "power") {
+        const on = b.dataset.on === "1";
+        if (!on) {
+          const ok = await ask({ title: "Switch off " + esc(g.name) + "?", text: "It leaves the lobby and stops taking new real-money bets. Rounds already in play can still be finished.", yes: "Switch off", danger: true });
+          if (ok === null) return;
+        }
+        b.disabled = true;
+        const r = await api("/catalog/game/" + encodeURIComponent(g.lobby_id), { enabled: on });
+        b.disabled = false;
+        flash(r.ok ? "ok" : "error", r.ok ? esc(g.name) + " is now " + (on ? "on" : "off") + "." : errText(r, "Couldn't change it."));
+        if (r.ok) { await draw(false); if (state.tab === "games") loadGames(); }
+        return;
+      }
+      if (act === "resume") return save({ paused: false }, esc(g.name) + " resumed: new rounds and bets are open again.", b);
+      if (act === "pause") {
+        const dlg = await askPause(g.name);
+        if (!dlg) return;
+        return save({ paused: true, paused_until: dlg.until, pause_note: dlg.note }, esc(g.name) + " paused" + (dlg.until ? " until " + when(dlg.until) : "") + ".", b);
+      }
+    });
+    s.body.addEventListener("submit", async (e) => {
+      const f = e.target.closest("form[data-gf]");
+      if (!f || !d) return;
+      e.preventDefault();
+      const g = d.game;
+      const c = d.controls;
+      const body = {};
+      const v = (sel) => { const i = f.querySelector(sel); return i ? i.value.trim() : undefined; };
+      const lines = [];
+      const minV = v("#gmMin");
+      const maxV = v("#gmMax");
+      if (minV !== undefined && (minV === "" ? null : Number(minV)) !== c.min_bet) { body.min_bet = minV === "" ? null : minV; lines.push("Minimum bet → <b>" + (minV === "" ? "the game's own" : money(Number(minV))) + "</b>"); }
+      if (maxV !== undefined && (maxV === "" ? null : Number(maxV)) !== c.max_bet) { body.max_bet = maxV === "" ? null : maxV; lines.push("Maximum bet → <b>" + (maxV === "" ? "the game's own" : money(Number(maxV))) + "</b>"); }
+      const w = v("#gmWait");
+      if (w !== undefined && Math.round(Number(w) * 1000) !== (c.wait_ms || g.wait_ms)) {
+        if (!(Number(w) >= 3 && Number(w) <= 60)) return flash("error", "The betting time must be 3 to 60 seconds.");
+        body.wait_ms = Math.round(Number(w) * 1000);
+        lines.push("Betting time → <b>" + Number(w) + " s</b>");
+      }
+      const mx = v("#gmMaxX");
+      if (mx !== undefined && Number(mx) !== (c.max_x || g.max_x)) {
+        if (!(Number(mx) >= 2 && Number(mx) <= g.max_x)) return flash("error", "The top multiplier must be 2x to " + g.max_x + "x.");
+        body.max_x = Number(mx);
+        lines.push("Top multiplier → <b>" + Number(mx) + "x</b> (rounds of at most " + secs(xSecs(Number(mx))) + ")");
+      }
+      if (!lines.length) return flash("info", "Nothing changed.");
+      const ok = await ask({ title: "Save " + esc(g.name) + "'s controls?", text: lines.join("<br>") + "<br>Applies from the next round and bet; rounds already open keep their settings.", yes: "Save" });
+      if (ok === null) return;
+      return save(body, esc(g.name) + ": controls saved.", f.querySelector("button[type=submit]"));
+    });
+
+    await draw(false);
+    timer = setInterval(() => { if (!isOpen()) return clearInterval(timer); if (!document.hidden) draw(true); }, 10000);
+  }
+
+  /* pause now, optionally until a time, with a note for the team */
+  function askPause(name) {
+    return new Promise((resolve) => {
+      const dlg = document.createElement("div");
+      dlg.className = "me-dialog";
+      dlg.setAttribute("role", "dialog");
+      dlg.setAttribute("aria-modal", "true");
+      const minLocal = new Date(Date.now() + 60e3 - new Date().getTimezoneOffset() * 60e3).toISOString().slice(0, 16);
+      dlg.innerHTML = '<div class="me-dialog-card"><h2>Pause ' + esc(name) + "?</h2>" +
+        "<p>No new rounds or bets start while it's paused. It stays in the lobby, and rounds already in play still finish.</p>" +
+        '<div class="field"><label for="gmUntil">Resume automatically at <span class="opt">(optional)</span></label><input id="gmUntil" type="datetime-local" min="' + minLocal + '"></div>' +
+        '<div class="field"><label for="gmNote">Note for the team <span class="opt">(optional)</span></label><input id="gmNote" type="text" maxlength="120" placeholder="e.g. Checking a player report"></div>' +
+        '<p class="adm-ask-err" hidden></p>' +
+        '<div class="me-dialog-actions"><button class="btn btn-ghost btn-lg" type="button" data-no>Cancel</button><button class="btn btn-primary btn-lg" type="button" data-yes>Pause</button></div></div>';
+      document.body.appendChild(dlg);
+      const done = (v) => { dlg.remove(); resolve(v); };
+      dlg.addEventListener("click", (e) => {
+        if (e.target === dlg || e.target.closest("[data-no]")) return done(null);
+        if (!e.target.closest("[data-yes]")) return;
+        const raw = dlg.querySelector("#gmUntil").value;
+        const until = raw ? new Date(raw) : null;
+        if (until && (Number.isNaN(until.getTime()) || until.getTime() <= Date.now())) {
+          const err = dlg.querySelector(".adm-ask-err");
+          err.textContent = "Choose a time in the future, or leave it empty.";
+          err.hidden = false;
+          return;
+        }
+        done({ until: until ? until.toISOString() : null, note: dlg.querySelector("#gmNote").value.trim() });
+      });
+      dlg.querySelector("#gmUntil").focus();
+    });
   }
 
   /* ================= Partners ================= */
@@ -2362,7 +2673,7 @@
     players: { title: "Players", lead: "Find a player by name, number or id to see their money, bets and account.", actions: ADD_MONEY },
     money: { title: "Money", lead: "Every deposit, withdrawal, bet and adjustment as it happens." },
     withdrawals: { title: "Withdrawals", lead: "Players' requests to cash out. Send the money by hand, then Approve marks it paid; Reject returns it to the player's balance." },
-    games: { title: "Games", lead: "Switching a game off takes it out of the lobby and stops new real-money bets on it; rounds already in play can still finish. A studio's switch does the same for all its games." },
+    games: { title: "Games", lead: "Manage every game: switch it on or off, pause and resume it, set bet limits and round timing, and watch live play, statistics and players' wins and losses. Results are drawn by the server and can't be seen or changed before a round ends." },
     mines: { title: "Mines Signal", lead: "Admin only: where the hidden mines are in the rounds being played." },
     aviator: { title: "Aviator", lead: "Watch rounds and bets live, pause the game, and set its published RTP and bet limits." },
     partners: { title: "Partners", lead: "Add partners with a secure setup link, approve applications, pay commission and choose what partners can use.", actions: '<button class="btn btn-primary btn-sm" type="button" data-add-partner>' + U.icon("plus") + "Add partner</button>" },
@@ -2443,6 +2754,8 @@
     if (e.target.closest("[data-av-toggle]")) return aviatorToggle();
     const copy = e.target.closest("[data-copy]");
     if (copy) return copyText(copy.dataset.copy);
+    const gopen = e.target.closest("[data-game-open]");
+    if (gopen) return openGame(gopen.dataset.gameOpen);
     const psec = e.target.closest("[data-psec]");
     if (psec) return showPtSection(psec.dataset.psec, psec.dataset.pv);
     const inv = e.target.closest("[data-inv-renew], [data-inv-cancel]");
@@ -2461,6 +2774,11 @@
       if (group === "range") { ov.range = v; return loadOverview(); }
       if (group === "feed") { mf.type = v; return loadMoney(); }
       if (group === "grange") { gm.range = v; return loadGames(); }
+      if (group === "gfilter") {
+        gm.filter = v;
+        chip.parentElement.querySelectorAll("[data-v]").forEach((x) => { x.classList.toggle("on", x === chip); x.setAttribute("aria-pressed", String(x === chip)); });
+        return drawGameList();
+      }
       if (group === "pview") { pt.view = v; pt.status = v; return loadPartners(); }
       if (group === "pset") { pt.view = v; pt.setView = v; return loadPartners(); }
       if (group === "ppay") { pt.pay = v; return loadPartners(); }

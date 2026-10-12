@@ -3,7 +3,7 @@ import type { Pool, PoolClient } from "pg";
 import { postMovement, SystemAccount } from "../services/balanceService.js";
 import { getLimits } from "../services/responsibleGaming.js";
 import { GameError } from "./catalog.js";
-import { assertGameOpen } from "./availability.js";
+import { assertGameOpen, assertStakeAllowed } from "./availability.js";
 
 /*
  * Rendo Mines Live with real money. Everyone plays the same 5×5 board (6 mines) in 3-minute rounds that follow the
@@ -248,6 +248,7 @@ export async function placeLiveBet(
   if (!Number.isFinite(stake) || stake < LIVE_MIN_BET || stake > LIVE_MAX_BET) {
     throw new GameError("invalid_stake", `Bets are GHS ${LIVE_MIN_BET.toFixed(2)} – ${LIVE_MAX_BET.toFixed(2)}.`);
   }
+  await assertStakeAllowed(db, "volta-mines-live", stake);
   if ((await getLimits(db, userId)).excludedUntil) {
     throw new GameError("self_excluded", "You're taking a break, so real-money play is paused until it ends.", 403);
   }

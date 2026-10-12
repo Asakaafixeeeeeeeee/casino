@@ -200,7 +200,7 @@ export async function lookupByPhone(db: Pool, phone: unknown): Promise<PlayerByP
 export async function userDetail(db: Pool, id: unknown) {
   const uid = await mustFindUser(db, id);
   const q = async (sql: string) => (await db.query(sql, [uid])).rows;
-  const [profile, dep, wd, bets, adj, ledger, recentBets, actions, limits] = await Promise.all([
+  const [profile, dep, wd, bets, adj, ledger, recentBets, actions, limits, perGame, rewards] = await Promise.all([
     q(`SELECT u.id, u.username, u.full_name, u.phone, u.status::text AS status, u.kyc_status::text AS kyc, u.created_at, u.last_login_at,
               coalesce(b.available, 0) AS balance,
               a.code AS partner_code, a.status AS partner_status,
@@ -228,9 +228,17 @@ export async function userDetail(db: Pool, id: unknown) {
          FROM ledger_entries e JOIN ledger_journal j ON j.id = e.journal_id
          LEFT JOIN payment_intents p ON j.entry_type = 'DEPOSIT' AND p.transaction_id = j.external_ref
         WHERE e.user_id = $1 AND e.currency_code = 'GHS' ORDER BY e.id DESC LIMIT 25`),
-    q(`SELECT game, stake, payout, settled, created_at FROM all_bets WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20`),
+    q(`SELECT game, stake, payout, settled, created_at FROM all_bets WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`),
     q(`SELECT admin, action, details, created_at FROM admin_actions WHERE target = $1::text ORDER BY id DESC LIMIT 20`),
     getLimits(db, uid),
+    /* wins and losses game by game */
+    q(`SELECT game, count(*) AS bets, coalesce(sum(stake) FILTER (WHERE settled), 0) AS staked, coalesce(sum(payout) FILTER (WHERE settled), 0) AS paid,
+              count(*) FILTER (WHERE settled AND payout > stake) AS wins, coalesce(max(payout), 0) AS top_win, max(created_at) AS last_bet
+         FROM all_bets WHERE user_id = $1 GROUP BY game ORDER BY 3 DESC`),
+    /* every reward, bonus and correction, with who gave it and why */
+    q(`SELECT e.created_at, e.direction::text AS direction, e.amount, j.description, j.reason, j.created_by
+         FROM ledger_entries e JOIN ledger_journal j ON j.id = e.journal_id
+        WHERE e.user_id = $1 AND j.entry_type = 'ADJUSTMENT' ORDER BY e.id DESC LIMIT 50`),
   ]);
   const p = profile[0]!;
   const stakes = num(bets[0]!.stakes);
@@ -259,6 +267,13 @@ export async function userDetail(db: Pool, id: unknown) {
       ...gameInfo(b.game), stake: round2(num(b.stake)), payout: round2(num(b.payout)), settled: b.settled, at: b.created_at,
     })),
     actions: actions.map((a) => ({ admin: a.admin, action: a.action, details: a.details, at: a.created_at })),
+    games: perGame.map((g) => ({
+      ...gameInfo(g.game), bets: num(g.bets), staked: round2(num(g.staked)), paid: round2(num(g.paid)), net: round2(num(g.paid) - num(g.staked)),
+      wins: num(g.wins), top_win: round2(num(g.top_win)), last_bet: g.last_bet,
+    })),
+    rewards: rewards.map((r) => ({
+      at: r.created_at, amount: round2(r.direction === "CREDIT" ? num(r.amount) : -num(r.amount)), description: r.description, reason: r.reason, by: r.created_by,
+    })),
   };
 }
 
@@ -289,6 +304,20 @@ export const MAX_ADJUSTMENT = 50000;
 
 /** A balance correction or goodwill credit: an ADJUSTMENT in the ledger, with the reason and the admin who made it. */
 /** Validates a manual adjustment's amount, reason and key. `addOnly` forbids negatives (the by-phone "Add money"). */
+/* what a manual adjustment is, so the ledger and the audit log say so: a promotional reward or a bonus (credits),
+   or a correction of a verified error (either way). Never a change to a bet's result. */
+export const ADJUST_KINDS: Record<string, string> = {
+  PROMO: "Promotional reward from WIN B casino",
+  BONUS: "Bonus from WIN B casino",
+  CORRECTION: "",
+};
+function adjustKind(raw: unknown, amount: number): string {
+  const k = raw === undefined || raw === null || raw === "" ? "CORRECTION" : String(raw).toUpperCase();
+  if (!(k in ADJUST_KINDS)) throw new AdminError("invalid_kind", "Choose a promotional reward, a bonus or a correction");
+  if (k !== "CORRECTION" && amount < 0) throw new AdminError("invalid_kind", "Rewards and bonuses add money; use a correction to take money off");
+  return k;
+}
+
 function adjustmentInput(input: { amount?: unknown; reason?: unknown; idempotency_key?: unknown }, addOnly = false) {
   const amount = round2(Number(input.amount));
   if (!Number.isFinite(amount) || amount === 0 || (addOnly && amount < 0)) {
@@ -307,7 +336,7 @@ function adjustmentInput(input: { amount?: unknown; reason?: unknown; idempotenc
 /** The one audited money movement behind every manual adjustment: credits (amount > 0) or debits the player
  *  against the AdminAdjustments system account, and records it in admin_actions. Shared by the by-id and by-phone
  *  callers so there is a single, logged path and no second way to mint money. */
-async function postAdjustment(db: Pool, admin: string, uid: string, amount: number, reason: string, key: string) {
+async function postAdjustment(db: Pool, admin: string, uid: string, amount: number, reason: string, key: string, kind = "CORRECTION") {
   /* nobody adjusts their own balance: an admin crediting themselves (and then approving their own withdrawal) could
      mint money alone — another admin has to do it */
   const target = (await db.query<{ phone: string | null }>(`SELECT phone FROM users WHERE id = $1`, [uid])).rows[0];
@@ -322,7 +351,7 @@ async function postAdjustment(db: Pool, admin: string, uid: string, amount: numb
     await postMovement(client, {
       idempotencyKey: `adjust:${key}`,
       entryType: "ADJUSTMENT",
-      description: amount > 0 ? "Balance credited by WIN B casino" : "Balance debited by WIN B casino",
+      description: ADJUST_KINDS[kind] || (amount > 0 ? "Balance credited by WIN B casino" : "Balance debited by WIN B casino"),
       reason,
       createdBy: admin,
       legs: amount > 0
@@ -335,7 +364,7 @@ async function postAdjustment(db: Pool, admin: string, uid: string, amount: numb
             { userId: null, systemAccount: SystemAccount.AdminAdjustments, currencyCode: "GHS", direction: "CREDIT", amountMajor: abs },
           ],
     });
-    await logAction(client, admin, "user.adjust", uid, { amount, reason });
+    await logAction(client, admin, "user.adjust", uid, { amount, reason, kind });
     await client.query("COMMIT");
   } catch (e) {
     await client.query("ROLLBACK");
@@ -352,20 +381,20 @@ async function postAdjustment(db: Pool, admin: string, uid: string, amount: numb
 
 /** Credit or debit a player found by their player id (from the player's profile sheet). */
 export async function adjustBalance(
-  db: Pool, admin: string, id: unknown, input: { amount?: unknown; reason?: unknown; idempotency_key?: unknown }
+  db: Pool, admin: string, id: unknown, input: { amount?: unknown; reason?: unknown; idempotency_key?: unknown; kind?: unknown }
 ) {
   const uid = await mustFindUser(db, id);
   const { amount, reason, key } = adjustmentInput(input);
-  return postAdjustment(db, admin, uid, amount, reason, key);
+  return postAdjustment(db, admin, uid, amount, reason, key, adjustKind(input.kind, amount));
 }
 
 /** Add money to a player found by mobile number (the dashboard's "Add money" card). Add only — never a debit. */
 export async function creditByPhone(
-  db: Pool, admin: string, input: { phone?: unknown; amount?: unknown; reason?: unknown; idempotency_key?: unknown }
+  db: Pool, admin: string, input: { phone?: unknown; amount?: unknown; reason?: unknown; idempotency_key?: unknown; kind?: unknown }
 ) {
   const player = await findUserByPhone(db, input.phone);
   const { amount, reason, key } = adjustmentInput(input, true);
-  const result = await postAdjustment(db, admin, player.id, amount, reason, key);
+  const result = await postAdjustment(db, admin, player.id, amount, reason, key, adjustKind(input.kind, amount));
   return {
     player: { id: player.id, username: player.username, full_name: player.full_name, phone: player.phone },
     added: amount,

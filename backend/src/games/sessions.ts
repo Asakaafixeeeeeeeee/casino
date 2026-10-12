@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import { postMovement, SystemAccount } from "../services/balanceService.js";
 import { getLimits } from "../services/responsibleGaming.js";
 import { GameError, secureRandom, type Rng } from "./catalog.js";
-import { assertGameOpen } from "./availability.js";
+import { assertGameOpen, assertStakeAllowed } from "./availability.js";
 import { SESSION_GAMES, type SessionGame } from "./sessionCatalog.js";
 
 type AnyGame = SessionGame<never, never, never>;
@@ -105,6 +105,7 @@ export async function startSession(
   if (!Number.isFinite(stake) || stake < game.minBet || stake > game.maxBet) {
     throw new GameError("invalid_stake", `Bet between GHS ${game.minBet} and GHS ${game.maxBet.toLocaleString("en-GH")}`);
   }
+  await assertStakeAllowed(db, gameId, stake);
   if ((await getLimits(db, userId)).excludedUntil) {
     throw new GameError("self_excluded", "You're taking a break, so real-money play is paused until it ends.", 403);
   }

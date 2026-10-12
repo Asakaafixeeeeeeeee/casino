@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import { postMovement, SystemAccount } from "../services/balanceService.js";
 import { getLimits } from "../services/responsibleGaming.js";
 import { GameError, secureRandom, type Rng } from "./catalog.js";
-import { assertGameOpen } from "./availability.js";
+import { assertGameOpen, assertStakeAllowed, gameControls } from "./availability.js";
 
 /*
  * Crash-style rounds (Crash, Knockout, Jet). Each player's rounds run on the server's clock: a round opens with a crash
@@ -121,7 +121,9 @@ export function judge(
 
 /* ---------------- storage ---------------- */
 
-interface FlightRow { id: string; user_id: string; game: string; crash: string; starts_at: Date | string; settled: boolean }
+/* the settings a round was drawn with (game_settings at the time): later changes never touch a round already open */
+interface FlightConfig { wait_ms?: number; max_x?: number }
+interface FlightRow { id: string; user_id: string; game: string; crash: string; starts_at: Date | string; settled: boolean; config?: FlightConfig | null }
 interface BetRow {
   id: string; flight_id: string; user_id: string; panel: number; stake: string; kind: Kind; auto_target: string | null;
   status: "ACTIVE" | "WON" | "LOST" | "CANCELLED"; cashed_x: string | null; payout: string;
@@ -151,6 +153,10 @@ export interface FlightView {
   crash?: number;
   bets: BetView[];
   balance: number;
+  wait_ms: number;
+  max_x: number;
+  min_bet: number;
+  max_bet: number;
 }
 
 type Db = Pool | PoolClient;
@@ -161,6 +167,13 @@ function gameOf(gameId: string): FlightGame {
   const g = Object.prototype.hasOwnProperty.call(FLIGHT_GAMES, gameId) ? FLIGHT_GAMES[gameId] : undefined;
   if (!g) throw new GameError("unknown_game", "This game can't be played for real money yet", 404);
   return g;
+}
+
+/** The game as this round was drawn: its betting time and highest multiplier. */
+function gameFor(f: FlightRow): FlightGame {
+  const base = gameOf(f.game);
+  const c = f.config ?? {};
+  return { ...base, waitMs: c.wait_ms ?? base.waitMs, maxCrash: c.max_x ?? base.maxCrash };
 }
 
 async function balanceOf(db: Db, userId: string): Promise<number> {
@@ -184,8 +197,9 @@ function betView(game: FlightGame, b: BetRow): BetView {
   };
 }
 
-async function flightView(db: Db, f: FlightRow, now: number): Promise<FlightView> {
-  const game = gameOf(f.game);
+async function flightView(db: Pool, f: FlightRow, now: number): Promise<FlightView> {
+  const game = gameFor(f);
+  const c = await gameControls(db, f.game);
   const crash = Number(f.crash);
   const over = now >= startOf(f) + game.flightMs(crash);
   const bets = (await db.query<BetRow>(
@@ -198,6 +212,11 @@ async function flightView(db: Db, f: FlightRow, now: number): Promise<FlightView
     ...(over ? { crash } : {}),
     bets: bets.map((b) => betView(game, b)),
     balance: await balanceOf(db, f.user_id),
+    /* this round's betting time and top multiplier, and the bet limits now (the page shows and checks these) */
+    wait_ms: game.waitMs,
+    max_x: game.maxCrash,
+    min_bet: Math.max(game.minBet, c.min_bet ?? 0),
+    max_bet: Math.min(game.maxBet, c.max_bet ?? Infinity),
   };
 }
 
@@ -245,7 +264,7 @@ export async function settleFlight(db: Pool, flightId: string, now = Date.now())
   await inTransaction(db, async (client) => {
     const f = (await client.query<FlightRow>(`SELECT * FROM crash_flights WHERE id = $1 FOR UPDATE`, [flightId])).rows[0];
     if (!f || f.settled) return;
-    const game = gameOf(f.game);
+    const game = gameFor(f);
     if (now < startOf(f) + game.flightMs(Number(f.crash))) return;
     const bets = (await client.query<BetRow>(
       `SELECT * FROM crash_bets WHERE flight_id = $1 AND status = 'ACTIVE' FOR UPDATE`, [f.id])).rows;
@@ -275,11 +294,17 @@ export async function nextFlight(
   if (!latest || now >= startOf(latest) + game.flightMs(Number(latest.crash))) {
     if (latest && !latest.settled) await settleFlight(db, latest.id, now);
     await assertGameOpen(db, gameId); /* switched off by an admin: no new rounds (one in the air still ends) */
-    const crash = crashPoint(game.rtp, opts.rng ?? secureRandom, game.maxCrash);
-    const startsAt = now + game.waitMs;
+    /* the admin's timing for this game (Games tab), fixed into the round when it's drawn */
+    const c = await gameControls(db, gameId);
+    const config: FlightConfig = {
+      wait_ms: c.wait_ms ?? game.waitMs,
+      max_x: c.max_x !== null && game.maxCrash > 100 ? Math.min(c.max_x, game.maxCrash) : game.maxCrash,
+    };
+    const crash = crashPoint(game.rtp, opts.rng ?? secureRandom, config.max_x);
+    const startsAt = now + config.wait_ms!;
     flight = (await db.query<FlightRow>(
-      `INSERT INTO crash_flights (user_id, game, crash, starts_at, ends_at) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [userId, gameId, crash, new Date(startsAt), new Date(Math.ceil(startsAt + game.flightMs(crash)))]
+      `INSERT INTO crash_flights (user_id, game, crash, starts_at, ends_at, config) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [userId, gameId, crash, new Date(startsAt), new Date(Math.ceil(startsAt + game.flightMs(crash))), JSON.stringify(config)]
     )).rows[0]!;
   }
   const history = (await db.query<{ crash: string }>(
@@ -329,9 +354,11 @@ export async function placeFlightBet(
       throw new GameError("invalid_auto", `Auto cash-out between 1.01x and ${MAX_CRASH}x`);
     }
   }
+  await assertStakeAllowed(db, gameId, stake);
   if ((await getLimits(db, userId)).excludedUntil) {
     throw new GameError("self_excluded", "You're taking a break, so real-money play is paused until it ends.", 403);
   }
+  const roundGame = gameFor(f);
 
   try {
     return await inTransaction(db, async (client) => {
@@ -352,7 +379,7 @@ export async function placeFlightBet(
           { userId: null, systemAccount: SystemAccount.House, currencyCode: "GHS", direction: "CREDIT", amountMajor: stake },
         ],
       });
-      return { bet: betView(game, bet), balance: await balanceOf(client, userId) };
+      return { bet: betView(roundGame, bet), balance: await balanceOf(client, userId) };
     });
   } catch (e) {
     if (e instanceof Error && e.name === "InsufficientFundsError") {
@@ -368,7 +395,7 @@ async function withBet<T>(
   db: Pool, userId: string, gameId: string, betId: unknown,
   fn: (client: PoolClient, game: FlightGame, bet: BetRow, flight: FlightRow) => Promise<T>
 ): Promise<T> {
-  const game = gameOf(gameId);
+  gameOf(gameId); /* an unknown game is refused before anything is read */
   const id = String(betId ?? "");
   if (!UUID.test(id)) throw new GameError("not_found", "That bet wasn't found", 404);
   return inTransaction(db, async (client) => {
@@ -376,13 +403,13 @@ async function withBet<T>(
     const flight = bet && (await client.query<FlightRow>(
       `SELECT * FROM crash_flights WHERE id = $1 AND game = $2`, [bet.flight_id, gameId])).rows[0];
     if (!bet || !flight) throw new GameError("not_found", "That bet wasn't found", 404);
-    return fn(client, game, bet, flight);
+    return fn(client, gameFor(flight), bet, flight);
   });
 }
 
 type BetAnswer = { bet: BetView; balance: number; crash?: number };
 async function answer(client: PoolClient, bet: BetRow, flight: FlightRow, now: number): Promise<BetAnswer> {
-  const game = gameOf(flight.game);
+  const game = gameFor(flight);
   const crash = Number(flight.crash);
   const over = now >= startOf(flight) + game.flightMs(crash);
   return { bet: betView(game, bet), balance: await balanceOf(client, bet.user_id), ...(over ? { crash } : {}) };

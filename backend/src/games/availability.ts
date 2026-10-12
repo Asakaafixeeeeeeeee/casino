@@ -72,4 +72,62 @@ export async function assertGameOpen(db: Pool, serverGameId: string): Promise<vo
   if (hidden.games.includes(entry.id) || hidden.providers.includes(entry.provider)) {
     throw new GameError("game_disabled", "This game is temporarily unavailable. Please try another one.", 503);
   }
+  await assertNotPaused(db, serverGameId);
+}
+
+/* ---------------- per-game controls (game_settings): pause, tighter bet limits, round timing ---------------- */
+
+export interface GameControls {
+  paused: boolean;
+  paused_until: string | null;
+  pause_note: string | null;
+  min_bet: number | null;
+  max_bet: number | null;
+  wait_ms: number | null;
+  max_x: number | null;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+const NONE: GameControls = { paused: false, paused_until: null, pause_note: null, min_bet: null, max_bet: null, wait_ms: null, max_x: null, updated_by: null, updated_at: null };
+let controlsCache: { at: number; byGame: Map<string, GameControls> } | null = null;
+
+/** Every game's controls (a few seconds' cache; a change made here clears it at once). */
+export async function allGameControls(db: Pool): Promise<Map<string, GameControls>> {
+  if (controlsCache && Date.now() - controlsCache.at < TTL_MS) return controlsCache.byGame;
+  const { rows } = await db.query(`SELECT * FROM game_settings`);
+  const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+  const byGame = new Map(rows.map((r) => [String(r.game), {
+    paused: !!r.paused, paused_until: r.paused_until ? new Date(r.paused_until).toISOString() : null, pause_note: r.pause_note ?? null,
+    min_bet: n(r.min_bet), max_bet: n(r.max_bet), wait_ms: n(r.wait_ms), max_x: n(r.max_x),
+    updated_by: r.updated_by ?? null, updated_at: r.updated_at ? new Date(r.updated_at).toISOString() : null,
+  } as GameControls]));
+  controlsCache = { at: Date.now(), byGame };
+  return byGame;
+}
+export async function gameControls(db: Pool, serverGameId: string): Promise<GameControls> {
+  return (await allGameControls(db)).get(serverGameId) ?? NONE;
+}
+export const clearGameControlsCache = () => { controlsCache = null; };
+
+/** Paused right now: paused, and not past the time it was set to resume. */
+export const isPaused = (c: GameControls, now = Date.now()) => c.paused && (!c.paused_until || new Date(c.paused_until).getTime() > now);
+
+/** Refuses a new round or bet while an admin has paused the game. */
+export async function assertNotPaused(db: Pool, serverGameId: string): Promise<void> {
+  const c = await gameControls(db, serverGameId);
+  if (isPaused(c)) {
+    const until = c.paused_until ? " It reopens at " + new Date(c.paused_until).toISOString().slice(11, 16) + " GMT." : "";
+    throw new GameError("game_paused", "This game is paused for a moment." + until + " Please try again shortly.", 503);
+  }
+}
+
+/** An admin's tighter bet limits for a game (the game's own limits are checked by the game itself). */
+export async function assertStakeAllowed(db: Pool, serverGameId: string, stake: number): Promise<void> {
+  const c = await gameControls(db, serverGameId);
+  if ((c.min_bet !== null && stake < c.min_bet) || (c.max_bet !== null && stake > c.max_bet)) {
+    const lo = (c.min_bet ?? 0).toFixed(2);
+    throw new GameError("invalid_stake", c.max_bet !== null
+      ? `Bet between GHS ${lo} and GHS ${c.max_bet.toLocaleString("en-GH", { minimumFractionDigits: 2 })} on this game`
+      : `The minimum bet on this game is GHS ${lo}`);
+  }
 }

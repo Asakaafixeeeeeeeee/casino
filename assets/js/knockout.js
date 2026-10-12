@@ -15,13 +15,13 @@
   const U = window.VBUtil;
   const $ = (id) => document.getElementById(id);
 
-  const WAIT_MS = 5000;   // betting window before each round
+  let WAIT_MS = 5000;   // betting window before each round
   const HOLD_MS = 2000;   // "FLEW AWAY!" pause after a crash
   const GROWTH = 0.12;    // multiplier = e^(GROWTH × seconds): 2x after ~5.8s, 10x after ~19s, 100x after ~38s
   const CRUISE_S = 8;     // seconds the plane takes to climb to its cruising spot
-  const MAX_CRASH = 10000;
-  const MIN_BET = 0.1;
-  const MAX_BET = 1000;
+  let MAX_CRASH = 10000;
+  let MIN_BET = 0.1;
+  let MAX_BET = 1000;
   const FUN_CREDITS = 3000;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -416,6 +416,11 @@
     }
     syncWarned = false;
     const d = r.data;
+    /* the round's own betting time and top multiplier, and the bet limits now (an admin can change them) */
+    if (d.wait_ms > 0) WAIT_MS = d.wait_ms;
+    if (d.max_x > 1) MAX_CRASH = d.max_x;
+    if (d.min_bet > 0) MIN_BET = d.min_bet;
+    if (d.max_bet > 0) MAX_BET = d.max_bet;
     results.splice(0, results.length, ...d.history);
     resultsDirty = true;
     /* a round already in the air starts its flight on the next frame, from the right moment */
