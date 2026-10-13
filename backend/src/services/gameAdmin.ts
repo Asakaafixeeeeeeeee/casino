@@ -5,6 +5,7 @@ import { FLIGHT_GAMES } from "../games/flights.js";
 import { LIVE_MAX_BET, LIVE_MIN_BET } from "../games/minesLive.js";
 import { SESSION_GAMES } from "../games/sessionCatalog.js";
 import { getSkySettings, SKY_ID } from "../games/skyRush.js";
+import { getLottoSettings, LOTTO_ID } from "../games/lotto.js";
 import { AdminError, logAction } from "./admin.js";
 
 /*
@@ -19,7 +20,7 @@ import { AdminError, logAction } from "./admin.js";
 const num = (v: unknown) => Number(v ?? 0);
 const round2 = (x: number) => Math.round(x * 100) / 100;
 
-type Kind = "instant" | "session" | "flight" | "aviator" | "live" | "demo";
+type Kind = "instant" | "session" | "flight" | "aviator" | "live" | "lotto" | "demo";
 interface Engine { kind: Kind; rtp: number | null; minBet: number | null; maxBet: number | null; waitMs?: number; maxCrash?: number }
 
 /** What each game is and its own limits (the limits an admin can only tighten). */
@@ -41,6 +42,10 @@ async function engineOf(db: Pool, serverId: string): Promise<Engine> {
     const s = await getSkySettings(db);
     return { kind: "aviator", rtp: s.rtp, minBet: s.min_bet, maxBet: s.max_bet };
   }
+  if (serverId === LOTTO_ID) {
+    const s = await getLottoSettings(db);
+    return { kind: "lotto", rtp: s.rtp, minBet: s.min_bet, maxBet: s.max_bet };
+  }
   if (serverId === "volta-mines-live") return { kind: "live", rtp: null, minBet: LIVE_MIN_BET, maxBet: LIVE_MAX_BET };
   return { kind: "demo", rtp: null, minBet: null, maxBet: null };
 }
@@ -51,11 +56,12 @@ const KIND_NOTE: Record<Kind, string> = {
   flight: "Each player gets their own rounds: betting time, then the multiplier climbs until the round ends.",
   aviator: "One shared round for everyone. Its RTP and bet limits are in the Aviator tab.",
   live: "One shared 3-minute round for everyone.",
+  lotto: "One 5/90 draw a day for everyone. Its schedule, payouts and results are in the Lotto tab.",
   demo: "Demo credits only, on its own server: no real-money bets to show.",
 };
 
 /** The big-wins strip lives on the site's own game pages; Jet, Live Mines and the demo game have pages of their own. */
-export const showcaseFits = (id: string, kind: string) => kind !== "demo" && kind !== "live" && id !== "volta-jet";
+export const showcaseFits = (id: string, kind: string) => kind !== "demo" && kind !== "live" && kind !== "lotto" && id !== "volta-jet";
 
 function controlsView(c: GameControls) {
   return { ...c, paused_now: isPaused(c) };

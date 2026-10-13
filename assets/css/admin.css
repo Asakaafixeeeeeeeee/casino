@@ -559,3 +559,10 @@
 .rv-text.rv-none { color: var(--dim); font-style: italic; }
 .rv-who { font-size: .76rem; color: var(--dim); }
 .rv-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Lotto tab: drawn numbers as gold balls */
+.lta-balls { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.lta-ball { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; font-weight: 900; font-size: .74rem;
+  color: #1a1000; background: radial-gradient(circle at 35% 30%, #fff3b0, #ffc21a 45%, #a86400 100%); font-variant-numeric: tabular-nums; }
+.lta-act { white-space: nowrap; }
+.lta-ball.lta-bank { color: #fff; background: radial-gradient(circle at 35% 30%, #ff9a9a, #e0101e 45%, #7a0008 100%); }

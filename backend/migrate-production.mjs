@@ -39,6 +39,9 @@ const migrationFiles = [
   "031_free_play_showcase.sql",
   "032_risk_management.sql",
   "033_deposit_network_reviews.sql",
+  "034_lotto.sql",
+  "035_lotto_draws_bet_types.sql",
+  "036_lotto_sales_switch.sql",
 ];
 
 if (!process.env.DATABASE_URL) {

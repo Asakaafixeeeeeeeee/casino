@@ -22,6 +22,7 @@ import { adminReply, adminThread, adminThreads, setThreadStatus, SupportError, u
 import { listAdminMinesSignals } from "../services/minesSignal.js";
 import { DepositError, recheckDeposit, waitingDeposits } from "../services/depositRecheck.js";
 import { aviatorOverview, saveAviatorSettings } from "../services/aviatorAdmin.js";
+import { cancelLotto, createLotto, lottoOverview, lottoPreview, lottoTickets, pauseLotto, releaseLotto, saveLottoAdminSettings } from "../services/lottoAdmin.js";
 import { gameDetail, gamesOverview, saveGameControls } from "../services/gameAdmin.js";
 import { getPlayerRisk, playerMoney, playersWithLimits, recentDeposits, riskOverview, savePlayerRisk, saveRiskSettings } from "../services/risk.js";
 import { adminReviews, decideReview } from "../services/reviews.js";
@@ -65,13 +66,14 @@ export function adminRouter(db: Pool): Router {
       `SELECT (SELECT count(*) FROM withdrawals WHERE status = 'REQUESTED') AS withdrawals,
               (SELECT count(*) FROM affiliates WHERE status = 'PENDING') AS partners,
               (SELECT count(*) FROM affiliate_payouts WHERE status IN ('REQUESTED', 'APPROVED')) AS partner_payouts,
-              (SELECT count(*) FROM withdrawal_reviews WHERE status = 'PENDING') AS reviews`);
+              (SELECT count(*) FROM withdrawal_reviews WHERE status = 'PENDING') AS reviews,
+              (SELECT count(*) FROM lotto_draws WHERE status = 'CLOSED') AS lotto`);
     res.setHeader("Cache-Control", "no-store");
     res.json({
       admin: true, payoutsEnabled: payouts, phone: requireUser(_req).phone,
       waiting: {
         withdrawals: Number(rows[0].withdrawals), partners: Number(rows[0].partners), partnerPayouts: Number(rows[0].partner_payouts),
-        reviews: Number(rows[0].reviews),
+        reviews: Number(rows[0].reviews), lotto: Number(rows[0].lotto),
         support: await unreadThreads(db),
       },
     });
@@ -94,6 +96,17 @@ export function adminRouter(db: Pool): Router {
   /* Aviator: live monitor (a round's crash point only once it's over), published RTP and bet limits */
   r.get("/aviator", send(() => aviatorOverview(db)));
   r.post("/aviator/settings", send((req) => saveAviatorSettings(db, adminOf(req), req.body ?? {})));
+
+  /* Lotto: schedule and payouts, draws and tickets; a draw's numbers once betting has closed; release pays the
+     winners, cancel (only while betting is open) refunds every ticket */
+  r.get("/lotto", send(() => lottoOverview(db)));
+  r.post("/lotto/settings", send((req) => saveLottoAdminSettings(db, adminOf(req), req.body ?? {})));
+  r.get("/lotto/tickets", send((req) => lottoTickets(db, query(req))));
+  r.post("/lotto/draws", send((req) => createLotto(db, adminOf(req), req.body ?? {})));
+  r.get("/lotto/draws/:id/preview", send((req) => lottoPreview(db, req.params.id)));
+  r.post("/lotto/draws/:id/pause", send((req) => pauseLotto(db, adminOf(req), req.params.id, req.body ?? {})));
+  r.post("/lotto/draws/:id/release", send((req) => releaseLotto(db, adminOf(req), req.params.id, req.body ?? {})));
+  r.post("/lotto/draws/:id/cancel", send((req) => cancelLotto(db, adminOf(req), req.params.id)));
 
   /* players */
   r.get("/users", send((req) => searchUsers(db, query(req))));

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#1a0207">
+<title>WIN B Lotto — WIN B WIN</title>
+<meta name="description" content="WIN B Lotto: pick numbers from 1-90 for 5/90 draws — Direct, Perm and Banker tickets, payouts fixed when you buy, numbers drawn at random by the server.">
+<link rel="stylesheet" href="assets/css/styles.css?v=39">
+<link rel="stylesheet" href="assets/css/minigame.css">
+<link rel="stylesheet" href="assets/css/lotto.css?v=3">
+<link rel="icon" href="assets/img/winb-mark.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/img/app/w-apple-touch-icon-180.png">
+<link rel="apple-touch-icon" sizes="120x120" href="assets/img/app/w-apple-touch-icon-120.png">
+<link rel="apple-touch-icon" sizes="152x152" href="assets/img/app/w-apple-touch-icon-152.png">
+<link rel="apple-touch-icon" sizes="167x167" href="assets/img/app/w-apple-touch-icon-167.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/img/app/w-apple-touch-icon-180.png">
+<meta name="apple-mobile-web-app-title" content="WIN B casino">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<script src="assets/js/data.js?v=56"></script>
+<script src="assets/js/splash.js?v=34"></script>
+</head>
+<body class="game-page lt-page" data-shell="game">
+
+<header class="mg-header lt-header">
+  <a class="mg-icon-btn" href="games.html?category=Live%20Casino" aria-label="Back to the lobby"><i data-icon="arrowLeft"></i></a>
+  <h1 class="mg-title lt-title">WIN B Lotto</h1>
+  <span class="mg-balance lt-bal">GHS <b data-wallet-balance-num>0.00</b></span>
+  <button class="mg-icon-btn" type="button" id="ltRulesBtn" aria-label="How to play"><i data-icon="info"></i></button>
+</header>
+
+<main class="lt-main" id="ltMain">
+  <p class="lt-closed" id="ltSalesClosed" hidden><b>Ticket sales open soon.</b> You can look around and pick your numbers — buying a ticket isn't available yet.</p>
+
+  <!-- the draws taking bets -->
+  <div class="lt-draw-tabs" id="ltDrawTabs" role="tablist" aria-label="Draws" hidden></div>
+  <section class="lt-draw" aria-labelledby="ltDrawTitle">
+    <div class="lt-draw-top">
+      <span class="lt-badge" id="ltStatus">Loading…</span>
+      <span class="lt-draw-when" id="ltDrawWhen"></span>
+    </div>
+    <h2 id="ltDrawTitle" class="lt-draw-title">WIN B Lotto</h2>
+    <div class="lt-count" aria-live="off">
+      <span class="lt-count-label" id="ltCountLabel">Betting closes in</span>
+      <span class="lt-count-time" id="ltCount">--:--:--</span>
+    </div>
+    <p class="lt-hash" id="ltHashRow" hidden>Draw fingerprint <code id="ltHash">—</code></p>
+  </section>
+
+  <div class="lt-grid-wrap">
+    <!-- pick numbers -->
+    <section class="lt-pick" aria-labelledby="ltPickTitle">
+      <div class="lt-types" id="ltTypes" role="tablist" aria-label="Bet type"></div>
+      <div class="lt-pick-head">
+        <h2 id="ltPickTitle">Pick your numbers</h2>
+        <div class="lt-pick-tools">
+          <label class="lt-qp" id="ltPermSizeWrap" hidden>Perm
+            <select id="ltPermSize" aria-label="Numbers per line"></select>
+          </label>
+          <label class="lt-qp" id="ltQpWrap">Quick pick
+            <select id="ltQpCount" aria-label="How many numbers to quick pick"></select>
+          </label>
+          <button class="btn btn-ghost lt-mini" type="button" id="ltQuick">Pick</button>
+          <button class="btn btn-ghost lt-mini" type="button" id="ltClear">Clear</button>
+        </div>
+      </div>
+      <p class="lt-hint" id="ltHint"></p>
+      <label class="lt-all" id="ltAllWrap" hidden><input type="checkbox" id="ltAgainstAll"> Banker against all (89 lines)</label>
+      <div class="lt-board" id="ltBoard" role="group" aria-label="Numbers 1 to 90"></div>
+    </section>
+
+    <!-- the ticket -->
+    <aside class="lt-slip" aria-labelledby="ltSlipTitle">
+      <h2 id="ltSlipTitle">Your ticket</h2>
+      <div class="lt-picked" id="ltPicked"><span class="lt-empty">Tap numbers on the board</span></div>
+      <dl class="lt-slip-rows">
+        <div><dt>Bet type</dt><dd id="ltType">—</dd></div>
+        <div><dt>Lines</dt><dd id="ltLines">—</dd></div>
+        <div><dt>Pays per winning line</dt><dd id="ltMult">—</dd></div>
+      </dl>
+      <label class="lt-stake-label" for="ltStake" id="ltStakeLabel">Stake per line (GHS)</label>
+      <div class="lt-stake">
+        <button type="button" class="lt-step" data-step="-1" aria-label="Lower the stake">−</button>
+        <input id="ltStake" type="number" inputmode="decimal" min="1" step="1" value="5">
+        <button type="button" class="lt-step" data-step="1" aria-label="Raise the stake">+</button>
+      </div>
+      <div class="lt-chips">
+        <button type="button" data-chip="1">1</button><button type="button" data-chip="5">5</button>
+        <button type="button" data-chip="10">10</button><button type="button" data-chip="50">50</button><button type="button" data-chip="100">100</button>
+      </div>
+      <p class="lt-potential"><span>Ticket cost</span><b id="ltCost">GHS 0.00</b></p>
+      <p class="lt-potential"><span>Potential win</span><b class="lt-win" id="ltPotential">GHS 0.00</b></p>
+      <button class="btn btn-primary btn-block btn-lg" type="button" id="ltBuy" disabled>Review ticket</button>
+      <p class="lt-slip-note" id="ltLimits"></p>
+    </aside>
+  </div>
+
+  <!-- payouts -->
+  <section class="lt-card" aria-labelledby="ltPayTitle">
+    <h2 id="ltPayTitle">Payouts</h2>
+    <p class="lt-sub">A line wins when <b>every</b> number on it is among the 5 winning numbers. Each winning line pays its stake × the figure below, fixed the moment you buy.</p>
+    <table class="lt-table"><thead><tr><th>Line</th><th>Pays</th><th>Chance*</th></tr></thead><tbody id="ltPayouts"></tbody></table>
+    <p class="lt-foot" id="ltPayFoot"></p>
+  </section>
+
+  <!-- my tickets / results -->
+  <section class="lt-card" aria-label="Tickets and results">
+    <div class="lt-tabs" role="tablist">
+      <button type="button" role="tab" aria-selected="true" data-lt-tab="mine">My tickets</button>
+      <button type="button" role="tab" aria-selected="false" data-lt-tab="results">Results</button>
+    </div>
+    <div id="ltMineWrap">
+      <div class="lt-filter" id="ltMineFilter">
+        <button type="button" data-f="all" aria-pressed="true">All</button>
+        <button type="button" data-f="pending" aria-pressed="false">Pending</button>
+        <button type="button" data-f="completed" aria-pressed="false">Completed</button>
+        <button type="button" data-f="won" aria-pressed="false">Winnings</button>
+      </div>
+      <p class="lt-summary" id="ltSummary" hidden></p>
+      <div class="lt-list" id="ltMine"></div>
+    </div>
+    <div class="lt-list" id="ltResults" hidden></div>
+  </section>
+
+  <p class="mg-note">18+ · play responsibly · <button type="button" class="lt-link" id="ltRulesLink">Lotto rules</button></p>
+</main>
+
+<!-- confirm a ticket before buying -->
+<dialog class="mg-dialog lt-confirm" id="ltConfirm" aria-labelledby="ltConfirmTitle">
+  <h2 id="ltConfirmTitle">Confirm your ticket</h2>
+  <div id="ltConfirmBody"></div>
+  <div class="lt-confirm-actions">
+    <button type="button" class="btn btn-ghost btn-lg" id="ltConfirmBack">Back</button>
+    <button type="button" class="btn btn-primary btn-lg" id="ltConfirmBuy">Confirm &amp; buy</button>
+  </div>
+</dialog>
+
+<!-- the ticket just bought -->
+<dialog class="mg-dialog lt-issued" id="ltIssued" aria-labelledby="ltIssuedTitle">
+  <h2 id="ltIssuedTitle">Ticket confirmed</h2>
+  <div id="ltIssuedBody"></div>
+  <form method="dialog"><button class="btn btn-primary btn-block btn-lg">Done</button></form>
+</dialog>
+
+<dialog class="mg-dialog" id="ltRules" aria-labelledby="ltRulesTitle">
+  <h2 id="ltRulesTitle">Lotto rules</h2>
+  <div id="ltRulesBody"></div>
+  <form method="dialog"><button class="btn btn-primary btn-block">Got it</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=51"></script>
+<script src="assets/js/lotto.js?v=3"></script>
+</body>
+</html>

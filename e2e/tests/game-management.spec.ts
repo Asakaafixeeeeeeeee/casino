@@ -29,7 +29,7 @@ test("admin game management: Knockout timing, pause and resume, bet limits, live
     await a.goto("/admin.html");
     await settle(a);
     await adminTab(a, "games");
-    await expect(a.locator(".agm-card")).toHaveCount(19);
+    await expect(a.locator(".agm-card")).toHaveCount(20);
     await expect(a.locator(".agm-card", { hasText: "Knockout" })).toBeVisible();
 
     /* 2. Knockout: 12 seconds to bet, rounds of at most 50x */

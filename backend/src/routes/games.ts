@@ -12,6 +12,7 @@ import { cancelFlightBet, cashOutFlightBet, FLIGHT_GAMES, nextFlight, placeFligh
 import {
   cancelLiveBet, currentLiveRound, LIVE_MAX_BET, LIVE_MIN_BET, liveRound, myLiveBet, placeLiveBet,
 } from "../games/minesLive.js";
+import { buyLottoTicket, getLottoSettings, LOTTO_ID, LOTTO_NAME, lottoState, myLottoTickets } from "../games/lotto.js";
 import { cancelSkyBet, cashOutSkyBet, createSkyLive, placeSkyBet, SKY, SKY_ID } from "../games/skyRush.js";
 
 /** Real-money play: the server draws every outcome and settles it in the ledger. */
@@ -19,8 +20,9 @@ export function gamesRouter(db: Pool): Router {
   const r = Router();
 
   /* which games can be played for real money, with their bet limits */
-  r.get("/", (_req: Request, res: Response) => {
+  r.get("/", async (_req: Request, res: Response) => {
     res.setHeader("Cache-Control", "no-store");
+    const lotto = await getLottoSettings(db).catch(() => ({ min_bet: 1, max_bet: 500 }));
     res.json({
       games: [
         ...Object.values(GAMES).map((g) => ({ id: g.id, name: g.name, type: "round", minBet: g.minBet, maxBet: g.maxBet })),
@@ -28,6 +30,7 @@ export function gamesRouter(db: Pool): Router {
         ...Object.values(FLIGHT_GAMES).map((g) => ({ id: g.id, name: g.name, type: "flight", minBet: g.minBet, maxBet: g.maxBet })),
         { id: "volta-mines-live", name: "Live Mines", type: "live", minBet: LIVE_MIN_BET, maxBet: LIVE_MAX_BET },
         { id: SKY_ID, name: SKY.name, type: "live-crash", minBet: SKY.minBet, maxBet: SKY.maxBet },
+        { id: LOTTO_ID, name: LOTTO_NAME, type: "draw", minBet: lotto.min_bet, maxBet: lotto.max_bet },
       ],
     });
   });
@@ -142,6 +145,13 @@ export function gamesRouter(db: Pool): Router {
   r.post(`/${SKY_ID}/live/bet`, arrived, authenticate, handle((req, userId) => placeSkyBet(db, userId, req.body ?? {}, at(req))));
   r.post(`/${SKY_ID}/live/cancel`, arrived, authenticate, handle((req, userId) => cancelSkyBet(db, userId, req.body ?? {}, at(req))));
   r.post(`/${SKY_ID}/live/cashout`, arrived, authenticate, handle((req, userId) => cashOutSkyBet(db, userId, req.body ?? {}, at(req))));
+
+
+  /* WIN B Lotto: one 5/90 draw a day. The draw (its hash, and once released its numbers and seed), the payouts and
+     the latest results are public; buying a ticket and the player's own tickets need their sign-in. */
+  r.get(`/${LOTTO_ID}/state`, open(() => lottoState(db)));
+  r.get(`/${LOTTO_ID}/tickets`, authenticate, handle((req, userId) => myLottoTickets(db, userId, req.query.status)));
+  r.post(`/${LOTTO_ID}/ticket`, arrived, authenticate, handle((req, userId) => buyLottoTicket(db, userId, req.body ?? {}, at(req))));
 
   return r;
 }

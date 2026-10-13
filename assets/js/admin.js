@@ -560,11 +560,11 @@
   /* Game management: every game as a card (on/off, paused, today's numbers, live play), the studios' switches, and
      a control sheet per game (pause and resume, bet limits, round timing, live activity, statistics, history and
      players' wins and losses). Results are drawn by the server; nothing here can see or change one before it's over. */
-  const GM_KIND = { flight: "Rounds", aviator: "Shared rounds", live: "Live", instant: "Instant", session: "Step by step", demo: "Demo" };
+  const GM_KIND = { flight: "Rounds", aviator: "Shared rounds", live: "Live", lotto: "Daily draw", instant: "Instant", session: "Step by step", demo: "Demo" };
   const GM_FILTERS = [["all", "All games"], ["rounds", "Round games"], ["instant", "Instant & step"], ["paused", "Paused"], ["off", "Off"]];
   const GAME_PAGE = { aviator: "aviator.html", knockout: "knockout.html", crash: "crash.html", mines: "mines.html", "hi-lo": "hilo.html",
     roulette: "roulette.html", olympus: "olympus.html", "blaze-fruits": "fruits.html", "magic-ball": "magicball.html", "red-black": "redblack.html",
-    "even-odd": "evenodd.html", bottle: "bottle.html", coin: "coin.html", goal: "goal.html", crossing: "crossing.html", wings: "wings.html", jet: "volta-jet/index.html" };
+    "even-odd": "evenodd.html", bottle: "bottle.html", coin: "coin.html", goal: "goal.html", crossing: "crossing.html", wings: "wings.html", lotto: "lotto.html", jet: "volta-jet/index.html" };
   const gmState = (g) => (!g.enabled || !g.studio_enabled ? ["bad", g.studio_enabled ? "Off" : "Studio off"] : g.paused ? ["warn", "Paused"] : ["ok", "On"]);
   const xSecs = (x) => Math.log(Math.max(1, x)) / 0.12;
   const secs = (s) => (s >= 60 ? Math.floor(s / 60) + " min " + Math.round(s % 60) + " s" : Math.round(s) + " s");
@@ -651,7 +651,7 @@
   function drawGameList() {
     const q = gm.q.toLowerCase();
     const list = (gm.list || []).filter((g) =>
-      (gm.filter === "all" || (gm.filter === "rounds" && ["flight", "aviator", "live"].includes(g.kind)) || (gm.filter === "instant" && ["instant", "session"].includes(g.kind)) ||
+      (gm.filter === "all" || (gm.filter === "rounds" && ["flight", "aviator", "live", "lotto"].includes(g.kind)) || (gm.filter === "instant" && ["instant", "session"].includes(g.kind)) ||
         (gm.filter === "paused" && g.paused) || (gm.filter === "off" && (!g.enabled || !g.studio_enabled))) &&
       (!q || g.name.toLowerCase().includes(q) || g.studio.toLowerCase().includes(q)));
     $("gmList").innerHTML = list.length ? '<div class="apt-grid agm-grid">' + list.map(gameCard).join("") + "</div>" : empty("No games here.", "slots");
@@ -2723,6 +2723,151 @@
     loadAviator(true);
   }
 
+  /* ================= Lotto ================= */
+  /* the daily 5/90 draw: schedule, payouts and limits; every draw with its tickets; a draw's numbers once betting has
+     closed; Release results pays the winners, Cancel (only while betting is open) refunds every ticket. The settings
+     form is drawn once per visit so the refresh never wipes what's being typed. */
+  const lt = { loading: false, last: null, tickets: null };
+  const LT_STATUS = { OPEN: ["Betting open", "live"], CLOSED: ["Drawn — waiting for release", "warn"], RELEASED: ["Results released", "ok"], CANCELLED: ["Cancelled — refunded", "bad"] };
+  const ltBalls = (ns) => '<span class="lta-balls">' + ns.map((n) => '<span class="lta-ball">' + n + "</span>").join("") + "</span>";
+  function ltForm(s) {
+    const f = (id, label, value, type, step, min, hint) => '<div class="field"><label for="' + id + '">' + label + "</label>" +
+      '<input id="' + id + '" type="' + type + '"' + (step ? ' step="' + step + '"' : "") + (min !== null ? ' min="' + min + '"' : "") + ' value="' + esc(value) + '" required>' +
+      (hint ? '<small class="adm-note">' + hint + "</small>" : "") + "</div>";
+    return '<section class="adm-card"><h3 class="adm-h">Schedule and payouts</h3>' +
+      '<p class="adm-note">Changes apply to the draw taking bets and every draw after it. Tickets already bought keep the payout they were sold at.</p>' +
+      '<form class="adm-terms" data-form="lotto">' +
+      f("ltaTime", "Daily draw time (Ghana time)", s.draw_time, "time", null, null, "Results can be released once betting closes.") +
+      f("ltaCutoff", "Betting closes (minutes before the draw)", s.cutoff_min, "number", "1", "1") +
+      f("ltaRtp", "RTP (%)", s.rtp_pct, "number", "0.01", "50", "Between 50 and 99. Sets every payout: higher RTP = bigger payouts.") +
+      f("ltaMin", "Minimum stake (GHS)", s.min_bet, "number", "0.01", "0.5") +
+      f("ltaMax", "Maximum stake (GHS)", s.max_bet, "number", "0.01", "0.5") +
+      f("ltaWin", "Top win per ticket (GHS)", s.max_win, "number", "0.01", "1") +
+      '<button class="btn btn-primary btn-sm" type="submit">Save settings</button></form>' +
+      '<p class="adm-note">Last changed ' + (s.updated_by ? when(s.updated_at) + " by " + esc(s.updated_by || "—") : "never (defaults)") + ".</p></section>";
+  }
+  function renderLotto(d) {
+    const panel = panelOf("lotto");
+    if (!panel.querySelector("#ltaDraws")) {
+      panel.innerHTML = '<div id="ltaTop"></div><div id="ltaDraws"></div><div id="ltaTickets"></div>' + ltForm(d.settings);
+    }
+    const s = d.settings;
+    $("ltaTop").innerHTML = '<section class="adm-card"><div class="adm-studio-head"><div><strong>Lotto is ' + (d.enabled ? "on" : "paused") + "</strong><small>" +
+      (d.enabled ? "Players can buy tickets. Pausing stops new tickets; tickets already bought stay in their draw." : "No new tickets are sold. Resume to open it again.") + "</small></div>" +
+      '<button class="btn ' + (d.enabled ? "btn-danger" : "btn-success") + ' btn-sm" type="button" data-lt-toggle>' + (d.enabled ? "Pause Lotto" : "Resume Lotto") + "</button></div>" +
+      '<div class="adm-studio-head"><div><strong>Ticket sales are ' + (s.real_money ? "open" : "closed") + "</strong><small>" +
+      (s.real_money ? "Players can buy real-money tickets." : "Players can see the Lotto page but can't buy tickets. Open sales once the required lotto licence and approvals are in place.") + "</small></div>" +
+      '<button class="btn ' + (s.real_money ? "btn-danger" : "btn-success") + ' btn-sm" type="button" data-lt-sales>' + (s.real_money ? "Close ticket sales" : "Open ticket sales") + "</button></div>" +
+      '<div class="adm-mines-meta">' + avStat("Daily draw", esc(s.draw_time) + " GMT") + avStat("Betting closes", s.cutoff_min + " min before") +
+      avStat("RTP", s.rtp_pct + "%") + avStat("Stakes", money(s.min_bet) + " – " + money(s.max_bet)) + avStat("Top win", money(s.max_win)) + "</div>" +
+      '<div class="adm-mines-meta">' + [1, 2, 3, 4, 5].map((k) => avStat("Direct-" + k, count(d.multipliers[k]) + "×")).join("") + "</div></section>";
+    const rows = d.draws.map((x) => {
+      const st = LT_STATUS[x.status] || [x.status, ""];
+      let act = '<button class="btn btn-ghost btn-sm" type="button" data-lt-tickets="' + x.id + '">Tickets</button>';
+      if (x.status === "OPEN") act += ' <button class="btn btn-danger btn-sm" type="button" data-lt-cancel="' + x.id + '">Cancel &amp; refund</button>';
+      if (x.status === "CLOSED") act += ' <button class="btn btn-success btn-sm" type="button" data-lt-release="' + x.id + '">Release results</button>';
+      const result = x.numbers ? ltBalls(x.numbers) : '<span class="adm-note">Hidden until betting closes</span>';
+      const pay = x.status === "CLOSED" && x.projected ? count(x.projected.winners) + " win · " + money(x.projected.payout) + " to pay"
+        : x.status === "RELEASED" ? count(x.winners) + " won · " + money(x.paid) + " paid"
+        : x.status === "CANCELLED" ? count(x.refunded) + " refunded" : "—";
+      return "<tr><td>#" + x.id + " " + esc(x.name || "") + "</td><td>" + when(x.draw_at) + "</td><td>" + pill(st[0], st[1]) + "</td><td>" + result + "</td><td>" +
+        count(x.tickets) + "</td><td>" + money(x.staked) + "</td><td>" + pay + '</td><td class="lta-act">' + act + "</td></tr>";
+    }).join("");
+    $("ltaDraws").innerHTML = '<section class="adm-card"><h3 class="adm-h">Draws</h3>' +
+      '<p class="adm-note">The numbers are drawn by the server when betting closes and are locked to the fingerprint players saw. ' +
+      "Check them here, then press <b>Release results</b> to publish them and pay every winning ticket. A draw nobody releases is released automatically 24 hours after its draw time.</p>" +
+      (rows ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Draw</th><th>Draw time</th><th>Status</th><th>Numbers</th><th>Tickets</th><th>Staked</th><th>Winners</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div>"
+        : empty("No draws yet.", "star")) + "</section>";
+  }
+  function renderLottoTickets() {
+    const t = lt.tickets;
+    if (!t) { $("ltaTickets").innerHTML = ""; return; }
+    $("ltaTickets").innerHTML = '<section class="adm-card"><div class="adm-mines-card-head"><strong>Tickets in draw #' + t.id + "</strong>" +
+      '<button class="btn btn-ghost btn-sm" type="button" data-lt-tickets-close>Close</button></div>' +
+      (t.list.length ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Ticket</th><th>Player</th><th>Phone</th><th>Numbers</th><th>Bet</th><th>Stake</th><th>Potential</th><th>Status</th><th>Win</th><th>Bought</th></tr></thead><tbody>' +
+        t.list.map((x) => "<tr><td>" + esc(x.code || "") + "</td><td>" + esc(x.name) + "</td><td>" + esc(x.phone || "—") + "</td><td>" +
+          (x.banker ? '<span class="lta-balls"><span class="lta-ball lta-bank" title="Banker">' + x.banker + "</span></span> + " : "") +
+          (x.picks.length >= 89 ? "all 89" : ltBalls(x.picks)) + "</td><td>" + esc(x.bet || "Direct-" + x.picks.length) +
+          " · " + count(x.multiplier) + "×" + (x.lines > 1 ? " · " + count(x.lines) + " lines" : "") + "</td><td>" + money(x.stake) + "</td><td>" + money(x.potential) + "</td><td>" +
+          pill(x.status === "ACTIVE" ? "Waiting" : x.status === "WON" ? "Won" : x.status === "LOST" ? "Lost" : "Refunded", x.status === "WON" ? "ok" : x.status === "LOST" ? "bad" : x.status === "ACTIVE" ? "live" : "") +
+          "</td><td>" + (x.payout ? money(x.payout) : "—") + "</td><td>" + when(x.created_at) + "</td></tr>").join("") + "</tbody></table></div>"
+        : '<p class="adm-note">No tickets in this draw.</p>') + "</section>";
+  }
+  async function loadLotto(fresh) {
+    if (lt.loading || state.tab !== "lotto") return;
+    if (fresh) { panelOf("lotto").innerHTML = loading; lt.tickets = null; }
+    lt.loading = true;
+    const r = await api("/lotto");
+    lt.loading = false;
+    if (state.tab !== "lotto") return;
+    if (!r.ok) return flash("error", errText(r, "Couldn't load Lotto."));
+    lt.last = r.data;
+    renderLotto(r.data);
+    renderLottoTickets();
+  }
+  async function lottoTickets(id) {
+    const r = await api("/lotto/tickets?draw=" + encodeURIComponent(id));
+    if (!r.ok) return flash("error", errText(r, "Couldn't load the tickets."));
+    lt.tickets = { id, list: r.data.tickets };
+    renderLottoTickets();
+    $("ltaTickets").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  async function lottoToggle() {
+    const on = !(lt.last && lt.last.enabled);
+    if (!on) {
+      const ok = await ask({ title: "Pause Lotto?", text: "No new tickets are sold until you resume it. Tickets already bought stay in their draw.", yes: "Pause", danger: true });
+      if (ok === null) return;
+    }
+    const r = await api("/catalog/game/lotto", { enabled: on });
+    flash(r.ok ? "ok" : "error", r.ok ? "Lotto is now " + (on ? "on" : "paused") + "." : errText(r, "Couldn't change it."));
+    loadLotto(false);
+  }
+  async function lottoSales() {
+    const open = !(lt.last && lt.last.settings.real_money);
+    const ok = open
+      ? await ask({ title: "Open real-money ticket sales?", text: "Players will be able to buy Lotto tickets with their balance. Only do this once the required lotto licence and approvals are in place — you confirm they are.", yes: "Yes, open sales" })
+      : await ask({ title: "Close ticket sales?", text: "No new tickets are sold. Tickets already bought stay in their draw and are settled as normal.", yes: "Close sales", danger: true });
+    if (ok === null) return;
+    const r = await api("/lotto/settings", open ? { real_money: true, licence_confirmed: true } : { real_money: false });
+    flash(r.ok ? "ok" : "error", r.ok ? "Lotto ticket sales are now " + (open ? "open" : "closed") + "." : errText(r, "Couldn't change it."));
+    loadLotto(false);
+  }
+  async function lottoRelease(id) {
+    const x = lt.last && lt.last.draws.find((d) => d.id === Number(id));
+    const pay = x && x.projected ? x.projected : { winners: 0, payout: 0 };
+    const ok = await ask({ title: "Release the results of draw #" + id + "?",
+      text: "Numbers: " + (x && x.numbers ? x.numbers.join(", ") : "—") + ". " + count(pay.winners) + " winning ticket(s) will be paid " + money(pay.payout) +
+        " in total, straight to their balances. Players see the results at once. This can't be undone.", yes: "Release and pay" });
+    if (ok === null) return;
+    const r = await api("/lotto/draws/" + id + "/release", { confirm: true });
+    flash(r.ok ? "ok" : "error", r.ok ? "Draw #" + id + " released: " + count(r.data.winners) + " winner(s), " + money(r.data.paid) + " paid." : errText(r, "Couldn't release the results."));
+    refreshBadges();
+    loadLotto(false);
+  }
+  async function lottoCancel(id) {
+    const ok = await ask({ title: "Cancel draw #" + id + "?", text: "Every ticket in this draw is refunded in full to the player's balance and no more tickets are sold for it. This can't be undone.", yes: "Cancel and refund", danger: true });
+    if (ok === null) return;
+    const r = await api("/lotto/draws/" + id + "/cancel", {});
+    flash(r.ok ? "ok" : "error", r.ok ? "Draw #" + id + " cancelled: " + count(r.data.tickets) + " ticket(s), " + money(r.data.refunded) + " refunded." : errText(r, "Couldn't cancel the draw."));
+    loadLotto(false);
+  }
+  async function saveLotto(form) {
+    const v = (id) => form.querySelector("#" + id).value;
+    const body = { draw_time: v("ltaTime"), cutoff_min: v("ltaCutoff"), rtp_pct: v("ltaRtp"), min_bet: v("ltaMin"), max_bet: v("ltaMax"), max_win: v("ltaWin") };
+    if (lt.last && Number(body.rtp_pct) !== lt.last.settings.rtp_pct) {
+      const ok = await ask({ title: "Change the RTP to " + esc(body.rtp_pct) + "%?", text: "Every payout changes for new tickets, and the game page shows the new payouts. Tickets already bought keep theirs.", yes: "Change RTP" });
+      if (ok === null) return;
+    }
+    const btn = form.querySelector("button[type=submit]");
+    btn.disabled = true;
+    const r = await api("/lotto/settings", body);
+    btn.disabled = false;
+    if (!r.ok) return flash("error", errText(r, "Couldn't save the settings."));
+    flash("ok", "Lotto settings saved.");
+    panelOf("lotto").innerHTML = "";
+    loadLotto(true);
+  }
+
   /* ================= sections, menu, events, badges ================= */
   /* ================= Recent deposits ================= */
   const dep = { status: "all", q: "", timer: 0 };
@@ -2874,7 +3019,7 @@
     if (r.ok) loadRisk(true);
   }
 
-  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, deposits: loadDeposits, games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), partners: loadPartners, withdrawals: loadWithdrawals, risk: loadRisk, reviews: loadReviews, support: () => loadSupport() };
+  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, deposits: loadDeposits, games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), lotto: () => loadLotto(true), partners: loadPartners, withdrawals: loadWithdrawals, risk: loadRisk, reviews: loadReviews, support: () => loadSupport() };
   const ADD_MONEY = '<button class="btn btn-primary btn-sm" type="button" data-credit>' + U.icon("plus") + "Add money</button>";
   /* each section's title, a line on what it's for, and its buttons */
   const SECTIONS = {
@@ -2888,6 +3033,7 @@
     reviews: { title: "Withdrawal reviews", lead: "What players said about their withdrawals, after an admin approved them. Approve a review, then Publish it to show it on players' profile pages (username, stars and feedback). Only genuine reviews players chose to submit appear here." },
     mines: { title: "Mines Signal", lead: "Admin only: where the hidden mines are in the rounds being played." },
     aviator: { title: "Aviator", lead: "Watch rounds and bets live, pause the game, and set its published RTP and bet limits." },
+    lotto: { title: "Lotto", lead: "The daily 5/90 draw: set the draw time and payouts, see every draw and ticket, check the numbers once betting closes, then release the results to pay the winners." },
     partners: { title: "Partners", lead: "Add partners with a secure setup link, approve applications, pay commission and choose what partners can use.", actions: '<button class="btn btn-primary btn-sm" type="button" data-add-partner>' + U.icon("plus") + "Add partner</button>" },
     support: { title: "Support", lead: "Players write from the chat button on every page; your replies show in their chat as “WIN B casino Support”. Unread conversations come first." },
   };
@@ -2917,6 +3063,7 @@
     set("withdrawals", w.withdrawals || 0);
     set("partners", (w.partners || 0) + (w.partnerPayouts || 0));
     set("reviews", w.reviews || 0);
+    set("lotto", w.lotto || 0);
     set("support", w.support || 0);
     /* on a phone the menu button carries a dot while anything is waiting */
     $("admMenuDot").hidden = !((w.withdrawals || 0) + (w.partners || 0) + (w.partnerPayouts || 0) + (w.support || 0));
@@ -2953,6 +3100,7 @@
   document.querySelector(".adm-wrap").addEventListener("submit", (e) => {
     if (e.target.matches('form[data-act="risk-settings"]')) { e.preventDefault(); saveRiskSettings(e.target); }
     if (e.target.matches('form[data-form="aviator"]')) { e.preventDefault(); saveAviator(e.target); }
+    if (e.target.matches('form[data-form="lotto"]')) { e.preventDefault(); saveLotto(e.target); }
     if (e.target.matches('form[data-form="psettings"]')) { e.preventDefault(); savePartnerSettings(e.target); }
     if (e.target.matches('form[data-form="pperms"]')) { e.preventDefault(); savePartnerPermissions(e.target); }
     if (e.target.matches('form[data-form="flupload"]')) { e.preventDefault(); uploadFlyerAsset(e.target); }
@@ -2966,6 +3114,15 @@
 
   document.querySelector(".adm-wrap").addEventListener("click", (e) => {
     if (e.target.closest("[data-av-toggle]")) return aviatorToggle();
+    if (e.target.closest("[data-lt-toggle]")) return lottoToggle();
+    if (e.target.closest("[data-lt-sales]")) return lottoSales();
+    const ltRel = e.target.closest("[data-lt-release]");
+    if (ltRel) return lottoRelease(ltRel.dataset.ltRelease);
+    const ltCan = e.target.closest("[data-lt-cancel]");
+    if (ltCan) return lottoCancel(ltCan.dataset.ltCancel);
+    const ltTix = e.target.closest("[data-lt-tickets]");
+    if (ltTix) return lottoTickets(ltTix.dataset.ltTickets);
+    if (e.target.closest("[data-lt-tickets-close]")) { lt.tickets = null; return renderLottoTickets(); }
     const copy = e.target.closest("[data-copy]");
     if (copy) return copyText(copy.dataset.copy);
     const gopen = e.target.closest("[data-game-open]");
@@ -3076,6 +3233,7 @@
       setInterval(() => { if (state.tab === "deposits" && !document.hidden) loadDeposits(true); }, 10000),
       setInterval(() => { if (state.tab === "risk" && !document.hidden && !document.querySelector(".adm-sheet")) loadRisk(true); }, 20000),
       setInterval(() => { if (state.tab === "reviews" && !document.hidden) loadReviews(true); }, 20000),
+      setInterval(() => { if (state.tab === "lotto" && !document.hidden && !document.querySelector(".adm-sheet, .me-dialog")) loadLotto(false); }, 20000),
       setInterval(() => { if (state.tab === "support" && !document.hidden && !document.querySelector(".adm-sheet")) loadSupport(true); }, 15000),
       setInterval(() => { if (state.tab === "mines" && !document.hidden) loadMinesSignals(); }, 2000),
       setInterval(() => { if (state.tab === "aviator" && !document.hidden && !document.querySelector(".adm-sheet")) loadAviator(false); }, 2000));

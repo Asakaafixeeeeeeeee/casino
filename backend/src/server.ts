@@ -10,6 +10,7 @@ import { startFlightSweep } from "./games/flights.js";
 import { startLiveSweep } from "./games/minesLive.js";
 import { startSessionSweep } from "./games/sessions.js";
 import { startSkySweep } from "./games/skyRush.js";
+import { startLottoSweep } from "./games/lotto.js";
 import { startPartnerSweep } from "./services/affiliates.js";
 import { startKeepWarm } from "./keepWarm.js";
 
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
   startLiveSweep(db);
   startSessionSweep(db);
   startSkySweep(db);
+  startLottoSweep(db);
   startPartnerSweep(db);
   startKeepWarm();
 }

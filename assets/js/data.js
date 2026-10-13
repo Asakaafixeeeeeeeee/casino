@@ -37,6 +37,10 @@
        seed fingerprint is published before take-off and the seed after it */
     { id: "aviator", name: "Aviator", category: "Live Casino", providerId: "bonwire", icon: "✈️", rtp: 97, maxWin: "₵ 250,000",
       volatility: "Medium", minBet: "₵ 1", tags: ["LIVE", "NEW", "HOT"], real: true, page: "aviator.html", thumb: "assets/img/thumbs/sky-rush.webp" },
+    /* 5/90 draws (backend games/lotto.ts, page lotto.html): Direct, Perm and Banker tickets at fixed odds. How the
+       winning numbers are decided is set per draw and disclosed on the page (players accept the Lotto notice first) */
+    { id: "lotto", name: "WIN B Lotto", category: "Live Casino", providerId: "accra", icon: "🎱", rtp: 90, maxWin: "₵ 100,000",
+      volatility: "High", minBet: "₵ 1", tags: ["NEW"], real: true, page: "lotto.html", thumb: "assets/img/thumbs/lotto.webp" },
     /* the crash maths runs at this RTP (crash.js for credits, backend games/flights.ts for real money) */
     { name: "Crash", category: "Live Casino", providerId: "bonwire", icon: "💥", rtp: 99.23, maxWin: "₵ 250,000",
       volatility: "Low", minBet: "₵ 1", tags: ["HOT"], real: true, page: "crash.html", thumb: "assets/img/thumbs/volta-crash.webp" },
@@ -177,10 +181,8 @@
   /* customer care: live chat is on every page; the email and the numbers to call go HERE, in one place, and show up on
      the Customer care page, in the footer, in the chat and on the legal pages. Leave a field empty and it's not shown. */
   const contact = {
-    email: "",                      /* e.g. "support@rendowin.com" */
-    phones: [                       /* { label, number } — more than one is fine */
-      { label: "Customer care", number: "+233 55 618 5004" }
-    ],
+    email: "xtechihub@gmail.com",
+    phones: [],                     /* { label, number } — none for now: customer care is by email and live chat */
     whatsapp: "",                   /* e.g. "+233240000000" (digits only, with the country code) */
     hours: "8:00 am – 10:00 pm GMT, every day"
   };
