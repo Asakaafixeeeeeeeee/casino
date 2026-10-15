@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { deposit } from "../src/services/balanceService.js";
-import { ensureWalletAccount } from "../src/services/accountLink.js";
 import { AdminError, setUserStatus } from "../src/services/admin.js";
 import { accountRestriction, controlAccount, restrictedUsers } from "../src/services/accountControl.js";
 import { expireBlocks } from "../src/services/blockExpiry.js";
