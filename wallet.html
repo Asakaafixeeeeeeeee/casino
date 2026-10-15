@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0d0e10">
 <title>Deposit | WIN B WIN</title>
 <meta name="description" content="Fund your WIN B casino wallet with mobile money, bank transfer or card.">
-<link rel="stylesheet" href="assets/css/styles.css?v=40">
+<link rel="stylesheet" href="assets/css/styles.css?v=41">
 <link rel="icon" href="assets/img/winb-mark.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="assets/img/app/w-apple-touch-icon-180.png">
@@ -43,15 +43,16 @@
 
     <!-- the deposit, betting and withdrawal rules (Admin -> Betting & withdrawal settings): accepted once per version -->
     <section class="dep-rules" id="depRules" aria-labelledby="depRulesTitle" hidden>
-      <h2 class="dep-rules-title" id="depRulesTitle"><i data-icon="shield"></i>Before you deposit</h2>
+      <h2 class="dep-rules-title" id="depRulesTitle"><i data-icon="shield"></i><span id="depRulesHeading">BEFORE YOU PROCEED WITH YOUR DEPOSIT</span></h2>
       <ul class="dep-rules-list" id="depRulesList"></ul>
       <label class="dep-rules-accept">
         <input type="checkbox" id="depRulesAccept">
-        <span>I have read and accept these deposit, betting and withdrawal rules</span>
+        <span id="depRulesAcceptText">I acknowledge that I have carefully reviewed, understood and accepted the applicable deposit, betting and withdrawal conditions.</span>
       </label>
       <p class="dep-rules-err" id="depRulesErr" role="alert" hidden></p>
-      <p class="dep-rules-more">Full details are in the <a href="terms.html#money-rules">terms</a>.</p>
+      <p class="dep-rules-more">Full details are in the <a href="terms.html#money-rules">Terms and Conditions</a>.</p>
     </section>
+    <div id="depFunds"></div>
     <div class="dep-rules-summary" id="depRulesSummary" hidden>
       <i data-icon="shield"></i>
       <span id="depRulesShort"></span>
@@ -144,8 +145,8 @@
 </main>
 
 <script src="assets/js/data.js?v=58"></script>
-<script src="assets/js/site.js?v=55"></script>
+<script src="assets/js/site.js?v=56"></script>
 <script src="assets/js/pay-fx.js?v=33"></script>
-<script src="assets/js/wallet.js?v=39"></script>
+<script src="assets/js/wallet.js?v=40"></script>
 </body>
 </html>

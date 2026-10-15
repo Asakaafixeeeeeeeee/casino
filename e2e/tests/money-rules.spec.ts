@@ -33,7 +33,6 @@ test("betting & withdrawal settings: admin page, deposit disclosure and acceptan
     const panel = a.locator('[data-panel="moneyrules"]');
     await expect(panel.locator("#mrMin")).toBeVisible();
     await panel.locator("#mrMin").fill("135");
-    await panel.locator("#mrDays").fill("30");
     await panel.locator('input[data-mr="bet_rule_enabled"]').check({ force: true });
     await panel.locator('form[data-form="moneyrules"] button[type="submit"]').click();
     const dialog = a.locator(".me-dialog");
@@ -42,9 +41,10 @@ test("betting & withdrawal settings: admin page, deposit disclosure and acceptan
     await expect(dialog).toContainText("accept the updated rules");
     await dialog.locator("[data-yes]").click();
     await expect(a.locator("#msg")).toContainText("settings saved");
-    await expect(panel).toContainText("Betting eligibility rule");
+    await expect(panel).toContainText("New-deposit betting requirement");
+    await expect(panel).toContainText("Deposit page conditions");
     await expect(panel.locator(".mr-card.is-on")).toHaveCount(1);
-    await expect(panel.locator('[data-mr-preview="bet"]')).toContainText("at least GHS 135 in the last 30 days");
+    await expect(panel.locator('[data-mr-preview="bet"]')).toContainText("Only deposited funds can be staked");
     await expect(a.locator("#mrHistory")).toContainText("Minimum deposit");
     await expect(a.locator("#mrHistory")).toContainText("GHS 135");
     if (SHOTS) await a.screenshot({ path: `${SHOTS}/admin-money-rules.png`, fullPage: true });
@@ -56,9 +56,15 @@ test("betting & withdrawal settings: admin page, deposit disclosure and acceptan
     await settle(p);
     const box = p.locator("#depRules");
     await expect(box).toBeVisible();
-    await expect(box).toContainText("Before you deposit");
-    await expect(box).toContainText("GHS 135.00");
-    await expect(box).toContainText("at least GHS 135 in the last 30 days");
+    await expect(box).toContainText("BEFORE YOU PROCEED WITH YOUR DEPOSIT");
+    await expect(box).toContainText("The minimum permissible deposit is GHS 135.00 per transaction, subject to a maximum of GHS 50,000.00.");
+    await expect(box).toContainText("A qualifying deposit is required to activate a new betting session.");
+    await expect(box).toContainText("Payments Team");
+    await expect(box).toContainText("Minimum Withdrawal: GHS 20.00.");
+    await expect(box).not.toContainText("whole balance");
+    await expect(box).not.toContainText(/admin/i);
+    await expect(box).toContainText("I acknowledge that I have carefully reviewed, understood and accepted the applicable deposit, betting and withdrawal conditions.");
+    await expect(p.locator("#depFunds")).toContainText("Session funds");
     await expect(p.locator(".pay-min").first()).toContainText("135.00");
     await expect(p.locator("#depAmount")).toHaveAttribute("min", "135");
     if (SHOTS) await p.screenshot({ path: `${SHOTS}/wallet-rules-box.png`, fullPage: true });
@@ -74,13 +80,14 @@ test("betting & withdrawal settings: admin page, deposit disclosure and acceptan
     expect((await refused.json()).error).toBe("rules_not_accepted");
     await p.locator("#depRulesAccept").check();
     await expect(p.locator("#depRulesSummary")).toBeVisible();
-    await expect(p.locator("#depRulesSummary")).toContainText("Rules accepted");
+    await expect(p.locator("#depRulesSummary")).toContainText("Conditions accepted");
     await expect(box).toBeHidden();
     if (SHOTS) await p.screenshot({ path: `${SHOTS}/wallet-rules-accepted.png` });
     await p.locator("#depSubmit").click();
     await expect(p.locator("#msg")).toContainText("successful", { timeout: 30_000 });
     expect(await serverBalance(request, player.token)).toBe(135);
-    /* a qualifying deposit: this player may bet */
+    /* a qualifying deposit: this player may stake it */
+    await expect(p.locator("#depFunds")).toContainText("135.00");
     const ok = await request.post(`${API}/api/games/volta-coin/play`, { headers: auth(player.token),
       data: { stake: 2, choice: { pick: "HEADS" }, idempotency_key: "round:e2e-rules-ok-" + Date.now() } });
     expect(ok.status()).toBe(200);
@@ -89,30 +96,39 @@ test("betting & withdrawal settings: admin page, deposit disclosure and acceptan
     await settle(p);
     await expect(p.locator("#depRulesSummary")).toBeVisible();
 
-    /* 3. money from an admin credit, no deposit: bets refused with the message, balance untouched */
+    /* 3. a player left with only winnings: winnings can't be staked (message, balance untouched), and stay theirs */
     const c = await (await browser.newContext()).newPage();
     const cErrors = trackErrors(c);
     const credited = await register(c);
-    const credit = await request.post(`${API}/api/admin/credit`, { headers: auth(adminToken),
-      data: { phone: credited.phone, amount: 30, reason: "e2e credit for the betting rule", idempotency_key: "adjust:e2e-rules-" + Date.now() } });
-    expect(credit.status(), await credit.text()).toBe(200);
+    let won = 0;
+    for (let i = 0; i < 40 && !won; i++) {
+      /* GHS 2 of credited (deposited) money staked on a coin: a loss uses it up, a win leaves only winnings */
+      const credit = await request.post(`${API}/api/admin/credit`, { headers: auth(adminToken),
+        data: { phone: credited.phone, amount: 2, reason: "e2e credit for the betting rule", idempotency_key: "adjust:e2e-rules-" + i + "-" + Date.now() } });
+      expect(credit.status(), await credit.text()).toBe(200);
+      const play = await request.post(`${API}/api/games/volta-coin/play`, { headers: auth(credited.token),
+        data: { stake: 2, choice: { pick: "HEADS" }, idempotency_key: "round:e2e-rules-w-" + i + "-" + Date.now() } });
+      expect(play.status(), await play.text()).toBe(200);
+      won = await serverBalance(request, credited.token);
+    }
+    expect(won, "a coin win within 40 tries").toBeGreaterThan(0);
     const bet = await request.post(`${API}/api/games/volta-coin/play`, { headers: auth(credited.token),
-      data: { stake: 2, choice: { pick: "HEADS" }, idempotency_key: "round:e2e-rules-no-" + Date.now() } });
+      data: { stake: 1, choice: { pick: "HEADS" }, idempotency_key: "round:e2e-rules-no-" + Date.now() } });
     expect(bet.status()).toBe(403);
     const body = await bet.json();
     expect(body.error).toBe("deposit_required");
-    expect(body.message).toContain("at least GHS 135 in the last 30 days");
-    expect(await serverBalance(request, credited.token)).toBe(30);
+    expect(body.message).toContain("cannot be staked");
+    expect(await serverBalance(request, credited.token)).toBe(won);
     /* in a game: the same message, with a way to the deposit page */
     await c.goto("/hilo.html?mode=real");
     await settle(c);
     await c.locator("[data-pick]:not([disabled])").first().click();
     await c.locator("#hlConfirmYes").click();
     await expect(c.locator("#vbDepositRequired")).toBeVisible();
-    await expect(c.locator("#vbDepositRequired")).toContainText("at least GHS 135 in the last 30 days");
+    await expect(c.locator("#vbDepositRequired")).toContainText("cannot be staked");
     await expect(c.locator('#vbDepositRequired a[href="wallet.html"]')).toBeVisible();
     if (SHOTS) await c.screenshot({ path: `${SHOTS}/game-deposit-required.png` });
-    expect(await serverBalance(request, credited.token)).toBe(30);
+    expect(await serverBalance(request, credited.token)).toBe(won);
     expect(cErrors).toEqual([]);
 
     /* 4. the admin sees that player under "Affected players" */

@@ -3,8 +3,10 @@
 // Admin -> "Betting & withdrawal settings": the site's minimum deposit, and two rules an admin can switch on.
 //
 //   - Minimum deposit: every deposit route and page uses this live value (GHS 135 by default).
-//   - Betting eligibility (off by default): a real-money casino bet needs a completed deposit of at least the minimum
-//     within the last N days. It only refuses new bets; it never deducts anything and never touches withdrawals.
+//   - Betting sessions (switched on by migration 041): only session funds — deposited money not yet staked — can be
+//     staked (the ledger keeps the winnings part apart in user_balances.withdrawable, and stakes use deposited money
+//     first). Winnings can't be staked; they stay withdrawable. A new deposit adds session funds. It only refuses bets:
+//     nothing is deducted, deposited money can always be bet, and withdrawals are untouched.
 //   - Withdrawal play-through (off by default): deposited money not yet bet is held from withdrawal:
 //       held = min(balance, deposited part of the balance, qualifying deposits,
 //                  max(0, multiple x qualifying deposits - stakes since the first qualifying deposit))
@@ -32,6 +34,14 @@ export interface MoneyRules {
   withdraw_rule_multiple: number;
   withdraw_rule_message: string;
   withdraw_info: string;
+  policy_heading: string;
+  policy_min_deposit: string;
+  policy_betting: string;
+  policy_funds: string;
+  policy_withdrawal: string;
+  policy_min_withdrawal: string;
+  policy_notice: string;
+  policy_accept: string;
   rules_version: number;
   bet_rule_enabled_at: string | null;
   withdraw_rule_enabled_at: string | null;
@@ -48,13 +58,21 @@ export class MoneyRuleError extends Error {
 
 export const DEFAULT_RULES: MoneyRules = {
   min_deposit: 135,
-  bet_rule_enabled: false,
+  bet_rule_enabled: true,
   bet_rule_days: 30,
-  bet_rule_message: "To place casino bets you need a deposit of at least GHS {min} in the last {days} days. Your balance stays yours: nothing is deducted, you can still see it, and you can still withdraw what is withdrawable.",
+  bet_rule_message: "Only deposited funds can be staked. Your session funds: GHS {session}. Your winnings of GHS {winnings} cannot be staked, but they remain yours to withdraw at any time. A qualifying deposit (minimum GHS {min}) activates a new betting session.",
   withdraw_rule_enabled: false,
   withdraw_rule_multiple: 1,
   withdraw_rule_message: "Deposited money has to be played through before it can be withdrawn. GHS {held} of your balance is held until you place GHS {to_bet} more in bets. Your winnings are never held, and nothing is deducted.",
-  withdraw_info: "Withdrawals are paid to the mobile money number you registered with, after an admin approves them (usually within a few minutes during business hours). The minimum withdrawal is GHS 20. Only winnings can be withdrawn; deposited money stays in your balance for betting. If anything is unclear, contact customer care.",
+  withdraw_info: "Eligible withdrawal requests are securely reviewed and processed by our dedicated Payments Team, usually within a few minutes during business hours, and paid to the Mobile Money number you registered with. The minimum withdrawal is GHS 20.00. Only winnings can be withdrawn; deposited money stays in your balance as session funds for betting. For further clarification, contact our Customer Support Team.",
+  policy_heading: "BEFORE YOU PROCEED WITH YOUR DEPOSIT",
+  policy_min_deposit: "The minimum permissible deposit is GHS {min} per transaction, subject to a maximum of GHS {max}.",
+  policy_betting: "A qualifying deposit is required to activate a new betting session. Existing account balances do not independently qualify users to initiate additional betting sessions. Any remaining funds retain their applicable account rights.",
+  policy_funds: "Your balance is held in two parts. Session funds are your deposited money not yet staked: only session funds can be used to place bets. Winnings are kept separately: they cannot be used to stake, and they remain yours to withdraw at any time (from the minimum withdrawal). No part of your balance is ever deducted or confiscated.",
+  policy_withdrawal: "Eligible withdrawal requests are securely reviewed and processed by our dedicated Payments Team in accordance with the platform's withdrawal policy. Approved payments are disbursed to the registered Mobile Money account.",
+  policy_min_withdrawal: "GHS 20.00.",
+  policy_notice: "Please review the applicable deposit, betting and withdrawal conditions before proceeding. For further clarification, contact our Customer Support Team.",
+  policy_accept: "I acknowledge that I have carefully reviewed, understood and accepted the applicable deposit, betting and withdrawal conditions.",
   rules_version: 1,
   bet_rule_enabled_at: null,
   withdraw_rule_enabled_at: null,
@@ -78,6 +96,14 @@ function fromRow(r: Record<string, unknown> | undefined): MoneyRules {
     withdraw_rule_multiple: r2(r.withdraw_rule_multiple),
     withdraw_rule_message: String(r.withdraw_rule_message ?? ""),
     withdraw_info: String(r.withdraw_info ?? ""),
+    policy_heading: String(r.policy_heading ?? DEFAULT_RULES.policy_heading),
+    policy_min_deposit: String(r.policy_min_deposit ?? DEFAULT_RULES.policy_min_deposit),
+    policy_betting: String(r.policy_betting ?? DEFAULT_RULES.policy_betting),
+    policy_funds: String(r.policy_funds ?? DEFAULT_RULES.policy_funds),
+    policy_withdrawal: String(r.policy_withdrawal ?? DEFAULT_RULES.policy_withdrawal),
+    policy_min_withdrawal: String(r.policy_min_withdrawal ?? DEFAULT_RULES.policy_min_withdrawal),
+    policy_notice: String(r.policy_notice ?? DEFAULT_RULES.policy_notice),
+    policy_accept: String(r.policy_accept ?? DEFAULT_RULES.policy_accept),
     rules_version: Number(r.rules_version),
     bet_rule_enabled_at: iso(r.bet_rule_enabled_at),
     withdraw_rule_enabled_at: iso(r.withdraw_rule_enabled_at),
@@ -103,14 +129,32 @@ export async function getMoneyRules(db: Db, fresh = false): Promise<MoneyRules> 
 /** The live minimum deposit, in GHS. */
 export const minDeposit = async (db: Db) => (await getMoneyRules(db)).min_deposit;
 
-/** Fills {min}, {days}, {multiple}, {held} and {to_bet} in an admin's message (plain text; pages escape it). */
+/** Fills {min}, {max}, {days}, {multiple}, {held}, {to_bet} and {winnings} in an admin's message (plain text; pages
+ *  escape it). */
 export function fillMessage(template: string, values: Record<string, string | number>): string {
-  return template.replace(/\{(min|days|multiple|held|to_bet)\}/g, (all, key: string) =>
+  return template.replace(/\{(min|max|days|multiple|held|to_bet|winnings|session)\}/g, (all, key: string) =>
     values[key] === undefined ? all : typeof values[key] === "number" ? amountText(values[key] as number) : String(values[key]));
 }
 
-export const betRuleMessage = (r: MoneyRules) =>
-  fillMessage(r.bet_rule_message, { min: r.min_deposit, days: String(r.bet_rule_days) });
+const money2 = (n: number) => r2(n).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const betRuleMessage = (r: MoneyRules, winnings = 0, session = 0) =>
+  fillMessage(r.bet_rule_message, { min: money2(r.min_deposit), days: String(r.bet_rule_days), winnings: money2(winnings), session: money2(session) });
+
+/** The deposit page's "Before you proceed" box: every line as the admin wrote it, with the amounts filled in. */
+export function policyOf(r: MoneyRules) {
+  const v = { min: money2(r.min_deposit), max: money2(MAX_DEPOSIT) };
+  const items = [
+    { label: "Minimum Deposit", text: fillMessage(r.policy_min_deposit, v) },
+    ...(r.bet_rule_enabled ? [
+      { label: "Betting Eligibility", text: fillMessage(r.policy_betting, v) },
+      { label: "Your Funds", text: fillMessage(r.policy_funds, v) },
+    ] : []),
+    { label: "Withdrawal Processing", text: fillMessage(r.policy_withdrawal, v) },
+    { label: "Minimum Withdrawal", text: fillMessage(r.policy_min_withdrawal, v) },
+    { label: "Important Notice", text: fillMessage(r.policy_notice, v) },
+  ];
+  return { heading: r.policy_heading, items, accept: r.policy_accept };
+}
 
 /** What every page may know: the minimum deposit and both rules as players see them. */
 export function publicRules(r: MoneyRules) {
@@ -118,7 +162,8 @@ export function publicRules(r: MoneyRules) {
     min_deposit: r.min_deposit,
     max_deposit: MAX_DEPOSIT,
     rules_version: r.rules_version,
-    bet_rule: { enabled: r.bet_rule_enabled, days: r.bet_rule_days, message: betRuleMessage(r) },
+    bet_rule: { enabled: r.bet_rule_enabled, kind: "session", message: betRuleMessage(r) },
+    policy: policyOf(r),
     withdraw_rule: {
       enabled: r.withdraw_rule_enabled, multiple: r.withdraw_rule_multiple,
       /* the template with the amounts still to fill per player */
@@ -133,22 +178,30 @@ export function publicRules(r: MoneyRules) {
 const DEPOSIT_CREDITS = `SELECT e.user_id, e.amount, e.created_at FROM ledger_entries e JOIN ledger_journal j ON j.id = e.journal_id
                           WHERE j.entry_type = 'DEPOSIT' AND e.direction = 'CREDIT' AND e.user_id IS NOT NULL AND e.currency_code = 'GHS'`;
 
-/** Whether a player may place a real-money bet under the betting rule (always true while it's off). */
-export async function betEligibility(db: Db, userId: string): Promise<{ eligible: boolean; rules: MoneyRules }> {
+/** A player's balance in its two parts: session funds (deposited money not yet played) and winnings. */
+export async function fundsOf(db: Db, userId: string): Promise<{ balance: number; session: number; winnings: number }> {
+  const b = (await db.query<{ available: string; withdrawable: string }>(
+    `SELECT available, withdrawable FROM user_balances WHERE user_id = $1 AND currency_code = 'GHS'`, [userId])).rows[0];
+  const balance = r2(b?.available), winnings = Math.min(balance, r2(b?.withdrawable));
+  return { balance, session: Math.max(0, r2(balance - winnings)), winnings };
+}
+
+/** Whether a player may place a real-money bet of `stake`: while the session rule is on, only from session funds
+ *  (deposited money not yet staked) — winnings can't be staked. Always true while the rule is off. */
+export async function betEligibility(db: Db, userId: string, stake = 0.01): Promise<{ eligible: boolean; rules: MoneyRules; winnings: number; session: number }> {
   const rules = await getMoneyRules(db);
-  if (!rules.bet_rule_enabled) return { eligible: true, rules };
-  const { rows } = await db.query(
-    `SELECT 1 FROM (${DEPOSIT_CREDITS}) d WHERE d.user_id = $1 AND d.amount >= $2
-        AND d.created_at > now() - make_interval(days => $3::int) LIMIT 1`,
-    [userId, rules.min_deposit, rules.bet_rule_days]);
-  return { eligible: rows.length > 0, rules };
+  if (!rules.bet_rule_enabled) return { eligible: true, rules, winnings: 0, session: 0 };
+  const f = await fundsOf(db, userId);
+  /* a malformed stake, or one bigger than the whole balance, is left to the game's own checks (which say so) */
+  if (typeof stake !== "number" || !Number.isFinite(stake) || stake <= 0 || stake > f.balance + 1e-9) return { eligible: true, rules, winnings: f.winnings, session: f.session };
+  return { eligible: f.session >= 0.01 && f.session + 1e-9 >= stake, rules, winnings: f.winnings, session: f.session };
 }
 
 /** Refuses a real-money bet the betting rule doesn't allow: 403 deposit_required with the admin's message. Nothing
  *  is taken; the balance stays as it is and can still be withdrawn as usual. */
-export async function assertBetEligible(db: Db, userId: string): Promise<void> {
-  const { eligible, rules } = await betEligibility(db, userId);
-  if (!eligible) throw new MoneyRuleError("deposit_required", betRuleMessage(rules), 403);
+export async function assertBetEligible(db: Db, userId: string, stake?: number): Promise<void> {
+  const { eligible, rules, winnings, session } = await betEligibility(db, userId, stake);
+  if (!eligible) throw new MoneyRuleError("deposit_required", betRuleMessage(rules, winnings, session), 403);
 }
 
 /* ---------------- withdrawal play-through ---------------- */
@@ -242,11 +295,14 @@ export async function acceptRules(db: Db, userId: string, shownVersion?: unknown
 }
 
 /* ---------------- the admin's settings ---------------- */
+const POLICY = ["policy_heading", "policy_min_deposit", "policy_betting", "policy_funds", "policy_withdrawal",
+  "policy_min_withdrawal", "policy_notice", "policy_accept"] as const;
 const FIELDS = ["min_deposit", "bet_rule_enabled", "bet_rule_days", "bet_rule_message", "withdraw_rule_enabled",
-  "withdraw_rule_multiple", "withdraw_rule_message", "withdraw_info"] as const;
+  "withdraw_rule_multiple", "withdraw_rule_message", "withdraw_info", ...POLICY] as const;
 type Field = typeof FIELDS[number];
-/* a change to one of these is material: players accept the rules again */
-const MATERIAL: readonly Field[] = ["min_deposit", "bet_rule_enabled", "bet_rule_days", "withdraw_rule_enabled", "withdraw_rule_multiple"];
+/* a change to one of these is material: players accept the rules again (the policy wording is what they accept) */
+const MATERIAL: readonly Field[] = ["min_deposit", "bet_rule_enabled", "bet_rule_days", "withdraw_rule_enabled", "withdraw_rule_multiple",
+  "policy_min_deposit", "policy_betting", "policy_funds", "policy_withdrawal", "policy_min_withdrawal", "policy_accept"];
 
 function readInput(cur: MoneyRules, input: Record<string, unknown>) {
   const next = {} as Record<Field, unknown>;
@@ -285,6 +341,12 @@ function readInput(cur: MoneyRules, input: Record<string, unknown>) {
   next.withdraw_rule_multiple = num("withdraw_rule_multiple", "a play-through multiple", 0, 20);
   next.withdraw_rule_message = text("withdraw_rule_message", "the withdrawal rule message");
   next.withdraw_info = text("withdraw_info", "the withdrawal information");
+  const POLICY_LABEL: Record<typeof POLICY[number], string> = {
+    policy_heading: "the heading", policy_min_deposit: "the minimum deposit text", policy_betting: "the betting eligibility text",
+    policy_funds: "the funds text", policy_withdrawal: "the withdrawal processing text", policy_min_withdrawal: "the minimum withdrawal text",
+    policy_notice: "the important notice", policy_accept: "the acceptance checkbox text",
+  };
+  for (const k of POLICY) next[k] = text(k, POLICY_LABEL[k]);
   return next;
 }
 
@@ -310,12 +372,15 @@ export async function saveMoneyRules(db: Pool, admin: string, input: Record<stri
       `UPDATE money_rules SET min_deposit = $1, bet_rule_enabled = $2, bet_rule_days = $3, bet_rule_message = $4,
               withdraw_rule_enabled = $5, withdraw_rule_multiple = $6, withdraw_rule_message = $7, withdraw_info = $8,
               rules_version = $9,
+              policy_heading = $11, policy_min_deposit = $12, policy_betting = $13, policy_funds = $14, policy_withdrawal = $15,
+              policy_min_withdrawal = $16, policy_notice = $17, policy_accept = $18,
               bet_rule_enabled_at = CASE WHEN $2 AND NOT bet_rule_enabled THEN now() ELSE bet_rule_enabled_at END,
               withdraw_rule_enabled_at = CASE WHEN $5 AND NOT withdraw_rule_enabled THEN now() ELSE withdraw_rule_enabled_at END,
               updated_by = $10, updated_at = now()
         WHERE id = 1`,
       [next.min_deposit, next.bet_rule_enabled, next.bet_rule_days, next.bet_rule_message, next.withdraw_rule_enabled,
-        next.withdraw_rule_multiple, next.withdraw_rule_message, next.withdraw_info, version, admin]);
+        next.withdraw_rule_multiple, next.withdraw_rule_message, next.withdraw_info, version, admin,
+        ...POLICY.map((k) => next[k])]);
     const changes: Record<string, { before: unknown; after: unknown }> = {};
     for (const k of changed) changes[k] = { before: cur[k], after: next[k] };
     if (bump) changes.rules_version = { before: cur.rules_version, after: version };
@@ -360,8 +425,8 @@ export async function moneyRulesHistory(db: Pool) {
 const nameOf = (r: { full_name?: string | null; username?: string | null }) => r.full_name || r.username || "Player";
 
 /** Players each rule affects right now (up to 100 each, searchable by name or number):
- *   - betting: players with money in their balance and no qualifying deposit in the window (blocked from betting
- *     while the rule is on; listed as "would be blocked" while it's off);
+ *   - betting: players with money in their balance but no session funds left (only winnings): they need a new deposit
+ *     to bet, and their winnings stay withdrawable (listed as "would need one" while the rule is off);
  *   - withdrawal: players with an amount held by the play-through rule (only while it's on). */
 export async function affectedPlayers(db: Pool, input: { q?: unknown } = {}) {
   const rules = await getMoneyRules(db, true);
@@ -370,14 +435,12 @@ export async function affectedPlayers(db: Pool, input: { q?: unknown } = {}) {
   const match = `($1 = '' OR lower(coalesce(u.username, '')) LIKE '%' || $1 || '%' OR lower(coalesce(u.full_name, '')) LIKE '%' || $1 || '%'
                  OR ($2 <> '' AND coalesce(u.phone, '') LIKE '%' || $2 || '%'))`;
   const betRows = (await db.query(
-    `SELECT u.id, u.username, u.full_name, u.phone, b.available, ld.amount AS last_amount, ld.created_at AS last_at
+    `SELECT u.id, u.username, u.full_name, u.phone, b.available, b.withdrawable, ld.amount AS last_amount, ld.created_at AS last_at
        FROM user_balances b JOIN users u ON u.id = b.user_id
        LEFT JOIN LATERAL (SELECT d.amount, d.created_at FROM (${DEPOSIT_CREDITS}) d WHERE d.user_id = u.id ORDER BY d.created_at DESC LIMIT 1) ld ON true
-      WHERE b.currency_code = 'GHS' AND b.available > 0 AND ${match}
-        AND NOT EXISTS (SELECT 1 FROM (${DEPOSIT_CREDITS}) q WHERE q.user_id = u.id AND q.amount >= $3
-                          AND q.created_at > now() - make_interval(days => $4::int))
+      WHERE b.currency_code = 'GHS' AND b.available > 0 AND b.available - b.withdrawable < 0.01 AND ${match}
       ORDER BY b.available DESC LIMIT 100`,
-    [raw, phone.length >= 3 ? phone : "", rules.min_deposit, rules.bet_rule_days])).rows;
+    [raw, phone.length >= 3 ? phone : ""])).rows;
 
   let held: unknown[] = [];
   if (rules.withdraw_rule_enabled && rules.withdraw_rule_enabled_at) {
@@ -397,7 +460,7 @@ export async function affectedPlayers(db: Pool, input: { q?: unknown } = {}) {
     bet_rule: {
       enabled: rules.bet_rule_enabled, min_deposit: rules.min_deposit, days: rules.bet_rule_days,
       players: betRows.map((r) => ({
-        id: r.user_id ?? r.id, name: nameOf(r), phone: r.phone ?? null, balance: r2(r.available),
+        id: r.user_id ?? r.id, name: nameOf(r), phone: r.phone ?? null, balance: r2(r.available), winnings: r2(r.withdrawable),
         last_deposit: r.last_amount == null ? null : r2(r.last_amount), last_deposit_at: iso(r.last_at),
       })),
     },

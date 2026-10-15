@@ -2968,9 +2968,16 @@
     bet_rule_message: "Betting rule message", withdraw_rule_enabled: "Withdrawal play-through rule",
     withdraw_rule_multiple: "Play-through multiple", withdraw_rule_message: "Play-through message",
     withdraw_info: "Withdrawal information", rules_version: "Rules version",
+    policy_heading: "Deposit page heading", policy_min_deposit: "Minimum deposit text", policy_betting: "Betting eligibility text",
+    policy_funds: "Your funds text", policy_withdrawal: "Withdrawal processing text", policy_min_withdrawal: "Minimum withdrawal text",
+    policy_notice: "Important notice", policy_accept: "Acceptance checkbox text",
   };
-  const MR_TEXT = ["bet_rule_message", "withdraw_rule_message", "withdraw_info"];
-  const MR_MATERIAL = ["min_deposit", "bet_rule_enabled", "bet_rule_days", "withdraw_rule_enabled", "withdraw_rule_multiple"];
+  const MR_POLICY = [["policy_heading", "Heading"], ["policy_min_deposit", "Minimum Deposit"], ["policy_betting", "Betting Eligibility"],
+    ["policy_funds", "Your Funds"], ["policy_withdrawal", "Withdrawal Processing"], ["policy_min_withdrawal", "Minimum Withdrawal"],
+    ["policy_notice", "Important Notice"], ["policy_accept", "Acceptance checkbox"]];
+  const MR_TEXT = ["bet_rule_message", "withdraw_rule_message", "withdraw_info"].concat(MR_POLICY.map((x) => x[0]));
+  const MR_MATERIAL = ["min_deposit", "bet_rule_enabled", "bet_rule_days", "withdraw_rule_enabled", "withdraw_rule_multiple",
+    "policy_min_deposit", "policy_betting", "policy_funds", "policy_withdrawal", "policy_min_withdrawal", "policy_accept"];
   const mrValue = (k, v) => {
     if (v === true) return "ON";
     if (v === false) return "OFF";
@@ -2999,13 +3006,13 @@
       "</section>" +
       /* betting eligibility */
       '<section class="adm-card mr-card ' + (s.bet_rule_enabled ? "is-on" : "") + '">' +
-        '<div class="adm-studio-head"><div><strong>Betting eligibility rule</strong><small>' +
-          (s.bet_rule_enabled ? "ON — since " + when(s.bet_rule_enabled_at) : "OFF — everyone with a balance can bet") + "</small></div>" +
-          mrSwitch("bet_rule_enabled", s.bet_rule_enabled, "Betting eligibility rule on or off") + "</div>" +
-        '<p class="adm-note">When ON, a real-money casino bet (every game) needs a completed deposit of at least the minimum within the last N days. ' +
-          "It only refuses new bets: balances are never deducted, stay visible, and withdrawals are not affected.</p>" +
-        mrField("mrDays", "Days a qualifying deposit counts for", '<input id="mrDays" type="number" inputmode="numeric" step="1" min="1" max="365" value="' + esc(String(s.bet_rule_days)) + '">', "1 to 365 days.") +
-        mrField("mrBetMsg", "Message players see when a bet is refused", mrArea("mrBetMsg", s.bet_rule_message), "Plain text, up to 1,000 characters. {min} becomes the minimum deposit and {days} the number of days.") +
+        '<div class="adm-studio-head"><div><strong>New-deposit betting requirement</strong><small>' +
+          (s.bet_rule_enabled ? "ON — since " + when(s.bet_rule_enabled_at) + ": only deposited funds can be staked" : "OFF — the whole balance can be staked") + "</small></div>" +
+          mrSwitch("bet_rule_enabled", s.bet_rule_enabled, "New-deposit betting requirement on or off") + "</div>" +
+        '<p class="adm-note">When ON, every casino game stakes only from session funds (deposited money not yet staked). Winnings can\u2019t be staked; ' +
+          "they stay the player\u2019s and can be withdrawn. A new deposit adds session funds. Balances are never deducted.</p>" +
+        '<input id="mrDays" type="hidden" value="' + esc(String(s.bet_rule_days)) + '">' +
+        mrField("mrBetMsg", "Message players see when a bet is refused", mrArea("mrBetMsg", s.bet_rule_message), "Plain text, up to 1,000 characters. {min} = minimum deposit, {session} = their session funds, {winnings} = their winnings.") +
         '<div class="adm-tp-notice mr-preview"><span>Players read</span><p data-mr-preview="bet">' + esc(p.bet_rule.message) + "</p></div>" +
       "</section>" +
       /* withdrawal play-through */
@@ -3020,6 +3027,12 @@
         mrField("mrWdMsg", "Message players see when a withdrawal is over what they can withdraw", mrArea("mrWdMsg", s.withdraw_rule_message),
           "Plain text, up to 1,000 characters. {held} becomes the amount held, {to_bet} what is still to bet, {multiple} the multiple.") +
       "</section>" +
+      /* the deposit page's "Before you proceed" box: every line players read and accept */
+      '<section class="adm-card mr-card"><h3 class="adm-h">' + U.icon("shield") + "Deposit page conditions (what players accept)</h3>" +
+        '<p class="adm-note">Shown before every first deposit and after any change. {min} and {max} become the minimum and maximum deposit. ' +
+          "Betting Eligibility and Your Funds only show while the new-deposit requirement is ON.</p>" +
+        MR_POLICY.map(([k, label]) => mrField("mr_" + k, label, mrArea("mr_" + k, s[k]), "")).join("") +
+      "</section>" +
       /* general withdrawal information */
       '<section class="adm-card mr-card"><h3 class="adm-h">' + U.icon("withdraw") + "Withdrawal information</h3>" +
         mrField("mrInfo", "Shown on the withdraw page, the deposit page's rules box and the terms", mrArea("mrInfo", s.withdraw_info), "Plain text, up to 1,000 characters.") +
@@ -3027,7 +3040,7 @@
       '<div class="mr-save"><button class="btn btn-primary btn-lg" type="submit"' + (mr.saving ? " disabled" : "") + ">Save settings</button>" +
         '<p class="adm-note">Rules version <b>' + s.rules_version + "</b> · " + count(d.accepted_current) + " player(s) accepted it · " +
         (s.updated_by ? "last changed " + when(s.updated_at) + " by " + esc(s.updated_by) : "never changed (defaults)") +
-        ". Changing the minimum, a switch, the days or the multiple asks players to accept the rules again before their next deposit; wording changes don't.</p></div>" +
+        ". Changing the minimum, a switch, the multiple or the conditions text asks players to accept again before their next deposit.</p></div>" +
       "</form>" +
       '<section class="adm-card mr-card" id="mrAffected">' + loading + "</section>" +
       '<section class="adm-card mr-card" id="mrHistory">' + loading + "</section>";
@@ -3121,6 +3134,7 @@
       withdraw_rule_multiple: val("mrMult").trim() === "" ? "" : Number(val("mrMult")),
       withdraw_rule_message: val("mrWdMsg").trim(),
       withdraw_info: val("mrInfo").trim(),
+      ...Object.fromEntries(MR_POLICY.map(([k]) => [k, val("mr_" + k).trim()])),
     };
   }
   async function saveMoneyRules(form) {

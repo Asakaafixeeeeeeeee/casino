@@ -16,9 +16,10 @@ mkdirSync(stackDir, { recursive: true });
 
 /* The suite's specs fund players with GHS 25-100 deposits, from when the site's minimum deposit was GHS 5. The stack
    starts with that minimum (Admin -> Betting & withdrawal settings; production's default is GHS 135), so those specs
-   keep their amounts; money-rules.spec.ts sets GHS 135 itself and puts this back when it's done. */
+   keep their amounts. They also bet with their winnings, so the stack starts with the betting-session rule off;
+   money-rules.spec.ts sets GHS 135 and switches the rule on itself, and puts both back when it's done. */
 export const E2E_MIN_DEPOSIT = 5;
-const SET_MIN = "UPDATE money_rules SET min_deposit = " + E2E_MIN_DEPOSIT + " WHERE id = 1";
+const SET_MIN = "UPDATE money_rules SET min_deposit = " + E2E_MIN_DEPOSIT + ", bet_rule_enabled = false WHERE id = 1";
 
 const freePort = () => new Promise<number>((resolve) => {
   const s = net.createServer();

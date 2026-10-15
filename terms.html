@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#121212">
 <title>Terms of use — WIN B WIN</title>
 <meta name="description" content="The rules for using WIN B casino: 18+, deposits and withdrawals, fair use and accounts.">
-<link rel="stylesheet" href="assets/css/styles.css?v=40">
+<link rel="stylesheet" href="assets/css/styles.css?v=41">
 <link rel="icon" href="assets/img/winb-mark.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="assets/img/app/w-apple-touch-icon-180.png">
@@ -75,13 +75,16 @@
     <ul>
       <li><b>Minimum deposit.</b> Each deposit must be at least ₵ <span data-rule="min-deposit">135</span> (and at most
         ₵ <span data-rule="max-deposit">50,000</span>). A smaller amount is refused before any payment starts, so no money is taken.</li>
-      <li><b>Which funds can be bet.</b> Your whole cedi balance (deposits and winnings) can be used to place casino bets.
-        <span data-rule="bet-off">Right now there is no extra condition on betting.</span>
-        <span data-rule="bet-on" hidden>Right now the betting eligibility rule is on: to place a real-money casino bet you need
-          a completed deposit of at least ₵ <span data-rule="min-deposit">135</span> within the last
-          <span data-rule="bet-days">30</span> days. Without one, new bets are refused with a message saying so.</span>
-        When the betting eligibility rule is on, it only stops new bets: your balance stays visible, nothing is deducted,
-        and it never stops a withdrawal.</li>
+      <li><b>Betting eligibility and which funds can be staked.</b>
+        <span data-rule="bet-on" hidden>A qualifying deposit is required to activate a new betting session. Your balance is held
+          in two parts: <b>session funds</b> (deposited money not yet staked) and <b>winnings</b>. Only session funds can be used
+          to stake casino bets, in every game; winnings cannot be staked. Existing balances do not on their own start a new
+          betting session: when your session funds are used up, a new deposit of at least ₵ <span data-rule="min-deposit">135</span>
+          starts one. Your winnings always remain yours and can be withdrawn (minimum withdrawal ₵ 20). Your deposit page shows
+          both parts of your balance.</span>
+        <span data-rule="bet-off">Right now your whole balance (deposits and winnings) can be used to place casino bets.</span>
+        This rule only decides whether a bet can be placed: nothing is ever deducted from your balance, your balance stays
+        visible, and it never stops a withdrawal of winnings.</li>
       <li><b>Play-through on deposits.</b>
         <span data-rule="withdraw-off">Right now no play-through rule applies.</span>
         <span data-rule="withdraw-on" hidden>Right now the play-through rule is on: money you deposit while it is on has to be
@@ -95,7 +98,7 @@
       <li><b>Nothing is deducted.</b> These rules never take money from your balance. They only decide whether a new bet
         or a withdrawal request can go ahead.</li>
       <li><b>Withdrawing.</b> <span data-rule="withdraw-info">Withdrawals are paid to the mobile money number you registered
-        with, after an admin approves them. The minimum withdrawal is ₵ 20. Only winnings can be withdrawn; deposited money
+        with, after our Payments Team reviews them. The minimum withdrawal is ₵ 20. Only winnings can be withdrawn; deposited money
         stays in your balance for betting.</span> Start from the <a href="withdraw.html">withdraw page</a>, which shows what
         you can withdraw now. If anything is unclear, <a href="support.html">contact customer care</a>.</li>
     </ul>
@@ -149,6 +152,6 @@
 <footer class="site-footer" data-shell="footer"></footer>
 
 <script src="assets/js/data.js?v=58"></script>
-<script src="assets/js/site.js?v=55"></script>
+<script src="assets/js/site.js?v=56"></script>
 </body>
 </html>

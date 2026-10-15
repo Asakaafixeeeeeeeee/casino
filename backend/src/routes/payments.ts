@@ -24,7 +24,7 @@ import { partnerOf } from "../services/affiliates.js";
 import { permissionsOf } from "../services/partnerPlatform.js";
 import { PAYMENTS_OFF_MESSAGE, paymentsEnabled } from "../services/paymentSettings.js";
 import {
-  acceptRules, amountText, getMoneyRules, hasAcceptedRules, MAX_DEPOSIT, MoneyRuleError, publicRules,
+  acceptRules, amountText, fundsOf, getMoneyRules, hasAcceptedRules, MAX_DEPOSIT, MoneyRuleError, publicRules,
 } from "../services/moneyRules.js";
 
 /* the minimum deposit is the admin's live setting (Admin -> Betting & withdrawal settings; GHS 135 by default) */
@@ -185,7 +185,7 @@ export function paymentsRouter(db: Pool): Router {
       const user = requireUser(req);
       const rules = await getMoneyRules(db);
       res.setHeader("Cache-Control", "no-store");
-      res.json({ rules: publicRules(rules), accepted: await hasAcceptedRules(db, user.id, rules.rules_version) });
+      res.json({ rules: publicRules(rules), accepted: await hasAcceptedRules(db, user.id, rules.rules_version), funds: await fundsOf(db, user.id) });
     } catch (error) {
       next(error);
     }

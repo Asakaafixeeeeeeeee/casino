@@ -111,8 +111,8 @@ export async function gatewayRequests(request: APIRequestContext): Promise<{ met
   return (await request.get(`${GATEWAY}/requests`)).json();
 }
 
-/** On the wallet page: ticks "I have read and accept these deposit, betting and withdrawal rules" when the
- *  "Before you deposit" box asks for it (once per version of the rules), and waits for it to be saved. */
+/** On the wallet page: ticks the acceptance box when the
+ *  "Before you proceed with your deposit" box asks for it (once per version of the rules), and waits for it to be saved. */
 export async function acceptRulesOnPage(page: Page) {
   const box = page.locator("#depRules");
   const summary = page.locator("#depRulesSummary");

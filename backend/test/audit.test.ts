@@ -4,6 +4,7 @@ import http from "node:http";
 import test from "node:test";
 import type { AddressInfo } from "node:net";
 import { setupWalletDb } from "./helpers/walletDb.js";
+import { clearMoneyRulesCache } from "../src/services/moneyRules.js";
 import { deposit } from "../src/services/balanceService.js";
 import { ensureWalletAccount } from "../src/services/accountLink.js";
 import { requestWithdrawal, rejectWithdrawal, payWithdrawal, recheckWithdrawal, settleWithdrawal, WithdrawalError } from "../src/services/withdrawals.js";
@@ -19,9 +20,13 @@ import { cashOutSession, settleAbandonedSessions, startSession, stepSession, ABA
 
 const key = () => "k-" + Math.random().toString(36).slice(2, 12);
 
-/** A player with GHS 100, all of it withdrawable winnings, and the registered number 0241234567 (MTN). */
+/** A player with GHS 100, all of it withdrawable winnings, and the registered number 0241234567 (MTN). These tests
+ *  bet with that money, so the betting-session rule (only deposited funds can be staked) is switched off here; it has
+ *  its own tests in moneyRules.test.ts. */
 async function funded(amount = 100) {
+  clearMoneyRulesCache();
   const env = await setupWalletDb();
+  await env.db.query("UPDATE money_rules SET bet_rule_enabled = false WHERE id = 1");
   await env.db.query(`UPDATE users SET phone = '0241234567' WHERE id = $1`, [env.userId]);
   await env.client.query("BEGIN");
   await deposit(env.client, env.userId, "GHS", amount, "deposit:audit-" + key());

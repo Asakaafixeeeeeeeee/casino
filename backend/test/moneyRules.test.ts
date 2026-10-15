@@ -25,13 +25,18 @@ const isWd = (code: string) => (e: unknown) => e instanceof WithdrawalError && e
 let n = 0;
 const key = () => "mr-" + ++n + "-" + Date.now();
 
-/* every test has its own database: forget the previous one's cached rules */
-async function fresh() {
+/* every test has its own database: forget the previous one's cached rules. Most tests start from the rules as they
+   were before migration 041 switched the betting-session rule on (rule off, version 1), so each switch is tested */
+async function fresh(asMigrated = false) {
   clearMoneyRulesCache();
   clearGameControlsCache();
   clearPlayerRiskCache();
   const env = await setupWalletDb();
   await env.db.query("UPDATE users SET phone = $1 WHERE id = $2", [PHONE, env.userId]);
+  if (!asMigrated) {
+    await env.db.query("UPDATE money_rules SET bet_rule_enabled = false, bet_rule_enabled_at = NULL, rules_version = 1, updated_by = NULL WHERE id = 1");
+    await env.db.query("DELETE FROM money_rule_changes");
+  }
   return env;
 }
 async function pay(env: Env, amount: number) {
@@ -75,18 +80,28 @@ async function call(router: unknown, method: string, path: string, userId: strin
 
 /* ---------------- settings ---------------- */
 
-test("Defaults: minimum deposit GHS 135, both rules off, version 1", async () => {
-  const { db } = await fresh();
+test("As migrated: minimum deposit GHS 135, the betting-session rule on (version 2), the deposit page wording", async () => {
+  const { db } = await fresh(true);
   const r = await getMoneyRules(db, true);
   assert.equal(r.min_deposit, 135);
-  assert.equal(r.bet_rule_enabled, false);
-  assert.equal(r.bet_rule_days, 30);
+  assert.equal(r.bet_rule_enabled, true);
+  assert.ok(r.bet_rule_enabled_at);
   assert.equal(r.withdraw_rule_enabled, false);
   assert.equal(r.withdraw_rule_multiple, 1);
-  assert.equal(r.rules_version, 1);
-  assert.equal(r.bet_rule_message, DEFAULT_RULES.bet_rule_message, "the migration and the code agree on the wording");
-  assert.equal(r.withdraw_rule_message, DEFAULT_RULES.withdraw_rule_message);
-  assert.equal(r.withdraw_info, DEFAULT_RULES.withdraw_info);
+  assert.equal(r.rules_version, 2, "everyone accepts the new conditions before their next deposit");
+  for (const k of ["bet_rule_message", "withdraw_rule_message", "withdraw_info", "policy_heading", "policy_min_deposit", "policy_betting",
+    "policy_funds", "policy_withdrawal", "policy_min_withdrawal", "policy_notice", "policy_accept"] as const) {
+    assert.equal(r[k], DEFAULT_RULES[k], "the migration and the code agree on " + k);
+  }
+  const p = moneyRulesOverview(db);
+  const items = (await p).preview.policy;
+  assert.equal(items.heading, "BEFORE YOU PROCEED WITH YOUR DEPOSIT");
+  assert.deepEqual(items.items.map((i) => i.label), ["Minimum Deposit", "Betting Eligibility", "Your Funds", "Withdrawal Processing", "Minimum Withdrawal", "Important Notice"]);
+  assert.equal(items.items[0]!.text, "The minimum permissible deposit is GHS 135.00 per transaction, subject to a maximum of GHS 50,000.00.");
+  assert.equal(items.items[4]!.text, "GHS 20.00.");
+  assert.ok(!/admin/i.test(JSON.stringify(items)), "no reference to administrators on the customer page");
+  assert.equal(items.accept, "I acknowledge that I have carefully reviewed, understood and accepted the applicable deposit, betting and withdrawal conditions.");
+  assert.equal((await moneyRulesHistory(db)).changes.length, 1, "the switch is in the history");
 });
 
 test("Settings are validated; a refused save changes nothing and leaves no history", async () => {
@@ -150,7 +165,12 @@ test("Each save is audited (history + admin log); material changes bump the vers
   const details = typeof log[1].details === "string" ? JSON.parse(log[1].details) : log[1].details;
   assert.deepEqual(details.changes.min_deposit, { before: 135, after: 150 });
   const o = await moneyRulesOverview(db);
-  assert.equal(o.preview.bet_rule.message, "Deposit GHS 150 within 14 days to bet.", "players read the message with the values filled in");
+  assert.equal(o.preview.bet_rule.message, "Deposit GHS 150.00 within 14 days to bet.", "players read the message with the values filled in");
+  /* the conditions players accept are material; the heading isn't */
+  const v = (await getMoneyRules(db, true)).rules_version;
+  assert.equal((await saveMoneyRules(db, ADMIN, { policy_heading: "BEFORE YOU DEPOSIT" })).settings.rules_version, v);
+  assert.equal((await saveMoneyRules(db, ADMIN, { policy_betting: "New betting conditions." })).settings.rules_version, v + 1);
+  await assert.rejects(() => saveMoneyRules(db, ADMIN, { policy_accept: " " }), isAdmin("invalid_policy_accept"));
 });
 
 test("Only admins reach the settings: the routes sit behind the admin router's guard", () => {
@@ -219,10 +239,11 @@ test("The payment config tells pages the live minimum and the rules", async () =
   const body = c.body as { minDeposit: number; maxDeposit: number; rules: ReturnType<typeof Object> };
   assert.equal(body.minDeposit, 140);
   assert.equal(body.maxDeposit, 50000);
-  const rules = (c.body as { rules: { rules_version: number; bet_rule: { enabled: boolean; days: number; message: string }; withdraw_rule: { enabled: boolean; multiple: number }; withdraw_info: string } }).rules;
+  const rules = (c.body as { rules: { rules_version: number; bet_rule: { enabled: boolean; kind: string; message: string }; policy: { items: { label: string; text: string }[] }; withdraw_rule: { enabled: boolean; multiple: number }; withdraw_info: string } }).rules;
   assert.equal(rules.rules_version, 2);
-  assert.deepEqual([rules.bet_rule.enabled, rules.bet_rule.days], [true, 7]);
-  assert.match(rules.bet_rule.message, /GHS 140 in the last 7 days/);
+  assert.deepEqual([rules.bet_rule.enabled, rules.bet_rule.kind], [true, "session"]);
+  assert.match(rules.bet_rule.message, /minimum GHS 140\.00/);
+  assert.match(rules.policy.items[0]!.text, /GHS 140\.00 per transaction/);
   assert.deepEqual([rules.withdraw_rule.enabled, rules.withdraw_rule.multiple], [true, 1.5]);
   assert.ok(rules.withdraw_info.length > 20);
 });
@@ -237,51 +258,42 @@ test("Bet rule OFF: any funded player bets as before", async () => {
   assert.equal(r.stake, 5);
 });
 
-test("Bet rule ON: refused without a qualifying deposit (nothing taken), allowed with one; withdrawals unaffected", async () => {
+test("Bet rule ON: only deposited funds can be staked, never winnings; nothing is deducted; winnings stay withdrawable", async () => {
   const env = await fresh();
-  await pay(env, 100);                    /* below the GHS 135 minimum: doesn't qualify */
-  await move(env, "BET_SETTLED", 40);     /* 40 of winnings, withdrawable */
+  const router = paymentsRouter(env.db);
+  await pay(env, 100);
+  await move(env, "BET_PLACED", 100);    /* the deposit is fully staked... */
+  await move(env, "BET_SETTLED", 40);    /* ...and 40 won: only winnings left */
   await saveMoneyRules(env.db, ADMIN, { bet_rule_enabled: true });
   const before = await env.balance();
+  assert.deepEqual((await call(router, "get", "/rules", env.userId)).body!.funds, { balance: 40, session: 0, winnings: 40 });
 
-  /* every game passes the same check before its stake is taken */
+  /* every game passes the same check before its stake is taken: winnings can't be staked */
   await assert.rejects(() => assertStakeAllowed(env.db, "volta-coin", 5, env.userId), (e: unknown) =>
     isGame("deposit_required")(e) && (e as GameError).status === 403 &&
-    (e as GameError).message === "To place casino bets you need a deposit of at least GHS 135 in the last 30 days. Your balance stays yours: nothing is deducted, you can still see it, and you can still withdraw what is withdrawable.");
+    (e as GameError).message === "Only deposited funds can be staked. Your session funds: GHS 0.00. Your winnings of GHS 40.00 cannot be staked, but they remain yours to withdraw at any time. A qualifying deposit (minimum GHS 135.00) activates a new betting session.");
   await assert.rejects(() => playRound(env.db, env.userId, "volta-coin", { stake: 5, choice: { pick: "HEADS" }, idempotency_key: "round:" + key() }), isGame("deposit_required"));
   assert.equal(await env.balance(), before, "a refused bet never touches the balance");
-  assert.equal((await env.db.query(`SELECT count(*)::int AS n FROM game_rounds`)).rows[0].n, 0);
 
-  /* the balance is still visible and the winnings can still be withdrawn */
-  const view = await withdrawalView(env.db, env.userId);
-  assert.equal(view.balance, 140);
-  assert.equal(view.withdrawable, 40);
-  await requestWithdrawal(env.db, { id: env.userId, phone: PHONE }, 40, "wd-" + key());
-  assert.equal(await env.balance(), 100);
-
-  /* the player shows up as affected (money in the balance, no qualifying deposit) */
+  /* the player shows up as needing a new deposit */
   const aff = await affectedPlayers(env.db);
   assert.equal(aff.bet_rule.players.length, 1);
-  assert.equal(aff.bet_rule.players[0]!.balance, 100);
-  assert.equal(aff.bet_rule.players[0]!.last_deposit, 100);
+  assert.deepEqual([aff.bet_rule.players[0]!.balance, (aff.bet_rule.players[0] as { winnings: number }).winnings], [40, 40]);
 
-  /* an old qualifying deposit (40 days ago) doesn't count */
-  await pay(env, 200);
-  await env.db.query(`UPDATE ledger_entries SET created_at = now() - interval '40 days' WHERE amount = 200 AND user_id = $1`, [env.userId]);
-  await assert.rejects(() => assertStakeAllowed(env.db, "volta-coin", 5, env.userId), isGame("deposit_required"));
-
-  /* a deposit of at least the minimum within the window: allowed */
+  /* a new deposit: session funds to stake, up to their amount only */
   await pay(env, 135);
-  await assertStakeAllowed(env.db, "volta-coin", 5, env.userId);
+  assert.deepEqual((await call(router, "get", "/rules", env.userId)).body!.funds, { balance: 175, session: 135, winnings: 40 });
+  await assert.rejects(() => assertStakeAllowed(env.db, "volta-coin", 150, env.userId), isGame("deposit_required"), "a stake reaching into winnings is refused");
+  await assertStakeAllowed(env.db, "volta-coin", 135, env.userId);
   const r = await playRound(env.db, env.userId, "volta-coin", { stake: 5, choice: { pick: "HEADS" }, idempotency_key: "round:" + key() });
   assert.equal(r.stake, 5);
   assert.equal((await affectedPlayers(env.db)).bet_rule.players.length, 0);
+  /* stakes always use the deposited money first, so the winnings are untouched and withdrawable */
+  const view = await withdrawalView(env.db, env.userId);
+  assert.ok(view.withdrawable >= 40, "the 40 of winnings are still withdrawable");
+  await requestWithdrawal(env.db, { id: env.userId, phone: PHONE }, 40, "wd-" + key());
 
-  /* a shorter window from the admin: the deposit falls outside it once it's older */
-  await saveMoneyRules(env.db, ADMIN, { bet_rule_days: 1 });
-  await env.db.query(`UPDATE ledger_entries SET created_at = now() - interval '2 days' WHERE amount = 135 AND user_id = $1`, [env.userId]);
-  await assert.rejects(() => assertStakeAllowed(env.db, "volta-coin", 5, env.userId), isGame("deposit_required"));
-  /* switched off: betting is open again */
+  /* switched off: the whole balance can be staked again */
   await saveMoneyRules(env.db, ADMIN, { bet_rule_enabled: false });
   await assertStakeAllowed(env.db, "volta-coin", 5, env.userId);
 });

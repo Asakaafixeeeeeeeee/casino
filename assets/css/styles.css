@@ -975,6 +975,13 @@ a.provider:hover { border-color: var(--yellow); transform: translateY(-1px); }
 .dep-rules-title .ic { width: 18px; height: 18px; flex: none; }
 .dep-rules-list { margin: 0 0 12px; padding-left: 18px; color: var(--muted); font-size: .86rem; line-height: 1.55; overflow-wrap: anywhere; }
 .dep-rules-list li { margin-bottom: 6px; white-space: pre-line; }
+.dep-rules-title span { letter-spacing: .02em; }
+.dep-funds { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; }
+.dep-funds > div { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2, rgba(255,255,255,.04)); border: 1px solid var(--line, rgba(255,255,255,.1)); }
+.dep-funds span { color: var(--muted); font-size: .76rem; font-weight: 700; }
+.dep-funds small { font-weight: 600; opacity: .85; }
+.dep-funds b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+@media (max-width: 380px) { .dep-funds { grid-template-columns: 1fr; } }
 .dep-rules-list b { color: var(--text); }
 .dep-rules-accept {
   display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r-sm);

@@ -198,29 +198,36 @@
     const rulesBox = $("depRules");
     const rulesAccept = $("depRulesAccept");
     const rulesErr = $("depRulesErr");
-    const rs = { rules: null, accepted: false, sending: false };
+    const rs = { rules: null, accepted: false, sending: false, funds: null };
     const ruleItem = (label, text) => "<li><b>" + U.esc(label) + "</b> " + U.esc(text) + "</li>";
     function rulesHtml(r) {
-      const items = [ruleItem("Minimum deposit:", "GHS " + fixed(r.min_deposit) + " per deposit (up to GHS " + fixed(r.max_deposit) + ").")];
-      items.push(r.bet_rule.enabled
-        ? ruleItem("Betting:", r.bet_rule.message)
-        : ruleItem("Betting:", "you can bet with your whole balance."));
+      const items = (r.policy ? r.policy.items : []).map((it) => ruleItem(it.label + ":", it.text));
       if (r.withdraw_rule.enabled) {
-        items.push(ruleItem("Withdrawals:", "money you deposit while this rule is on has to be bet " + r.withdraw_rule.multiple +
-          " time(s) before that deposited money can be withdrawn. Your winnings are never held, rules never apply to earlier deposits, and nothing is ever deducted from your balance."));
+        items.push(ruleItem("Deposit Play-Through:", "money you deposit while this rule is on has to be staked " + r.withdraw_rule.multiple +
+          " time(s) before that deposited money can be withdrawn. Winnings are never held, and nothing is ever deducted from your balance."));
       }
-      if (r.withdraw_info) items.push(ruleItem("Withdrawing:", r.withdraw_info));
       return items.join("");
+    }
+    /* the player's balance in its two parts, so they can see what can be staked and what can be withdrawn */
+    function fundsHtml(f, r) {
+      if (!f || !r.bet_rule.enabled) return "";
+      return '<div class="dep-funds"><div><span>Session funds <small>(can be staked)</small></span><b>GHS ' + fixed(f.session) + "</b></div>" +
+        '<div><span>Winnings <small>(withdrawable, can\u2019t be staked)</small></span><b>GHS ' + fixed(f.winnings) + "</b></div></div>";
     }
     function renderRules() {
       const r = rs.rules;
       const summary = $("depRulesSummary");
       if (!r || !rulesBox) return;
       $("depRulesList").innerHTML = rulesHtml(r);
+      if (r.policy) {
+        $("depRulesHeading").textContent = r.policy.heading;
+        $("depRulesAcceptText").textContent = r.policy.accept;
+      }
+      $("depFunds").innerHTML = fundsHtml(rs.funds, r);
       rulesAccept.checked = rs.accepted;
       rulesAccept.disabled = rs.sending;
-      $("depRulesShort").innerHTML = "Rules accepted · minimum deposit <b>GHS " + fixed(r.min_deposit) + "</b>" +
-        (r.bet_rule.enabled ? " · betting needs a recent deposit" : "") + (r.withdraw_rule.enabled ? " · play-through on deposits" : "") +
+      $("depRulesShort").innerHTML = "Conditions accepted · minimum deposit <b>GHS " + fixed(r.min_deposit) + "</b>" +
+        (r.bet_rule.enabled ? " · only deposited funds can be staked" : "") + (r.withdraw_rule.enabled ? " · play-through on deposits" : "") +
         " · <a href='terms.html#money-rules'>terms</a>";
       const expanded = $("depRulesShow").getAttribute("aria-expanded") === "true";
       rulesBox.hidden = rs.accepted && !expanded;
@@ -237,6 +244,7 @@
       if (!r.ok || !r.data || !r.data.rules) return;
       rs.rules = r.data.rules;
       rs.accepted = !!r.data.accepted;
+      rs.funds = r.data.funds || null;
       applyMinimum(rs.rules);
       renderRules();
     }
@@ -288,6 +296,9 @@
       });
     }
     loadRules();
+    /* the balance changed (a deposit landed, a bet, a withdrawal): show the session funds and winnings as they are now */
+    let fundsTimer = 0;
+    document.addEventListener("vb:balance", () => { clearTimeout(fundsTimer); fundsTimer = setTimeout(loadRules, 400); });
 
     /* asks our server every 4 s for up to 4 minutes; leaving the page doesn't cancel the payment */
     async function waitForPayment(txId) {

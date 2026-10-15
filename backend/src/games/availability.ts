@@ -151,8 +151,8 @@ export const clearPlayerRiskCache = (userId?: string) => (userId ? riskCache.del
 export async function assertStakeAllowed(db: Pool, serverGameId: string, stake: number, userId?: string): Promise<void> {
   if (userId) {
     /* the betting rule: no qualifying deposit in the window, no new bet. Nothing is taken; the balance stays as it is */
-    const bet = await betEligibility(db, userId);
-    if (!bet.eligible) throw new GameError("deposit_required", betRuleMessage(bet.rules), 403);
+    const bet = await betEligibility(db, userId, stake);
+    if (!bet.eligible) throw new GameError("deposit_required", betRuleMessage(bet.rules, bet.winnings, bet.session), 403);
     const risk = await playerRisk(db, userId);
     if (risk.max_bet !== null && stake > risk.max_bet) {
       throw new GameError("invalid_stake", `Your maximum bet is GHS ${risk.max_bet.toLocaleString("en-GH", { minimumFractionDigits: 2 })}. Contact support if you'd like it changed.`);
