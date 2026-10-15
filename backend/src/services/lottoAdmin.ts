@@ -6,12 +6,13 @@
 // confirmation — the draw is then locked); and the settlement history. Every change is in the admin audit log.
 // Switching lotto on/off for the whole site uses the Games tab's switch (catalog_settings, game id "lotto").
 
+import crypto from "node:crypto";
 import type { Pool } from "pg";
 import { hiddenCatalog } from "../games/availability.js";
 import { GameError } from "../games/catalog.js";
 import {
   cancelLottoDraw, createLottoDraw, getLottoSettings, lottoAdminDraws, lottoChance, lottoPlacements, pauseLottoDraw,
-  previewLottoDraw, releaseLottoDraw, saveLottoSettings,
+  lottoNumbersFromSeed, previewLottoDraw, releaseLottoDraw, saveLottoSettings,
 } from "../games/lotto.js";
 import { AdminError, logAction } from "./admin.js";
 
@@ -91,3 +92,36 @@ export const cancelLotto = (db: Pool, admin: string, id: unknown) => asAdmin(asy
   await logAction(db, admin, "lotto.cancel", `lotto:${out.id}`, out);
   return out;
 });
+
+/**
+ * The Lotto Key: every draw whose betting has closed, with the winning numbers the server drew from its seed at the
+ * close (never typed by anyone), the proof they're locked (the seed's SHA-256 is the fingerprint shown to players while
+ * betting was open, and the seed gives exactly these numbers), what publishing will pay, and the draw's audit trail.
+ * Opening it is itself recorded (once per draw and admin) as lotto.preview.
+ */
+export async function lottoKey(db: Pool, admin: string) {
+  const draws = await lottoAdminDraws(db);
+  const closed = draws.filter((d) => d.status === "CLOSED");
+  const pending = [];
+  for (const d of closed) {
+    const row = (await db.query<{ seed: string; hash: string; numbers: number[] | null; closes_at: Date }>(
+      `SELECT seed, hash, numbers, closes_at FROM lotto_draws WHERE id = $1`, [d.id])).rows[0]!;
+    const fromSeed = lottoNumbersFromSeed(row.seed, Number(d.id));
+    const stored = (row.numbers ?? []).map(Number);
+    const locked = crypto.createHash("sha256").update(row.seed).digest("hex") === row.hash
+      && stored.length === fromSeed.length && stored.every((n, i) => n === fromSeed[i]);
+    const seen = await db.query(`SELECT 1 FROM admin_actions WHERE admin = $1 AND action = 'lotto.preview' AND target = $2`, [admin, `lotto:${d.id}`]);
+    if (!seen.rowCount) await logAction(db, admin, "lotto.preview", `lotto:${d.id}`, { numbers: stored, hash: row.hash });
+    pending.push({ id: d.id, name: d.name, draw_at: d.draw_at, closed_at: new Date(row.closes_at).toISOString(), numbers: stored, hash: row.hash,
+      locked, tickets: d.tickets, staked: d.staked, projected: d.projected });
+  }
+  const audit = (await db.query<{ admin: string; action: string; target: string; details: unknown; created_at: Date }>(
+    `SELECT admin, action, target, details, created_at FROM admin_actions WHERE target LIKE 'lotto:%' ORDER BY created_at DESC LIMIT 40`)).rows;
+  return {
+    pending,
+    published: draws.filter((d) => d.status === "RELEASED").slice(0, 10).map((d) => ({
+      id: d.id, name: d.name, draw_at: d.draw_at, numbers: d.numbers, winners: d.winners, paid: d.paid, published_by: d.decided_by, published_at: d.released_at,
+    })),
+    audit: audit.map((a) => ({ admin: a.admin, action: a.action, draw: Number(a.target.slice(6)), at: new Date(a.created_at).toISOString(), details: a.details })),
+  };
+}

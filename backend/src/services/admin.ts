@@ -26,7 +26,7 @@ const gameInfo = (serverId: string) => {
 };
 
 /* a search box term: lower-case text for names, digits (0XXXXXXXXX form) for phone numbers; LIKE wildcards removed */
-function searchTerm(raw: unknown): { text: string; phone: string } {
+export function searchTerm(raw: unknown): { text: string; phone: string } {
   const text = String(raw ?? "").trim().toLowerCase().replace(/[%_\\]/g, "").slice(0, 60);
   let phone = text.replace(/\D/g, "");
   if (phone.startsWith("233")) phone = "0" + phone.slice(3);
@@ -155,7 +155,7 @@ export async function searchUsers(db: Pool, input: { q?: unknown; status?: unkno
   };
 }
 
-async function mustFindUser(db: Db, id: unknown): Promise<string> {
+export async function mustFindUser(db: Db, id: unknown): Promise<string> {
   const uid = String(id ?? "");
   if (!UUID.test(uid) || !(await db.query(`SELECT 1 FROM users WHERE id = $1`, [uid])).rowCount) {
     throw new AdminError("not_found", "That player wasn't found", 404);
@@ -284,7 +284,21 @@ export async function setUserStatus(db: Pool, admin: string, id: unknown, input:
   if (status !== "ACTIVE" && status !== "SUSPENDED") throw new AdminError("invalid_status", "Choose Active or Suspended");
   const reason = String(input.reason ?? "").trim().slice(0, 200);
   if (status === "SUSPENDED" && reason.length < 4) throw new AdminError("reason_needed", "Say why the account is being suspended");
-  await db.query(`UPDATE users SET status = $2::account_status, updated_at = now() WHERE id = $1`, [uid, status]);
+  /* a banned, deactivated or deleted account is changed only from Banned users / Deleted users */
+  const cur = (await db.query<{ restriction: string | null }>(`SELECT restriction FROM users WHERE id = $1`, [uid])).rows[0];
+  if (cur?.restriction && cur.restriction !== "BLOCKED") {
+    throw new AdminError("not_allowed", `This account is ${cur.restriction.toLowerCase()}. Change it from ${cur.restriction === "BANNED" ? "Banned users" : "Deleted users"}.`, 409);
+  }
+  /* Suspend here is a block with no end date (it shows under Blocked users); Activate lifts it */
+  await db.query(
+    `UPDATE users SET status = $2::account_status, restriction = $3, restriction_reason = $4, restricted_at = $5, restricted_by = $6,
+            blocked_until = NULL, updated_at = now() WHERE id = $1`,
+    [uid, status, status === "SUSPENDED" ? "BLOCKED" : null, status === "SUSPENDED" ? reason : null, status === "SUSPENDED" ? new Date() : null,
+      status === "SUSPENDED" ? admin : null]);
+  if (status === "SUSPENDED" || cur?.restriction === "BLOCKED") {
+    await db.query(`INSERT INTO account_restrictions (user_id, action, reason, admin) VALUES ($1, $2, $3, $4)`,
+      [uid, status === "SUSPENDED" ? "block" : "unblock", reason || null, admin]);
+  }
   await logAction(db, admin, "user.status", uid, { status, reason });
   return { status };
 }

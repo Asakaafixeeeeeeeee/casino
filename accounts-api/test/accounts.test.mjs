@@ -202,3 +202,21 @@ test("The balance service can open an account for an admin (shared secret only),
   const off = await server({ ACCOUNTS_INTERNAL_SECRET: "" }); t.after(off.stop);
   assert.equal((await off.call("POST", "/api/internal/accounts", body, { "x-internal-secret": "" })).status, 403, "switched off without a secret");
 });
+
+test("The main admin's ban or delete stops log-in and ends every session; restoring lets the player back in", async (t) => {
+  const secret = "test-internal-secret-0123456789";
+  const s = await server({ ACCOUNTS_INTERNAL_SECRET: secret }); t.after(s.stop);
+  const reg = await s.call("POST", "/api/register", player(41));
+  const id = (await s.call("GET", "/api/session/verify", null, { authorization: "Bearer " + reg.body.token })).body.user.id;
+  const access = (a, h = { "x-internal-secret": secret }) => s.call("POST", "/api/internal/access", { account_id: id, access: a }, h);
+  assert.equal((await access("BANNED", { "x-internal-secret": "wrong-secret-0123456789xx" })).status, 403, "only with the secret");
+  assert.equal((await access("BANNED")).status, 200);
+  assert.equal((await s.call("GET", "/api/session/verify", null, { authorization: "Bearer " + reg.body.token })).status, 401, "sessions ended");
+  const banned = await s.call("POST", "/api/login", { phone: player(41).phone, password: PW });
+  assert.equal(banned.status, 403);
+  assert.match(banned.body.error, /banned/);
+  assert.equal((await access("DELETED")).status, 200);
+  assert.match((await s.call("POST", "/api/login", { phone: player(41).phone, password: PW })).body.error, /closed/);
+  assert.equal((await access("ACTIVE")).status, 200);
+  assert.equal((await s.call("POST", "/api/login", { phone: player(41).phone, password: PW })).status, 200, "restored");
+});

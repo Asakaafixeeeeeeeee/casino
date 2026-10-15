@@ -1,0 +1,129 @@
+/* Game promotions (a floating picture card) and the Lotto results popup (free text and balls over a light glass blur).
+   Loaded on every page by site.js; see assets/js/promos.js. */
+
+/* ---------------- the promotion card ---------------- */
+.wbp-card {
+  position: fixed; z-index: 9000; right: 20px; bottom: 20px; width: min(340px, calc(100vw - 32px));
+  border-radius: 20px; overflow: hidden; color: #fff;
+  background: linear-gradient(170deg, #2c0812 0%, #13060b 70%);
+  border: 1px solid rgba(255, 200, 61, .45);
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .9), 0 0 0 1px rgba(0, 0, 0, .4), 0 0 40px rgba(255, 179, 0, .15);
+  opacity: 0; transform: translateY(40px) scale(.94); transition: opacity .45s ease, transform .55s cubic-bezier(.2, 1.2, .3, 1);
+  font-family: inherit;
+}
+.wbp-card.is-in { opacity: 1; transform: none; }
+.wbp-card.is-out { opacity: 0; transform: translateY(30px) scale(.96); transition-duration: .35s; }
+.wbp-pic { position: relative; aspect-ratio: 16 / 9; overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, rgba(255, 200, 61, .35), transparent 60%), radial-gradient(circle at 20% 100%, rgba(224, 16, 30, .5), transparent 60%), #1a0509; }
+.wbp-pic img { width: 100%; height: 100%; object-fit: contain; display: block; animation: wbp-zoom 9s ease-out both; }
+.wbp-pic img[src$=".webp"] { object-fit: cover; }
+.wbp-pic::after { content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 45%; pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .28), transparent); transform: skewX(-18deg); animation: wbp-shine 3.2s ease-in-out .6s infinite; }
+@keyframes wbp-zoom { from { transform: scale(1.12); } to { transform: scale(1); } }
+@keyframes wbp-shine { 0%, 55% { left: -60%; } 100% { left: 130%; } }
+.wbp-tag { position: absolute; left: 12px; top: 12px; padding: 4px 10px; border-radius: 999px; font-size: .68rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase;
+  color: #1a1000; background: linear-gradient(180deg, #fff1b0, #ffc21a 60%, #c98600); box-shadow: 0 4px 12px rgba(0, 0, 0, .4); }
+.wbp-body { display: grid; gap: 8px; padding: 14px 16px 12px; }
+.wbp-title { margin: 0; font-size: 1.2rem; font-weight: 900; line-height: 1.15;
+  background: linear-gradient(180deg, #fff1b0, #ffd34d 40%, #ffb300); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.wbp-text { margin: 0; color: #e3d7da; font-size: .88rem; line-height: 1.45; }
+.wbp-cta { justify-self: start; display: inline-flex; align-items: center; min-height: 42px; padding: 0 22px; border-radius: 999px; font-weight: 900; font-size: .92rem;
+  text-decoration: none; color: #1a1000; background: linear-gradient(180deg, #fff1b0 0%, #ffd34d 30%, #ffb300 62%, #c98600 100%);
+  box-shadow: 0 8px 22px -8px rgba(255, 179, 0, .8), inset 0 1px 0 rgba(255, 255, 255, .6); transition: transform .15s ease; animation: wbp-pulse 2.4s ease-in-out 1.2s infinite; }
+.wbp-cta:hover { transform: translateY(-2px); }
+@keyframes wbp-pulse { 0%, 100% { box-shadow: 0 8px 22px -8px rgba(255, 179, 0, .8), 0 0 0 0 rgba(255, 200, 61, .5); } 50% { box-shadow: 0 8px 22px -8px rgba(255, 179, 0, .8), 0 0 0 8px rgba(255, 200, 61, 0); } }
+.wbp-mute { justify-self: start; padding: 2px 0; border: 0; background: none; color: #9a8d91; font: inherit; font-size: .74rem; text-decoration: underline; cursor: pointer; }
+.wbp-mute:hover { color: #fff; }
+.wbp-close { position: absolute; z-index: 2; top: 8px; right: 8px; width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .3);
+  background: rgba(0, 0, 0, .55); color: #fff; font-size: 1.15rem; line-height: 1; cursor: pointer; display: grid; place-items: center; backdrop-filter: blur(4px); }
+.wbp-close:hover { background: rgba(224, 16, 30, .7); }
+.wbp-close:focus-visible, .wbp-cta:focus-visible, .wbp-mute:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+@media (max-width: 560px) {
+  .wbp-card { left: 50%; right: auto; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 40px) scale(.94); }
+  .wbp-card.is-in { transform: translate(-50%, 0); }
+  .wbp-card.is-out { transform: translate(-50%, 30px) scale(.96); }
+  .wbp-pic { aspect-ratio: 2 / 1; }
+}
+
+/* ---------------- the Lotto results popup: no box, just a light glass blur ---------------- */
+.wbc-wrap {
+  position: fixed; inset: 0; z-index: 9100; display: grid; place-items: center; padding: 24px 16px; overflow: hidden;
+  background: radial-gradient(circle at 50% 45%, rgba(255, 200, 61, .1), rgba(20, 4, 10, .22) 70%);
+  -webkit-backdrop-filter: blur(7px) saturate(1.1); backdrop-filter: blur(7px) saturate(1.1);
+  opacity: 0; transition: opacity .5s ease;
+}
+.wbc-wrap.is-in { opacity: 1; }
+.wbc-wrap.is-out { opacity: 0; transition-duration: .55s; }
+.wbc-stage { position: relative; z-index: 2; display: grid; justify-items: center; gap: 10px; text-align: center; max-width: 640px;
+  transform: translateY(24px) scale(.92); transition: transform .8s cubic-bezier(.2, 1.3, .3, 1); }
+.wbc-wrap.is-in .wbc-stage { transform: none; }
+.wbc-wrap.is-out .wbc-stage { transform: translateY(-16px) scale(.96); transition-duration: .5s; }
+.wbc-kicker { margin: 0; color: #fff; font-size: .78rem; font-weight: 900; letter-spacing: .28em; text-transform: uppercase; text-shadow: 0 2px 10px rgba(0, 0, 0, .8); }
+.wbc-title {
+  margin: 0; font-size: clamp(2rem, 8vw, 4rem); font-weight: 900; line-height: 1.02; letter-spacing: .02em;
+  background: linear-gradient(100deg, #fff1b0 0%, #ffd34d 25%, #fff 45%, #ffb300 65%, #fff1b0 100%); background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, .7)) drop-shadow(0 0 22px rgba(255, 179, 0, .35));
+  animation: wbc-shimmer 3s linear infinite;
+}
+.wbc-title span { -webkit-text-fill-color: initial; color: initial; display: inline-block; animation: wbc-wiggle 1.4s ease-in-out .8s 3; }
+@keyframes wbc-shimmer { to { background-position: -220% 0; } }
+@keyframes wbc-wiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-14deg) scale(1.15); } 75% { transform: rotate(10deg) scale(1.1); } }
+.wbc-draw { margin: 0; color: #fff; font-size: clamp(1rem, 3.4vw, 1.3rem); font-weight: 800; text-shadow: 0 2px 12px rgba(0, 0, 0, .85); }
+.wbc-note { margin: 0; color: #f3e8ea; font-size: .82rem; text-shadow: 0 1px 8px rgba(0, 0, 0, .9); }
+.wbc-balls { display: flex; flex-wrap: wrap; justify-content: center; gap: clamp(8px, 2vw, 16px); margin: 8px 0 4px; }
+
+/* the 3D ball (the same look as the Lotto page's balls) */
+.wbc-ball {
+  --s: clamp(52px, 13vw, 76px); --l: #fff3b8; --m: #ffc21a; --d: #7a4c00;
+  position: relative; display: inline-grid; place-items: center; width: var(--s); height: var(--s); border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, var(--l) 0%, var(--m) 40%, var(--d) 84%, #000 118%);
+  box-shadow: inset 0 calc(var(--s) * -.1) calc(var(--s) * .2) rgba(0, 0, 0, .45), inset 0 calc(var(--s) * .05) calc(var(--s) * .08) rgba(255, 255, 255, .22),
+    0 calc(var(--s) * .18) calc(var(--s) * .22) calc(var(--s) * -.06) rgba(0, 0, 0, .75), 0 0 0 2px rgba(255, 211, 77, .9), 0 0 24px rgba(255, 200, 61, .5);
+  animation: wbc-drop .9s cubic-bezier(.3, .9, .3, 1) both;
+}
+.wbc-ball::before { content: ""; position: absolute; z-index: 2; left: 14%; top: 8%; width: 44%; height: 28%; border-radius: 50%; pointer-events: none; transform: rotate(-28deg);
+  background: radial-gradient(ellipse at 50% 40%, rgba(255, 255, 255, .95), rgba(255, 255, 255, .35) 45%, rgba(255, 255, 255, 0) 72%); }
+.wbc-ball i { position: absolute; inset: 20%; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 900; color: #111;
+  font-size: calc(var(--s) * .34); background: radial-gradient(circle at 42% 36%, #fff 0, #f5f5f5 55%, #cdcdcd 100%); box-shadow: inset 0 -1px 2px rgba(0, 0, 0, .25); }
+.wbc-ball.lt-c0 { --l: #ff9a9a; --m: #e01f2d; --d: #5e0309; } .wbc-ball.lt-c1 { --l: #a9cdff; --m: #1f6fe0; --d: #08214f; }
+.wbc-ball.lt-c2 { --l: #a6f5c1; --m: #18b257; --d: #053d1d; } .wbc-ball.lt-c4 { --l: #e0c2ff; --m: #8a3ff0; --d: #2c0a5c; }
+.wbc-ball.lt-c5 { --l: #ffd2a6; --m: #ff7a14; --d: #5e2500; } .wbc-ball.lt-c6 { --l: #b0f5f0; --m: #13b5ac; --d: #033f3b; }
+.wbc-ball.lt-c7 { --l: #ffc2e3; --m: #f0388f; --d: #5e0732; } .wbc-ball.lt-c8 { --l: #ffffff; --m: #bcc3ce; --d: #3c434d; }
+@keyframes wbc-drop {
+  0% { transform: translateY(-160%) rotate(-280deg) scale(.6); opacity: 0; }
+  55% { transform: translateY(10%) rotate(14deg) scale(1); opacity: 1; }
+  75% { transform: translateY(-6%) rotate(-5deg); }
+  100% { transform: none; opacity: 1; }
+}
+
+/* STAKE LOTTO: a button on its own */
+.wbc-stake {
+  margin-top: 10px; display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: 0 30px; border-radius: 999px;
+  font-weight: 900; font-size: .95rem; letter-spacing: .14em; text-decoration: none; color: #1a1000;
+  background: linear-gradient(180deg, #fff1b0 0%, #ffd34d 30%, #ffb300 62%, #c98600 100%);
+  box-shadow: 0 10px 26px -8px rgba(255, 179, 0, .9), inset 0 1px 0 rgba(255, 255, 255, .7);
+  animation: wbp-pulse 2.2s ease-in-out 1.6s infinite; transition: transform .15s ease;
+}
+.wbc-stake:hover { transform: translateY(-2px) scale(1.03); }
+.wbc-close { position: fixed; z-index: 3; top: max(14px, env(safe-area-inset-top, 0px)); right: 14px; width: 36px; height: 36px; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .45); background: rgba(0, 0, 0, .25); color: #fff; font-size: 1.3rem; line-height: 1; cursor: pointer; display: grid; place-items: center; }
+.wbc-close:hover { background: rgba(0, 0, 0, .5); }
+.wbc-stake:focus-visible, .wbc-close:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+/* confetti and little flowers */
+.wbc-confetti { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.wbc-bit, .wbc-flower { position: absolute; top: -24px; animation-name: wbc-fall; animation-timing-function: linear; animation-iteration-count: 2; animation-fill-mode: both; }
+.wbc-bit { width: 8px; height: 13px; border-radius: 2px; opacity: .95; }
+.wbc-flower { line-height: 1; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .4)); }
+@keyframes wbc-fall {
+  0% { transform: translate3d(0, -20px, 0) rotate(0); opacity: 0; }
+  8% { opacity: 1; }
+  100% { transform: translate3d(var(--drift, 0), 105vh, 0) rotate(var(--spin, 360deg)); opacity: .9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wbp-card, .wbc-wrap, .wbc-stage { transition: none; }
+  .wbp-pic img, .wbp-pic::after, .wbp-cta, .wbc-title, .wbc-title span, .wbc-ball, .wbc-stake { animation: none; }
+  .wbc-confetti { display: none; }
+}

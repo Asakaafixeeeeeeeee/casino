@@ -13,7 +13,7 @@ import {
   cancelLiveBet, currentLiveRound, LIVE_MAX_BET, LIVE_MIN_BET, liveRound, myLiveBet, placeLiveBet,
 } from "../games/minesLive.js";
 import { buyLottoTicket, getLottoSettings, LOTTO_ID, LOTTO_NAME, lottoState, myLottoTickets } from "../games/lotto.js";
-import { lottoWinners } from "../games/lottoWinners.js";
+import { latestLottoResult, lottoWinners } from "../games/lottoWinners.js";
 import { cancelSkyBet, cashOutSkyBet, createSkyLive, placeSkyBet, SKY, SKY_ID } from "../games/skyRush.js";
 
 /** Real-money play: the server draws every outcome and settles it in the ledger. */
@@ -153,6 +153,8 @@ export function gamesRouter(db: Pool): Router {
   r.get(`/${LOTTO_ID}/state`, open(() => lottoState(db)));
   /* real winning tickets from released draws only (masked numbers), for the page's winners slides */
   r.get(`/${LOTTO_ID}/winners`, open(() => lottoWinners(db)));
+  /* the latest published result, for the congratulations popup every page shows once it's out */
+  r.get(`/${LOTTO_ID}/latest-result`, open(() => latestLottoResult(db)));
   r.get(`/${LOTTO_ID}/tickets`, authenticate, handle((req, userId) => myLottoTickets(db, userId, req.query.status)));
   r.post(`/${LOTTO_ID}/ticket`, arrived, authenticate, handle((req, userId) => buyLottoTicket(db, userId, req.body ?? {}, at(req))));
 

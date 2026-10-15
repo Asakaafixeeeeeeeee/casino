@@ -586,3 +586,59 @@
 .adm-badge-off { background: #ff4b45 !important; color: #fff !important; }
 @media (min-width: 720px) { .adm-tp-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .adm-panel .adm-mines-meta + .adm-note { margin-top: 10px; }
+
+/* Blocked, Banned and Deleted users */
+.adm-ac-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.adm-ac-stat { display: grid; gap: 2px; text-align: left; padding: 12px 14px; border-radius: var(--r-lg); cursor: pointer; color: var(--text);
+  background: var(--surface); border: 1px solid var(--line-soft); font: inherit; transition: border-color .15s ease; }
+.adm-ac-stat span { color: var(--dim); font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.adm-ac-stat b { font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+.adm-ac-stat.on { border-color: var(--yellow); background: linear-gradient(180deg, rgba(255, 200, 61, .1), var(--surface)); }
+.adm-ac-stat:hover { border-color: var(--line); }
+.adm-ac-results { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.adm-ac-results li { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px;
+  background: var(--bg-raised); border: 1px solid var(--line-soft); }
+.adm-ac-results li > span:first-child { display: grid; }
+.adm-ac-results small { color: var(--dim); font-size: .78rem; }
+.adm-ac-filter { max-width: 260px; }
+.adm-ac-table td small.adm-note { display: block; margin: 2px 0 0; }
+.adm-ac-hist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.adm-ac-hist li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--bg-raised); font-size: .86rem; }
+.adm-ac-hist li small { white-space: nowrap; }
+.adm-ac-dialog .field { margin-top: 10px; }
+.adm-ac-dialog select, .adm-ac-dialog input { width: 100%; }
+.adm-ac-warn { display: flex; gap: 6px; align-items: flex-start; color: #ff8a82; font-weight: 700; margin-bottom: 4px; }
+.adm-ac-warn svg { width: 18px; height: 18px; flex: none; }
+.adm-badge-soft { background: var(--surface-3) !important; color: var(--muted) !important; }
+@media (max-width: 640px) {
+  .adm-ac-hist li { grid-template-columns: 1fr; gap: 4px; }
+  .adm-ac-stat b { font-size: 1.15rem; }
+  .adm-ac-filter { max-width: none; width: 100%; }
+}
+
+/* Lotto Key: the locked numbers of closed draws, as 3D balls */
+.lta-key { border: 1px solid rgba(255, 200, 61, .45); background: radial-gradient(circle at 100% 0, rgba(255, 200, 61, .12), transparent 50%), var(--surface); }
+.lta-key .adm-mines-card-head strong { display: inline-flex; align-items: center; gap: 6px; font-size: 1.05rem; }
+.lta-key .adm-mines-card-head svg { width: 18px; height: 18px; color: var(--yellow); }
+.lta-key-draw { margin-top: 12px; padding: 14px; border-radius: 14px; background: var(--bg-raised); border: 1px solid var(--line-soft); display: grid; gap: 10px; }
+.lta-key-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.lta-key-top small { display: block; color: var(--dim); font-size: .78rem; }
+.lta-key-meta { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: .86rem; }
+.lta-key-balls { display: flex; flex-wrap: wrap; gap: 10px; }
+.lta-key-ball { --s: 54px; --l: #fff3b8; --m: #ffc21a; --d: #7a4c00; position: relative; display: inline-grid; place-items: center; width: var(--s); height: var(--s); border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, var(--l) 0%, var(--m) 40%, var(--d) 84%, #000 118%);
+  box-shadow: inset 0 -5px 10px rgba(0, 0, 0, .45), 0 8px 12px -4px rgba(0, 0, 0, .8); }
+.lta-key-ball::before { content: ""; position: absolute; z-index: 2; left: 14%; top: 8%; width: 44%; height: 28%; border-radius: 50%; transform: rotate(-28deg);
+  background: radial-gradient(ellipse at 50% 40%, rgba(255, 255, 255, .95), rgba(255, 255, 255, 0) 72%); }
+.lta-key-ball i { position: absolute; inset: 20%; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 900; font-size: 1.1rem; color: #111;
+  background: radial-gradient(circle at 42% 36%, #fff 0, #f5f5f5 55%, #cdcdcd 100%); }
+.lta-key-ball.lt-c0 { --l: #ff9a9a; --m: #e01f2d; --d: #5e0309; } .lta-key-ball.lt-c1 { --l: #a9cdff; --m: #1f6fe0; --d: #08214f; }
+.lta-key-ball.lt-c2 { --l: #a6f5c1; --m: #18b257; --d: #053d1d; } .lta-key-ball.lt-c4 { --l: #e0c2ff; --m: #8a3ff0; --d: #2c0a5c; }
+.lta-key-ball.lt-c5 { --l: #ffd2a6; --m: #ff7a14; --d: #5e2500; } .lta-key-ball.lt-c6 { --l: #b0f5f0; --m: #13b5ac; --d: #033f3b; }
+.lta-key-ball.lt-c7 { --l: #ffc2e3; --m: #f0388f; --d: #5e0732; } .lta-key-ball.lt-c8 { --l: #ffffff; --m: #bcc3ce; --d: #3c434d; }
+.lta-publish { justify-self: start; font-weight: 900; letter-spacing: .06em; min-width: 200px; }
+.lta-key-h { margin: 16px 0 6px; font-size: .9rem; color: var(--muted); }
+.lta-key-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.lta-key-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: var(--bg-raised); font-size: .86rem; }
+.lta-key-none { padding: 10px 0; }
+@media (max-width: 480px) { .lta-key-ball { --s: 46px; } .lta-publish { width: 100%; } }

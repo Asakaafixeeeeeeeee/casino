@@ -50,3 +50,16 @@ export async function lottoWinners(db: Pool, now = Date.now()) {
     totals: { winners: Number(t.winners), paid: r2(t.paid), draws: Number(t.draws) },
   };
 }
+
+/** The latest published result, for the site-wide congratulations popup: only a draw whose results were released. */
+export async function latestLottoResult(db: Pool) {
+  const d = (await db.query<{ id: string; name: string | null; numbers: number[] | null; released_at: Date | null; draw_at: Date }>(
+    `SELECT id, name, numbers, released_at, draw_at FROM lotto_draws WHERE status = 'RELEASED' AND numbers IS NOT NULL
+      ORDER BY released_at DESC NULLS LAST, id DESC LIMIT 1`)).rows[0];
+  return {
+    result: d ? {
+      id: Number(d.id), name: d.name || "WIN B Lotto", numbers: d.numbers!.map(Number),
+      published_at: new Date(d.released_at ?? d.draw_at).toISOString(), draw_at: new Date(d.draw_at).toISOString(),
+    } : null,
+  };
+}

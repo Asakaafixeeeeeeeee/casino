@@ -7,6 +7,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { db } from "../db.js";
 import { ensureWalletAccount } from "../services/accountLink.js";
+import { expireBlocks } from "../services/blockExpiry.js";
 
 export interface SessionUser {
   id: string;
@@ -29,7 +30,8 @@ export function suspendedMayDo(method: string, url: string): boolean {
 
 /** Keeps the player's number, full name, optional email and "last seen" current for the admin pages (at most every 5 minutes, or
  *  as soon as the number or name changes), and returns the account's status. */
-async function touchUser(userId: string, phone: string, fullName: string, email: string): Promise<string> {
+async function touchUser(userId: string, phone: string, fullName: string, email: string):
+  Promise<{ status: string; restriction: string | null; until: Date | null }> {
   await db.query(
     `UPDATE users SET phone = COALESCE(NULLIF($2, ''), phone), full_name = COALESCE(NULLIF($3, ''), full_name),
             contact_email = NULLIF($4, ''), last_login_at = now()
@@ -38,8 +40,18 @@ async function touchUser(userId: string, phone: string, fullName: string, email:
                          OR ($3 <> '' AND full_name IS DISTINCT FROM $3)
                          OR contact_email IS DISTINCT FROM NULLIF($4, ''))`,
     [userId, phone, fullName, email]);
-  const { rows } = await db.query<{ status: string }>(`SELECT status::text AS status FROM users WHERE id = $1`, [userId]);
-  return rows[0]?.status ?? "ACTIVE";
+  /* a temporary block whose time is up ends here */
+  await expireBlocks(db, userId);
+  const { rows } = await db.query<{ status: string; restriction: string | null; blocked_until: Date | null }>(
+    `SELECT status::text AS status, restriction, blocked_until FROM users WHERE id = $1`, [userId]);
+  return { status: rows[0]?.status ?? "ACTIVE", restriction: rows[0]?.restriction ?? null, until: rows[0]?.blocked_until ?? null };
+}
+
+/** Banned, deactivated or deleted by the main admin: nothing at all is allowed (the accounts server refuses log-in too). */
+function closedError(restriction: string | null) {
+  return restriction === "BANNED"
+    ? Object.assign(new Error("This account has been banned. Contact customer care if you think this is a mistake."), { status: 403, name: "account_banned" })
+    : Object.assign(new Error("This account has been closed. Contact customer care if you think this is a mistake."), { status: 403, name: "account_closed" });
 }
 
 interface SessionVerifyResponse {
@@ -83,13 +95,18 @@ export async function authenticate(
     const fullName = String(user?.full_name ?? "").slice(0, 120);
     const balanceUserId = await ensureWalletAccount(db, String(accountId), user?.username, phone, user?.country);
     const email = /^[^@s]{1,64}@[^@s]{1,190}.[^@s]{2,}$/.test(String(user?.email ?? "")) ? String(user!.email).toLowerCase() : "";
-    const status = await touchUser(balanceUserId, phone, fullName, email);
+    const { status, restriction, until } = await touchUser(balanceUserId, phone, fullName, email);
+    if (status === "CLOSED") {
+      next(closedError(restriction));
+      return;
+    }
     (req as Request & { user: SessionUser }).user = { id: balanceUserId, accountId: String(accountId), phone, status };
     /* a suspended account can look, and finish what it started, but not bet, deposit or withdraw. The path tested is
        the one Express routed (mount + route path, no query or #fragment): testing originalUrl let a raw client send
        POST /api/user/withdraw#/cashout, which routes to /withdraw but looked like a cash-out to the gate. */
     if (status !== "ACTIVE" && !suspendedMayDo(req.method, (req.baseUrl || "") + (req.path || ""))) {
-      next(Object.assign(new Error("Your account is suspended. Contact support if you think this is a mistake."),
+      const when = until ? " until " + new Date(until).toLocaleString("en-GB", { timeZone: "Africa/Accra", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) + " GMT" : "";
+      next(Object.assign(new Error(`Your account is blocked${when}. Contact support if you think this is a mistake.`),
         { status: 403, name: "account_suspended" }));
       return;
     }

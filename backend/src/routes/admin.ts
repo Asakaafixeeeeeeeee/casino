@@ -22,7 +22,7 @@ import { adminReply, adminThread, adminThreads, setThreadStatus, SupportError, u
 import { listAdminMinesSignals } from "../services/minesSignal.js";
 import { DepositError, recheckDeposit, waitingDeposits } from "../services/depositRecheck.js";
 import { aviatorOverview, saveAviatorSettings } from "../services/aviatorAdmin.js";
-import { cancelLotto, createLotto, lottoOverview, lottoPreview, lottoTickets, pauseLotto, releaseLotto, saveLottoAdminSettings } from "../services/lottoAdmin.js";
+import { cancelLotto, createLotto, lottoKey, lottoOverview, lottoPreview, lottoTickets, pauseLotto, releaseLotto, saveLottoAdminSettings } from "../services/lottoAdmin.js";
 import { gameDetail, gamesOverview, saveGameControls } from "../services/gameAdmin.js";
 import { getPlayerRisk, playerMoney, playersWithLimits, recentDeposits, riskOverview, savePlayerRisk, saveRiskSettings } from "../services/risk.js";
 import { adminReviews, decideReview } from "../services/reviews.js";
@@ -33,6 +33,7 @@ import {
 import { partnerOf } from "../services/affiliates.js";
 import { cancelInvite, createInvite, listInvites, renewInvite } from "../services/partnerInvites.js";
 import { paymentSettingsOverview, pingTeller, setPaymentsEnabled } from "../services/paymentSettings.js";
+import { accountRestriction, controlAccount, restrictedUsers } from "../services/accountControl.js";
 
 const STATUSES = ["REQUESTED", "PAYING", "PAID", "DECLINED"];
 
@@ -69,13 +70,17 @@ export function adminRouter(db: Pool): Router {
               (SELECT count(*) FROM affiliate_payouts WHERE status IN ('REQUESTED', 'APPROVED')) AS partner_payouts,
               (SELECT count(*) FROM withdrawal_reviews WHERE status = 'PENDING') AS reviews,
               (SELECT count(*) FROM lotto_draws WHERE status = 'CLOSED') AS lotto,
-              (SELECT NOT payments_enabled FROM payment_settings WHERE id = 1) AS payments_off`);
+              (SELECT NOT payments_enabled FROM payment_settings WHERE id = 1) AS payments_off,
+              (SELECT count(*) FROM users WHERE restriction = 'BLOCKED') AS blocked,
+              (SELECT count(*) FROM users WHERE restriction = 'BANNED') AS banned,
+              (SELECT count(*) FROM users WHERE restriction IN ('DEACTIVATED', 'DELETED')) AS deleted`);
     res.setHeader("Cache-Control", "no-store");
     res.json({
       admin: true, payoutsEnabled: payouts, paymentsOn: rows[0].payments_off !== true, phone: requireUser(_req).phone,
       waiting: {
         withdrawals: Number(rows[0].withdrawals), partners: Number(rows[0].partners), partnerPayouts: Number(rows[0].partner_payouts),
         reviews: Number(rows[0].reviews), lotto: Number(rows[0].lotto),
+        blocked: Number(rows[0].blocked), banned: Number(rows[0].banned), deleted: Number(rows[0].deleted),
         support: await unreadThreads(db),
       },
     });
@@ -104,11 +109,19 @@ export function adminRouter(db: Pool): Router {
   r.get("/lotto", send(() => lottoOverview(db)));
   r.post("/lotto/settings", send((req) => saveLottoAdminSettings(db, adminOf(req), req.body ?? {})));
   r.get("/lotto/tickets", send((req) => lottoTickets(db, query(req))));
+  /* the Lotto Key: closed draws' locked numbers (drawn by the server at the close), their proof, and the audit trail */
+  r.get("/lotto/key", send((req) => lottoKey(db, adminOf(req))));
   r.post("/lotto/draws", send((req) => createLotto(db, adminOf(req), req.body ?? {})));
   r.get("/lotto/draws/:id/preview", send((req) => lottoPreview(db, req.params.id)));
   r.post("/lotto/draws/:id/pause", send((req) => pauseLotto(db, adminOf(req), req.params.id, req.body ?? {})));
   r.post("/lotto/draws/:id/release", send((req) => releaseLotto(db, adminOf(req), req.params.id, req.body ?? {})));
   r.post("/lotto/draws/:id/cancel", send((req) => cancelLotto(db, adminOf(req), req.params.id)));
+
+  /* Blocked, Banned and Deleted users: the lists, one player's restriction and history, and the actions (block,
+     unblock, ban, lift_ban, deactivate, delete, restore). Records and balances are never removed. */
+  r.get("/accounts/:kind", send((req) => restrictedUsers(db, req.params.kind, req.query.q)));
+  r.get("/users/:id/restriction", send((req) => accountRestriction(db, req.params.id)));
+  r.post("/users/:id/control", send((req) => controlAccount(db, adminOf(req), req.params.id, req.body ?? {})));
 
   /* players */
   r.get("/users", send((req) => searchUsers(db, query(req))));

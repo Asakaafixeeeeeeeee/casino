@@ -2749,7 +2749,7 @@
   function renderLotto(d) {
     const panel = panelOf("lotto");
     if (!panel.querySelector("#ltaDraws")) {
-      panel.innerHTML = '<div id="ltaTop"></div><div id="ltaDraws"></div><div id="ltaTickets"></div>' + ltForm(d.settings);
+      panel.innerHTML = '<div id="ltaKey"></div><div id="ltaTop"></div><div id="ltaDraws"></div><div id="ltaTickets"></div>' + ltForm(d.settings);
     }
     const s = d.settings;
     $("ltaTop").innerHTML = '<section class="adm-card"><div class="adm-studio-head"><div><strong>Lotto is ' + (d.enabled ? "on" : "paused") + "</strong><small>" +
@@ -2804,6 +2804,7 @@
     lt.last = r.data;
     renderLotto(r.data);
     renderLottoTickets();
+    loadLottoKey();
   }
   async function lottoTickets(id) {
     const r = await api("/lotto/tickets?draw=" + encodeURIComponent(id));
@@ -2944,6 +2945,225 @@
     tp.test = r.data;
     flash(r.data.reachable ? "ok" : "error", r.data.reachable ? "TheTeller answered in " + r.data.ms + " ms." : "TheTeller didn't answer: " + esc(r.data.error || "unknown error") + ".");
     if (tp.last) renderPaymentSettings(tp.last);
+  }
+
+  /* ================= Blocked, Banned and Deleted users ================= */
+  /* three menus, one shape: find a player and act, the list with its reasons and dates, and the history. A restriction
+     never touches a balance, a bet or a record; banning or deleting also stops log-in (the accounts server is told). */
+  const AC = {
+    blocked: { title: "Blocked users", act: "block", actLabel: "Block", empty: "No blocked accounts.", ico: "bell",
+      lead: "Temporarily blocked accounts: they can sign in and look, but can't bet, deposit or withdraw. Set an end date or block until you unblock." },
+    banned: { title: "Banned users", act: "ban", actLabel: "Ban", empty: "No banned accounts.", ico: "shield",
+      lead: "Permanently banned accounts: they can't log in, bet or make payment requests. Review a ban and lift it here. Every ban keeps its reason and date." },
+    deleted: { title: "Deleted users", act: "deactivate", actLabel: "Deactivate", empty: "No deactivated or deleted accounts.", ico: "trash",
+      lead: "Deactivated and deleted accounts. They can't log in, but every transaction and audit record is kept, so an account can be restored." },
+  };
+  const AC_LABEL = { block: "Blocked", unblock: "Unblocked", expire: "Block ended", ban: "Banned", lift_ban: "Ban lifted", deactivate: "Deactivated", delete: "Deleted", restore: "Restored" };
+  const ac = { q: {}, timer: 0, found: {}, last: {} };
+  const dateOnly = (iso) => (iso ? new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "—");
+
+  /* a small form in a dialog: fields of { id, label, type: "text" | "select" | "datetime", options, placeholder, hint } */
+  function askForm({ title, text, fields, yes, danger }) {
+    return new Promise((resolve) => {
+      const dlg = document.createElement("div");
+      dlg.className = "me-dialog";
+      dlg.setAttribute("role", "alertdialog");
+      dlg.setAttribute("aria-modal", "true");
+      const field = (f) => '<div class="field adm-ac-field"><label for="acf_' + f.id + '">' + f.label + "</label>" +
+        (f.type === "select" ? '<select id="acf_' + f.id + '">' + f.options.map(([v, l]) => '<option value="' + esc(v) + '">' + esc(l) + "</option>").join("") + "</select>"
+          : f.type === "datetime" ? '<input id="acf_' + f.id + '" type="datetime-local">'
+          : f.type === "textarea" ? '<textarea id="acf_' + f.id + '" class="me-textarea" rows="2" maxlength="300" placeholder="' + esc(f.placeholder || "") + '"></textarea>'
+          : '<input id="acf_' + f.id + '" type="text" autocomplete="off" placeholder="' + esc(f.placeholder || "") + '">') +
+        (f.hint ? '<small class="adm-note">' + f.hint + "</small>" : "") + "</div>";
+      dlg.innerHTML = '<div class="me-dialog-card adm-ac-dialog"><h2>' + title + "</h2>" + (text ? "<p>" + text + "</p>" : "") + fields.map(field).join("") +
+        '<p class="adm-ask-err" hidden></p><div class="me-dialog-actions"><button class="btn btn-ghost btn-lg" type="button" data-no>Cancel</button>' +
+        '<button class="btn ' + (danger ? "btn-danger" : "btn-primary") + ' btn-lg" type="button" data-yes>' + yes + "</button></div></div>";
+      document.body.appendChild(dlg);
+      const val = (id) => { const el = dlg.querySelector("#acf_" + id); return el ? el.value.trim() : ""; };
+      const done = (v) => { dlg.remove(); document.removeEventListener("keydown", onKey); resolve(v); };
+      const onKey = (e) => { if (e.key === "Escape") done(null); };
+      document.addEventListener("keydown", onKey);
+      const custom = dlg.querySelector("#acf_period");
+      const toggleCustom = () => { const w = dlg.querySelector("#acf_until"); if (w) w.closest(".field").hidden = !custom || custom.value !== "custom"; };
+      if (custom) { custom.addEventListener("change", toggleCustom); toggleCustom(); }
+      dlg.addEventListener("click", (e) => {
+        if (e.target === dlg || e.target.closest("[data-no]")) return done(null);
+        if (!e.target.closest("[data-yes]")) return;
+        const out = {};
+        fields.forEach((f) => (out[f.id] = val(f.id)));
+        const bad = fields.find((f) => f.check && f.check(out[f.id], out));
+        if (bad) {
+          const err = dlg.querySelector(".adm-ask-err");
+          err.hidden = false;
+          err.textContent = bad.check(out[bad.id], out);
+          return;
+        }
+        done(out);
+      });
+      (dlg.querySelector("input, textarea, select") || dlg.querySelector("[data-yes]")).focus();
+    });
+  }
+  const REASON = (what) => ({ id: "reason", label: "Reason", type: "textarea", placeholder: "Why " + what + "? (kept in the record)",
+    check: (v) => (v.length < 4 ? "Write the reason (at least 4 characters)." : "") });
+
+  /* the action itself: asks what's needed, sends it, and says what happened */
+  async function accountAction(action, id, name) {
+    const who = "<b>" + esc(name || "this player") + "</b>";
+    let body = null;
+    if (action === "block") {
+      const f = await askForm({ title: "Block " + esc(name || "player") + "?", yes: "Block",
+        text: who + " can still sign in and look, but can't bet, deposit or withdraw until the block ends.",
+        fields: [REASON("block this account"),
+          { id: "period", label: "Blocking period", type: "select", options: [["24h", "24 hours"], ["3d", "3 days"], ["7d", "7 days"], ["30d", "30 days"], ["custom", "Until a date I choose"], ["none", "Until I unblock"]] },
+          { id: "until", label: "Blocked until", type: "datetime", check: (v, o) => (o.period === "custom" && !v ? "Choose the date the block ends." : "") }] });
+      if (!f) return;
+      body = { action, reason: f.reason };
+      if (f.period === "custom") body.until = new Date(f.until).toISOString();
+      else if (f.period !== "none") body[f.period.endsWith("h") ? "hours" : "days"] = parseInt(f.period, 10);
+    } else if (action === "ban") {
+      const f = await askForm({ title: "Ban " + esc(name || "player") + "?", yes: "Ban permanently", danger: true,
+        text: who + " won't be able to log in, bet or make payment requests until an admin lifts the ban. Their records and balance are kept.", fields: [REASON("ban this account")] });
+      if (!f) return;
+      body = { action, reason: f.reason };
+    } else if (action === "lift_ban") {
+      const f = await askForm({ title: "Lift the ban on " + esc(name || "player") + "?", yes: "Lift ban",
+        text: who + " will be able to log in and play again.", fields: [Object.assign(REASON("lift the ban"), { label: "Your review" })] });
+      if (!f) return;
+      body = { action, reason: f.reason };
+    } else if (action === "deactivate") {
+      const f = await askForm({ title: "Deactivate " + esc(name || "player") + "?", yes: "Deactivate", danger: true,
+        text: who + " won't be able to log in. Nothing is erased: you can restore the account at any time.", fields: [REASON("deactivate this account")] });
+      if (!f) return;
+      body = { action, reason: f.reason };
+    } else if (action === "delete") {
+      const f = await askForm({ title: "Delete " + esc(name || "player") + "?", yes: "Delete account", danger: true,
+        text: "<span class='adm-ac-warn'>" + U.icon("bell") + "Warning: " + who + " is signed out everywhere and can't log in again.</span> Transactions, balances and the financial audit history are kept as the law requires, so the account can be restored if needed.",
+        fields: [REASON("delete this account"), { id: "confirm", label: "Type DELETE to confirm", placeholder: "DELETE", check: (v) => (v !== "DELETE" ? "Type DELETE (in capitals) to confirm." : "") }] });
+      if (!f) return;
+      body = { action, reason: f.reason, confirm: f.confirm };
+    } else if (action === "unblock" || action === "restore") {
+      const ok = await ask({ title: (action === "unblock" ? "Unblock " : "Restore ") + esc(name || "player") + "?",
+        text: action === "unblock" ? who + " can bet, deposit and withdraw again." : who + " can log in and use the account again, with the same balance and history.",
+        yes: action === "unblock" ? "Unblock" : "Restore" });
+      if (ok === null) return;
+      body = { action };
+    }
+    const r = await api("/users/" + encodeURIComponent(id) + "/control", body);
+    if (!r.ok) return flash("error", errText(r, "Couldn't change the account."));
+    const sync = r.data.login_synced === false ? " <b>Note:</b> the log-in server didn't confirm, so the player is refused on every page but may still see the log-in succeed. Try again in a minute." : "";
+    flash(r.data.login_synced === false ? "info" : "ok", esc(name || "The player") + ": " + (AC_LABEL[action] || action).toLowerCase() + "." + sync);
+    refreshBadges();
+    if (AC[state.tab]) loadAccounts(state.tab);
+  }
+
+  function accountsShell(kind) {
+    const panel = panelOf(kind);
+    if (panel.querySelector(".adm-ac-find")) return;
+    const c = AC[kind];
+    panel.innerHTML = '<div class="adm-ac-stats" id="acStats_' + kind + '"></div>' +
+      '<section class="adm-card adm-ac-find"><h3 class="adm-h">' + c.actLabel + " a player</h3>" +
+      '<div class="adm-toolbar"><label class="searchbar adm-search">' + U.icon("search") +
+      '<input type="search" data-ac-find="' + kind + '" placeholder="Find a player by name, username or phone" autocomplete="off" aria-label="Find a player"></label></div>' +
+      '<div class="adm-ac-found" id="acFound_' + kind + '"></div></section>' +
+      '<section class="adm-card"><div class="adm-mines-card-head"><strong>' + c.title + '</strong><label class="searchbar adm-search adm-ac-filter">' + U.icon("search") +
+      '<input type="search" data-ac-filter="' + kind + '" placeholder="Search this list" autocomplete="off" aria-label="Search ' + c.title + '"></label></div>' +
+      '<div id="acList_' + kind + '">' + loading + "</div></section>" +
+      '<section class="adm-card"><h3 class="adm-h">History</h3><div id="acHist_' + kind + '"></div></section>';
+  }
+  function acRowActions(kind, u) {
+    const b = (act, label, cls) => '<button class="btn ' + cls + ' btn-sm" type="button" data-ac-act="' + act + '" data-ac-id="' + esc(u.id) + '" data-ac-name="' + esc(u.full_name || u.username || u.phone || "") + '">' + label + "</button>";
+    if (kind === "blocked") return b("unblock", "Unblock", "btn-success") + b("block", "Change period", "btn-ghost") + b("ban", "Ban", "btn-danger");
+    if (kind === "banned") return b("lift_ban", "Review &amp; lift ban", "btn-success");
+    return b("restore", "Restore", "btn-success") + (u.restriction === "DEACTIVATED" ? b("delete", "Delete", "btn-danger") : "");
+  }
+  function renderAccounts(kind, d) {
+    const c = AC[kind];
+    $("acStats_" + kind).innerHTML = ["blocked", "banned", "deleted"].map((k) =>
+      '<button type="button" class="adm-ac-stat' + (k === kind ? " on" : "") + '" data-go="' + k + '"><span>' + AC[k].title + "</span><b>" + count(d.counts[k]) + "</b></button>").join("");
+    const rows = d.users.map((u) => {
+      const status = kind === "blocked" ? (u.until ? pill("Until " + dateOnly(u.until), "warn") : pill("Until unblocked", "warn"))
+        : kind === "banned" ? pill("Banned", "bad") : pill(u.restriction === "DELETED" ? "Deleted" : "Deactivated", u.restriction === "DELETED" ? "bad" : "");
+      return '<tr><td><button type="button" class="adm-link" data-user="' + esc(u.id) + '">' + esc(u.full_name || u.username || "Player") + "</button>" +
+        (u.username ? '<small class="adm-note">@' + esc(u.username) + "</small>" : "") + "</td><td>" + esc(u.phone || "—") +
+        '</td><td class="adm-wrapcell">' + esc(u.reason || "—") + "</td><td>" + dateOnly(u.since) + '<small class="adm-note">by ' + esc(u.by || "—") + "</small></td><td>" + status +
+        "</td>" + (kind === "deleted" ? "<td>" + money(u.balance) + "</td>" : "") + '<td class="lta-act">' + acRowActions(kind, u) + "</td></tr>";
+    }).join("");
+    $("acList_" + kind).innerHTML = rows
+      ? '<div class="adm-table-wrap"><table class="adm-table adm-ac-table"><thead><tr><th>Player</th><th>Phone</th><th>Reason</th><th>Date</th><th>Status</th>' +
+        (kind === "deleted" ? "<th>Balance kept</th>" : "") + "<th></th></tr></thead><tbody>" + rows + "</tbody></table></div>"
+      : empty(c.empty, c.ico);
+    $("acHist_" + kind).innerHTML = d.history.length ? '<ul class="adm-ac-hist">' + d.history.map((h) =>
+      "<li>" + pill(AC_LABEL[h.action] || h.action, h.action === "ban" || h.action === "delete" ? "bad" : h.action === "block" || h.action === "deactivate" ? "warn" : "ok") +
+      "<span><b>" + esc(h.name) + "</b> " + esc(h.phone || "") + (h.reason ? " — " + esc(h.reason) : "") + (h.until ? " · until " + dateOnly(h.until) : "") +
+      (h.login_synced === false ? ' <small class="adm-tp-missing">(log-in server not confirmed)</small>' : "") +
+      '</span><small class="adm-note">' + dateOnly(h.at) + " · " + esc(h.admin) + "</small></li>").join("") + "</ul>"
+      : '<p class="adm-note">Nothing yet.</p>';
+  }
+  async function loadAccounts(kind, quiet) {
+    accountsShell(kind);
+    if (!quiet) $("acList_" + kind).innerHTML = loading;
+    const r = await api("/accounts/" + kind + "?" + new URLSearchParams({ q: ac.q[kind] || "" }));
+    if (state.tab !== kind) return;
+    if (!r.ok) return flash("error", errText(r, "Couldn't load the list."));
+    ac.last[kind] = r.data;
+    renderAccounts(kind, r.data);
+  }
+  async function findForAccounts(kind, q) {
+    const box = $("acFound_" + kind);
+    if (q.length < 2) { box.innerHTML = ""; return; }
+    const r = await api("/users?" + new URLSearchParams({ q }));
+    if (!r.ok) { box.innerHTML = ""; return; }
+    const users = r.data.users.slice(0, 8);
+    const act = AC[kind].act;
+    box.innerHTML = users.length ? '<ul class="adm-ac-results">' + users.map((u) => {
+      const name = u.full_name || u.username || u.phone || "Player";
+      const b = (a, label, cls) => '<button class="btn ' + cls + ' btn-sm" type="button" data-ac-act="' + a + '" data-ac-id="' + esc(u.id) + '" data-ac-name="' + esc(name) + '">' + label + "</button>";
+      const buttons = kind === "deleted" ? b("deactivate", "Deactivate", "btn-ghost") + b("delete", "Delete", "btn-danger")
+        : b(act, AC[kind].actLabel, kind === "banned" ? "btn-danger" : "btn-primary");
+      return "<li><span><b>" + esc(name) + "</b><small>" + esc(u.phone || "—") + " · " + esc(u.status === "SUSPENDED" ? "blocked" : u.status === "CLOSED" ? "closed" : "active") +
+        " · " + money(u.balance) + "</small></span><span class='lta-act'>" + buttons + "</span></li>";
+    }).join("") + "</ul>" : '<p class="adm-note">No player matches “' + esc(q) + "”.</p>";
+  }
+  document.querySelector(".adm-wrap").addEventListener("input", (e) => {
+    const find = e.target.closest("[data-ac-find]");
+    const filter = e.target.closest("[data-ac-filter]");
+    if (!find && !filter) return;
+    clearTimeout(ac.timer);
+    ac.timer = setTimeout(() => {
+      if (find) return findForAccounts(find.dataset.acFind, find.value.trim());
+      ac.q[filter.dataset.acFilter] = filter.value.trim();
+      loadAccounts(filter.dataset.acFilter, true);
+    }, 300);
+  });
+
+  /* ================= Lotto Key ================= */
+  /* closed draws' winning numbers, drawn by the server from each draw's seed the moment betting closed (nobody types or
+     changes them), with the proof they're locked; PUBLISH RESULT makes them public and pays the winners */
+  async function loadLottoKey() {
+    const box = $("ltaKey");
+    if (!box) return;
+    const r = await api("/lotto/key");
+    if (!r.ok || state.tab !== "lotto" || !$("ltaKey")) return;
+    const d = r.data;
+    const big = (ns) => '<span class="lta-key-balls">' + ns.map((n) => '<span class="lta-key-ball lt-c' + Math.min(8, Math.floor((n - 1) / 10)) + '"><i>' + n + "</i></span>").join("") + "</span>";
+    const pend = d.pending.map((x) =>
+      '<div class="lta-key-draw"><div class="lta-key-top"><div><strong>Draw #' + x.id + " · " + esc(x.name || "") + "</strong><small>Betting closed " + when(x.closed_at) + " · draw " + when(x.draw_at) + "</small></div>" +
+      (x.locked ? pill("Numbers locked", "ok") : pill("Check failed — don't publish", "bad")) + "</div>" + big(x.numbers) +
+      '<div class="lta-key-meta"><span>' + count(x.tickets) + " ticket(s) · " + money(x.staked) + " staked</span><span>" +
+      (x.projected ? count(x.projected.winners) + " winner(s) · " + money(x.projected.payout) + " to pay" : "") + "</span></div>" +
+      '<p class="adm-note">Fingerprint <code>' + esc(x.hash.slice(0, 20)) + "…</code> — shown to players before betting closed; the secret seed behind it gives exactly these numbers.</p>" +
+      '<button class="btn btn-success lta-publish" type="button" data-lt-release="' + x.id + '"' + (x.locked ? "" : " disabled") + ">PUBLISH RESULT</button></div>").join("");
+    const pub = d.published.map((x) => "<li><b>#" + x.id + " " + esc(x.name || "") + "</b>" + ltBalls(x.numbers || []) +
+      '<small class="adm-note">' + when(x.published_at) + " by " + esc(x.published_by || "—") + " · " + count(x.winners) + " won · " + money(x.paid) + "</small></li>").join("");
+    const LABEL = { "lotto.preview": "Previewed", "lotto.publish": "Published", "lotto.cancel": "Cancelled", "lotto.draw_create": "Created", "lotto.draw_pause": "Paused", "lotto.draw_resume": "Resumed" };
+    const audit = d.audit.map((a) => "<li>" + pill(LABEL[a.action] || a.action, a.action === "lotto.publish" ? "ok" : a.action === "lotto.cancel" ? "bad" : "") +
+      "<span>Draw #" + a.draw + '</span><small class="adm-note">' + when(a.at) + " · " + esc(a.admin) + "</small></li>").join("");
+    box.innerHTML = '<section class="adm-card lta-key"><div class="adm-mines-card-head"><strong>' + U.icon("shield") + "Lotto Key</strong>" + pill("Admin only", "warn") + "</div>" +
+      '<p class="adm-note">When betting closes, the server draws the 5 winning numbers from the draw\'s secret seed — independent of every ticket — and locks them. ' +
+      "Preview them here; players see nothing until you press <b>PUBLISH RESULT</b>. Nobody can type or change the numbers.</p>" +
+      (pend || '<p class="adm-note lta-key-none">No draw is waiting: numbers appear here as soon as a draw\'s betting closes.</p>') +
+      (pub ? '<h4 class="lta-key-h">Published results</h4><ul class="lta-key-list">' + pub + "</ul>" : "") +
+      (audit ? '<h4 class="lta-key-h">Audit trail</h4><ul class="lta-key-list lta-key-audit">' + audit + "</ul>" : "") + "</section>";
   }
 
   /* ================= sections, menu, events, badges ================= */
@@ -3097,7 +3317,7 @@
     if (r.ok) loadRisk(true);
   }
 
-  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, deposits: loadDeposits, payments: () => loadPaymentSettings(true), games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), lotto: () => loadLotto(true), partners: loadPartners, withdrawals: loadWithdrawals, risk: loadRisk, reviews: loadReviews, support: () => loadSupport() };
+  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, deposits: loadDeposits, payments: () => loadPaymentSettings(true), blocked: () => loadAccounts("blocked"), banned: () => loadAccounts("banned"), deleted: () => loadAccounts("deleted"), games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), lotto: () => loadLotto(true), partners: loadPartners, withdrawals: loadWithdrawals, risk: loadRisk, reviews: loadReviews, support: () => loadSupport() };
   const ADD_MONEY = '<button class="btn btn-primary btn-sm" type="button" data-credit>' + U.icon("plus") + "Add money</button>";
   /* each section's title, a line on what it's for, and its buttons */
   const SECTIONS = {
@@ -3105,6 +3325,9 @@
     players: { title: "Players", lead: "Find a player by name, number or id to see their money, bets and account.", actions: ADD_MONEY },
     money: { title: "Money", lead: "Every deposit, withdrawal, bet and adjustment as it happens." },
     deposits: { title: "Recent deposits", lead: "Every deposit attempt — successful, pending and failed — newest first. Search by player, and filter by status. Separate from withdrawals." },
+    blocked: { title: AC.blocked.title, lead: AC.blocked.lead },
+    banned: { title: AC.banned.title, lead: AC.banned.lead },
+    deleted: { title: AC.deleted.title, lead: AC.deleted.lead },
     payments: { title: "TheTeller Payment Settings", lead: "Switch TheTeller payments ON or OFF for the whole website, and check the merchant ID and the connection. OFF stops new payments only; payments already started are still verified and credited. API keys and passwords stay hidden." },
     withdrawals: { title: "Withdrawals", lead: "Players' requests to cash out. Send the money by hand, then Approve marks it paid; Reject returns it to the player's balance." },
     games: { title: "Games", lead: "Manage every game: switch it on or off, choose whether it offers free play (same odds as real money) and a strip of real big wins, pause and resume it, set bet limits and round timing, and watch live play, statistics and players' wins and losses. Results are drawn by the server and can't be seen or changed before a round ends." },
@@ -3144,6 +3367,9 @@
     set("reviews", w.reviews || 0);
     set("lotto", w.lotto || 0);
     set("support", w.support || 0);
+    set("blocked", w.blocked || 0);
+    set("banned", w.banned || 0);
+    set("deleted", w.deleted || 0);
     /* payments switched off: the menu says so */
     const pb = document.querySelector('[data-badge="payments"]');
     pb.hidden = r.data.paymentsOn !== false;
@@ -3197,6 +3423,8 @@
 
   document.querySelector(".adm-wrap").addEventListener("click", (e) => {
     if (e.target.closest("[data-av-toggle]")) return aviatorToggle();
+    const acb = e.target.closest("[data-ac-act]");
+    if (acb) return accountAction(acb.dataset.acAct, acb.dataset.acId, acb.dataset.acName);
     const tpt = e.target.closest("[data-tp-test]");
     if (tpt) return paymentTest(tpt);
     if (e.target.closest("[data-lt-toggle]")) return lottoToggle();

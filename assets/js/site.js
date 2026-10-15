@@ -265,6 +265,11 @@
       });
       let data = {};
       try { data = await res.json(); } catch (e) { /* empty or non-JSON reply */ }
+      /* banned or closed by the main admin: the account can't be used any more, so this device signs out */
+      if (res.status === 403 && data && (data.error === "account_banned" || data.error === "account_closed") && session.get()) {
+        session.clear();
+        toast(data.message || "This account can't be used. Contact customer care.", "error");
+      }
       return { ok: res.ok, status: res.status, data };
     } catch (e) {
       return { ok: false, status: 0, data: { error: "Can't reach the payment server. Check your connection and try again." } };
@@ -282,7 +287,8 @@
     api("/api/me").then((r) => {
       if (r.status === 401 && session.get() && session.get().token === s.token) {
         session.clear();
-        toast("Your session has ended — please log in again.");
+        const why = r.data && typeof r.data.error === "string" && /banned|closed/.test(r.data.error) ? r.data.error : "";
+        toast(why || "Your session has ended — please log in again.", why ? "error" : undefined);
         return;
       }
       /* the account's currency (chosen at sign-up, changed from the balance menu) follows the player to this device */
@@ -1491,5 +1497,21 @@
       }
     }
     attributeRef();
+  })();
+
+  /* game promotions and the Lotto results popup, on every page (assets/js/promos.js decides where they may show) */
+  (function loadPromos() {
+    if (global.VB_NO_PROMOS || document.querySelector("script[data-promos]")) return;
+    const me = document.currentScript && document.currentScript.src;
+    const base = me ? new URL(".", me).href : "assets/js/";
+    const css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = new URL("../css/promos.css?v=1", base).href;
+    document.head.appendChild(css);
+    const js = document.createElement("script");
+    js.src = new URL("promos.js?v=1", base).href;
+    js.defer = true;
+    js.dataset.promos = "1";
+    document.head.appendChild(js);
   })();
 })(window);

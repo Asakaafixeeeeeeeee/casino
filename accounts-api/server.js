@@ -256,10 +256,20 @@ async function main() {
       `SELECT u.*, s.token_hash, s.last_seen_at FROM sessions s JOIN users u ON u.id = s.user_id
         WHERE s.token_hash = $1 AND s.expires_at > now()`, [sha256(m[1])]);
     if (!rows.length) throw new HttpError(401, "Your session has ended. Please log in again.");
+    if (rows[0].access && rows[0].access !== "ACTIVE") throw new HttpError(401, closedText(rows[0].access));
     /* "last active" for the sessions list, at most every 5 minutes */
     const seen = rows[0].last_seen_at ? new Date(rows[0].last_seen_at).getTime() : 0;
     if (Date.now() - seen > 5 * 60 * 1000) await db.query("UPDATE sessions SET last_seen_at = now() WHERE token_hash = $1", [rows[0].token_hash]);
     return rows[0];
+  }
+
+  /* banned or deleted by the main admin: no log-in, no session (the account and its records are kept) */
+  function closedText(access) {
+    return access === "BANNED" ? "This account has been banned. Contact customer care if you think this is a mistake."
+      : "This account has been closed. Contact customer care if you think this is a mistake.";
+  }
+  function refuseClosed(user) {
+    if (user.access && user.access !== "ACTIVE") throw new HttpError(403, closedText(user.access), { access: user.access });
   }
 
   /* a wrong password (or date of birth) counts towards the lock */
@@ -385,6 +395,7 @@ async function main() {
         if (lockS) throw new HttpError(429, "Too many wrong attempts — log-in is paused for " + lockS + " seconds.", { retryIn: lockS });
         throw new HttpError(401, "Wrong password.", { field: "lpw", triesLeft });
       }
+      refuseClosed(user);
       await db.query("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = $1", [user.id]);
       await db.query("DELETE FROM sessions WHERE expires_at < now()");
       const token = await newSession(user.id, body.remember !== false, req);
@@ -420,6 +431,24 @@ async function main() {
       }
       const user = await createAccount(body, { admin: true });
       return { status: 201, body: { user: { id: user.id, ...publicUser(user) } } };
+    },
+
+    /* the main admin bans, deletes or restores an account (from the balance service, holding ACCOUNTS_INTERNAL_SECRET):
+       anything but ACTIVE ends every session at once */
+    "POST /api/internal/access": async (req, body) => {
+      const secret = process.env.ACCOUNTS_INTERNAL_SECRET || "";
+      const given = String(req.headers["x-internal-secret"] || "");
+      if (secret.length < 16 || given.length !== secret.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(secret))) {
+        throw new HttpError(403, "Not allowed.");
+      }
+      const access = String(body.access || "");
+      if (!["ACTIVE", "BANNED", "DELETED"].includes(access)) throw new HttpError(400, "Choose ACTIVE, BANNED or DELETED.");
+      const id = String(body.account_id || "");
+      if (!/^\d+$/.test(id)) throw new HttpError(400, "Which account?");
+      const { rows } = await db.query("UPDATE users SET access = $2 WHERE id = $1 RETURNING id", [id, access]);
+      if (!rows.length) throw new HttpError(404, "No such account.");
+      if (access !== "ACTIVE") await db.query("DELETE FROM sessions WHERE user_id = $1", [id]);
+      return { body: { ok: true, access } };
     },
 
     "GET /api/session/verify": async (req) => {
@@ -494,6 +523,7 @@ async function main() {
       const found = await findAccount(body.login !== undefined ? body.login : body.phone, "f");
       if (!found) throw new HttpError(404, "No account found for that number, username or email.", { field: "fphone" });
       const { rows: [user] } = await db.query("SELECT *, to_char(dob, 'YYYY-MM-DD') AS dob_text FROM users WHERE id = $1", [found.id]);
+      refuseClosed(user);
       const wait = resetLockedFor(user);
       if (wait) throw new HttpError(429, "Password reset is paused on this account after too many wrong dates of birth. Try again in " + Math.ceil(wait / 3600) + " hours, or contact support.", { retryIn: wait });
       if (String(body.dob || "") !== user.dob_text) {
