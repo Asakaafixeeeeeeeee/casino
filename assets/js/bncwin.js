@@ -419,9 +419,11 @@
   }
 
   function makeDemoRace(stake) {
+    const demoBustChance = 0.001;
+    const demoUpChance = 0.5;
     const path = Array.from({ length: st.rules.steps }, () => {
       const n = Math.random();
-      return n < st.rules.bust ? "B" : n < st.rules.bust + st.rules.up_chance ? "U" : "D";
+      return n < demoBustChance ? "B" : n < demoBustChance + (1 - demoBustChance) * demoUpChance ? "U" : "D";
     });
     const startedAt = Date.now() + st.rules.start_ms;
     const id = "demo-" + Date.now() + "-" + Math.random().toString(36).slice(2);

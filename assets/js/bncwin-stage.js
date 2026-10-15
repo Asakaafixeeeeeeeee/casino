@@ -473,7 +473,7 @@ async function start() {
     let f = 32;
     const closeOn = (r, dist) => { const h = headOf(r); wantPos.set(h.x + dist * 0.95, 1.5, r.root.position.z + dist); wantLook.set(h.x - 0.1, 1.15, r.root.position.z); };
     switch (shot) {
-      case "wide": wantPos.set(mid - 26 + Math.sin(t * 0.08) * 6, 10, 26); wantLook.set(mid + 12, 2, -6); f = 46; break;
+      case "wide": wantPos.set(mid - 7 + Math.sin(t * 0.08) * 2, 3.5, 9.5); wantLook.set(mid + 1, 1.2, 0); f = 34; break;
       case "grid": wantPos.set(mid + 8 * Math.cos(0.9 + st * 0.1), 1.7, 7 * Math.sin(0.9 + st * 0.1) + 0.3); wantLook.set(mid, 1.0, (G.root.position.z + R.root.position.z) / 2); f = 36; break;
       case "warmG": closeOn(G, 3.2); f = 30; break;
       case "warmR": closeOn(R, 3.2); f = 30; break;
@@ -489,7 +489,7 @@ async function start() {
     }
     if (!reduce && shot !== "aerial" && shot !== "wide") { wantPos.y += Math.sin(t * 1.7) * 0.03; wantPos.x += Math.sin(t * 1.1) * 0.05; }
     /* the shots are composed for a wide TV picture; on a tall phone screen widen the lens so both runners stay in */
-    if (camera.aspect < 1.5) f = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(f) / 2) * Math.min(2.4, (16 / 9) / camera.aspect * 0.66)));
+    if (camera.aspect < 1.5) f = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(f) / 2) * Math.min(1.8, (16 / 9) / camera.aspect * 0.58)));
     if (snap) { camPos.copy(wantPos); camLook.copy(wantLook); fov = f; snap = false; }
     else {
       const k = Math.min(1, dt * (shot === "front" || shot === "finish" ? 2.2 : 3.4));
@@ -663,7 +663,7 @@ function buildAthlete(gltf, look) {
   slimLegs(sk);
   const mat = sk.material.clone();
   mat.map = kitTexture(sk.material.map.image, look.top, look.pants);
-  mat.metalness = 0; mat.roughness = 0.62;
+  mat.metalness = 0; mat.roughness = 0.76;
   sk.material = mat;
   sk.castShadow = !look.fan; sk.frustumCulled = false;
 
