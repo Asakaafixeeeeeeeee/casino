@@ -8,7 +8,7 @@ import { playRound } from "../src/games/rounds.js";
 import { AdminError } from "../src/services/admin.js";
 import {
   acceptRules, affectedPlayers, clearMoneyRulesCache, DEFAULT_RULES, getMoneyRules, hasAcceptedRules, moneyRulesHistory,
-  moneyRulesOverview, MoneyRuleError, playthroughOf, saveMoneyRules,
+  moneyRulesOverview, MoneyRuleError, playthroughOf, saveMoneyRules, withdrawalDepositProgress,
 } from "../src/services/moneyRules.js";
 import { payWithdrawal, requestWithdrawal, withdrawalView, WithdrawalError } from "../src/services/withdrawals.js";
 import { paymentsRouter, RULES_NOT_ACCEPTED_MESSAGE } from "../src/routes/payments.js";
@@ -34,7 +34,8 @@ async function fresh(asMigrated = false) {
   const env = await setupWalletDb();
   await env.db.query("UPDATE users SET phone = $1 WHERE id = $2", [PHONE, env.userId]);
   if (!asMigrated) {
-    await env.db.query("UPDATE money_rules SET bet_rule_enabled = false, bet_rule_enabled_at = NULL, rules_version = 1, updated_by = NULL WHERE id = 1");
+    await env.db.query(`UPDATE money_rules SET bet_rule_enabled = false, bet_rule_enabled_at = NULL,
+      withdrawal_deposit_rule_enabled = false, rules_version = 1, updated_by = NULL WHERE id = 1`);
     await env.db.query("DELETE FROM money_rule_changes");
   }
   return env;
@@ -80,7 +81,7 @@ async function call(router: unknown, method: string, path: string, userId: strin
 
 /* ---------------- settings ---------------- */
 
-test("As migrated: minimum deposit GHS 135, the betting-session rule on (version 2), the deposit page wording", async () => {
+test("As migrated: minimum deposit GHS 135, casino staking and withdrawal deposit rules on", async () => {
   const { db } = await fresh(true);
   const r = await getMoneyRules(db, true);
   assert.equal(r.min_deposit, 135);
@@ -88,20 +89,26 @@ test("As migrated: minimum deposit GHS 135, the betting-session rule on (version
   assert.ok(r.bet_rule_enabled_at);
   assert.equal(r.withdraw_rule_enabled, false);
   assert.equal(r.withdraw_rule_multiple, 1);
-  assert.equal(r.rules_version, 2, "everyone accepts the new conditions before their next deposit");
+  assert.equal(r.withdrawal_deposit_rule_enabled, true);
+  assert.equal(r.withdrawal_required_deposits, 3);
+  assert.equal(r.withdrawal_deposit_message, DEFAULT_RULES.withdrawal_deposit_message);
+  assert.equal(r.policy_deposit_withdrawal, DEFAULT_RULES.policy_deposit_withdrawal);
+  assert.equal(r.rules_version, 3, "everyone accepts the new conditions before their next deposit");
   for (const k of ["bet_rule_message", "withdraw_rule_message", "withdraw_info", "policy_heading", "policy_min_deposit", "policy_betting",
-    "policy_funds", "policy_withdrawal", "policy_min_withdrawal", "policy_notice", "policy_accept"] as const) {
+    "policy_funds", "policy_withdrawal", "policy_min_withdrawal", "policy_deposit_withdrawal", "policy_notice", "policy_accept"] as const) {
     assert.equal(r[k], DEFAULT_RULES[k], "the migration and the code agree on " + k);
   }
   const p = moneyRulesOverview(db);
   const items = (await p).preview.policy;
   assert.equal(items.heading, "BEFORE YOU PROCEED WITH YOUR DEPOSIT");
-  assert.deepEqual(items.items.map((i) => i.label), ["Minimum Deposit", "Betting Eligibility", "Your Funds", "Withdrawal Processing", "Minimum Withdrawal", "Important Notice"]);
+  assert.deepEqual(items.items.map((i) => i.label), ["Minimum Deposit", "Betting Eligibility", "Your Funds",
+    "Withdrawal Deposit Requirement", "Withdrawal Processing", "Minimum Withdrawal", "Important Notice"]);
   assert.equal(items.items[0]!.text, "The minimum permissible deposit is GHS 135.00 per transaction, subject to a maximum of GHS 50,000.00.");
-  assert.equal(items.items[4]!.text, "GHS 20.00.");
+  assert.match(items.items[3]!.text, /complete 3 qualifying deposits in total/);
+  assert.equal(items.items[5]!.text, "GHS 20.00.");
   assert.ok(!/admin/i.test(JSON.stringify(items)), "no reference to administrators on the customer page");
-  assert.equal(items.accept, "I acknowledge that I have carefully reviewed, understood and accepted the applicable deposit, betting and withdrawal conditions.");
-  assert.equal((await moneyRulesHistory(db)).changes.length, 1, "the switch is in the history");
+  assert.equal(items.accept, "I Accept Terms & Conditions");
+  assert.equal((await moneyRulesHistory(db)).changes.length, 2, "both migration changes are in the history");
 });
 
 test("Settings are validated; a refused save changes nothing and leaves no history", async () => {
@@ -111,6 +118,11 @@ test("Settings are validated; a refused save changes nothing and leaves no histo
     [{ min_deposit: 60000 }, "invalid_min_deposit"], [{ min_deposit: "abc" }, "invalid_min_deposit"], [{ min_deposit: "" }, "invalid_min_deposit"],
     [{ bet_rule_days: 0 }, "invalid_bet_rule_days"], [{ bet_rule_days: 366 }, "invalid_bet_rule_days"], [{ bet_rule_days: 1.5 }, "invalid_bet_rule_days"],
     [{ withdraw_rule_multiple: -1 }, "invalid_withdraw_rule_multiple"], [{ withdraw_rule_multiple: 21 }, "invalid_withdraw_rule_multiple"],
+    [{ withdrawal_required_deposits: 0 }, "invalid_withdrawal_required_deposits"],
+    [{ withdrawal_required_deposits: 101 }, "invalid_withdrawal_required_deposits"],
+    [{ withdrawal_required_deposits: 1.5 }, "invalid_withdrawal_required_deposits"],
+    [{ withdrawal_deposit_rule_enabled: "true" }, "invalid_withdrawal_deposit_rule_enabled"],
+    [{ withdrawal_deposit_message: " " }, "invalid_withdrawal_deposit_message"],
     [{ bet_rule_enabled: "true" }, "invalid_bet_rule_enabled"], [{ withdraw_rule_enabled: 1 }, "invalid_withdraw_rule_enabled"],
     [{ bet_rule_message: "   " }, "invalid_bet_rule_message"], [{ withdraw_rule_message: "x".repeat(1001) }, "invalid_withdraw_rule_message"],
     [{ withdraw_info: 42 }, "invalid_withdraw_info"],
@@ -271,7 +283,7 @@ test("Bet rule ON: only deposited funds can be staked, never winnings; nothing i
   /* every game passes the same check before its stake is taken: winnings can't be staked */
   await assert.rejects(() => assertStakeAllowed(env.db, "volta-coin", 5, env.userId), (e: unknown) =>
     isGame("deposit_required")(e) && (e as GameError).status === 403 &&
-    (e as GameError).message === "Only deposited funds can be staked. Your session funds: GHS 0.00. Your winnings of GHS 40.00 cannot be staked, but they remain yours to withdraw at any time. A qualifying deposit (minimum GHS 135.00) activates a new betting session.");
+    (e as GameError).message === "Only deposited funds can be staked. Your session funds: GHS 0.00. Your winnings of GHS 40.00 cannot be staked, but remain yours subject to the applicable withdrawal rules. A qualifying deposit (minimum GHS 135.00) activates a new betting session.");
   await assert.rejects(() => playRound(env.db, env.userId, "volta-coin", { stake: 5, choice: { pick: "HEADS" }, idempotency_key: "round:" + key() }), isGame("deposit_required"));
   assert.equal(await env.balance(), before, "a refused bet never touches the balance");
 
@@ -299,6 +311,53 @@ test("Bet rule ON: only deposited funds can be staked, never winnings; nothing i
 });
 
 /* ---------------- withdrawal play-through ---------------- */
+
+test("Withdrawal deposit rule activates after a qualifying deposit, stake and win; counts only qualifying completed deposits", async () => {
+  const env = await fresh();
+  await saveMoneyRules(env.db, ADMIN, { withdrawal_deposit_rule_enabled: true, withdrawal_required_deposits: 3 });
+  await pay(env, 135);
+  let progress = await withdrawalDepositProgress(env.db, env.userId);
+  assert.deepEqual([progress.triggered, progress.completed, progress.remaining, progress.eligible], [false, 1, 2, true]);
+
+  await move(env, "BET_PLACED", 10);
+  progress = await withdrawalDepositProgress(env.db, env.userId);
+  assert.equal(progress.triggered, false, "a deposit and bet alone do not activate the rule");
+  await move(env, "BET_SETTLED", 30);
+  progress = await withdrawalDepositProgress(env.db, env.userId);
+  assert.deepEqual([progress.triggered, progress.completed, progress.remaining, progress.eligible], [true, 1, 2, false]);
+  assert.match(String(progress.message), /2 more qualifying deposit/);
+
+  const view = await withdrawalView(env.db, env.userId);
+  assert.equal(view.withdrawable, 0);
+  assert.equal(view.deposit_requirement.triggered, true);
+  assert.equal(view.deposit_requirement.remaining, 2);
+  assert.match(String(view.deposit_requirement.message), /completed 1 of 3/);
+  await assert.rejects(() => requestWithdrawal(env.db, { id: env.userId, phone: PHONE }, 20, "wd:" + key()),
+    (e: unknown) => isWd("deposits_required")(e) && /2 more qualifying deposit/.test((e as Error).message));
+  assert.equal(await env.balance(), 155, "a denied request moves no money");
+
+  await pay(env, 134.99);
+  assert.equal((await withdrawalDepositProgress(env.db, env.userId)).completed, 1, "a below-minimum credit is not qualifying");
+  await pay(env, 135);
+  progress = await withdrawalDepositProgress(env.db, env.userId);
+  assert.deepEqual([progress.completed, progress.remaining, progress.eligible], [2, 1, false]);
+  await pay(env, 135);
+  progress = await withdrawalDepositProgress(env.db, env.userId);
+  assert.deepEqual([progress.completed, progress.remaining, progress.eligible], [3, 0, true]);
+  await requestWithdrawal(env.db, { id: env.userId, phone: PHONE }, 20, "wd:" + key());
+});
+
+test("Turning off the withdrawal deposit rule permits withdrawal even after its trigger", async () => {
+  const env = await fresh();
+  await saveMoneyRules(env.db, ADMIN, { withdrawal_deposit_rule_enabled: true });
+  await pay(env, 135);
+  await move(env, "BET_PLACED", 10);
+  await move(env, "BET_SETTLED", 30);
+  assert.equal((await withdrawalDepositProgress(env.db, env.userId)).eligible, false);
+  await saveMoneyRules(env.db, ADMIN, { withdrawal_deposit_rule_enabled: false });
+  assert.equal((await withdrawalDepositProgress(env.db, env.userId)).eligible, true);
+  await requestWithdrawal(env.db, { id: env.userId, phone: PHONE }, 20, "wd:" + key());
+});
 
 test("Play-through: the formula, never retroactive, winnings never held", async () => {
   const env = await fresh();

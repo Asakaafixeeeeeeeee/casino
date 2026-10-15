@@ -80,11 +80,11 @@
           in two parts: <b>session funds</b> (deposited money not yet staked) and <b>winnings</b>. Only session funds can be used
           to stake casino bets, in every game; winnings cannot be staked. Existing balances do not on their own start a new
           betting session: when your session funds are used up, a new deposit of at least ₵ <span data-rule="min-deposit">135</span>
-          starts one. Your winnings always remain yours and can be withdrawn (minimum withdrawal ₵ 20). Your deposit page shows
+          starts one. Your winnings remain yours, subject to the withdrawal conditions below. Your deposit page shows
           both parts of your balance.</span>
         <span data-rule="bet-off">Right now your whole balance (deposits and winnings) can be used to place casino bets.</span>
-        This rule only decides whether a bet can be placed: nothing is ever deducted from your balance, your balance stays
-        visible, and it never stops a withdrawal of winnings.</li>
+        This betting rule only decides whether a bet can be placed. Nothing is deducted, and the rule itself does not
+        change withdrawal eligibility; any separate withdrawal conditions below still apply.</li>
       <li><b>Play-through on deposits.</b>
         <span data-rule="withdraw-off">Right now no play-through rule applies.</span>
         <span data-rule="withdraw-on" hidden>Right now the play-through rule is on: money you deposit while it is on has to be
@@ -93,8 +93,18 @@
         what you deposited and never more than the deposited part of your balance, so <b>winnings are never held</b>. It
         counts from your most recent paid withdrawal, and the withdraw page shows how much is held and how much more there
         is to bet.</li>
-      <li><b>No retroactive rules.</b> A rule that is switched on applies only from that moment: deposits made before it
-        are never held by it.</li>
+      <li data-rule="withdraw-deposits-on" hidden><b>Deposits required before withdrawal.</b>
+        After you have made a qualifying deposit, placed a casino bet and won, you must have completed
+        <b><span data-rule="required-deposits">3</span> qualifying deposits in total</b> before you can withdraw.
+        Each qualifying deposit must be a successful, completed deposit of at least ₵
+        <span data-rule="min-deposit">135</span>. Successful qualifying deposits made before your first win count
+        toward the total. Once you have enough, withdrawals are enabled automatically. If the requirement has activated
+        and you are short, the withdraw page and any refused withdrawal request explain how many deposits remain.</li>
+      <li data-rule="withdraw-deposits-off" hidden><b>Deposits required before withdrawal.</b> This deposit-count
+        requirement is currently off.</li>
+      <li><b>When earlier deposits count.</b> The play-through rule applies only to deposits made while it is on and
+        after your most recent paid withdrawal. Separately, successful qualifying deposits made before your first win
+        count toward the deposit total once the withdrawal requirement activates.</li>
       <li><b>Nothing is deducted.</b> These rules never take money from your balance. They only decide whether a new bet
         or a withdrawal request can go ahead.</li>
       <li><b>Withdrawing.</b> <span data-rule="withdraw-info">Withdrawals are paid to the mobile money number you registered

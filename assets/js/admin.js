@@ -2967,23 +2967,30 @@
     min_deposit: "Minimum deposit", bet_rule_enabled: "Betting rule", bet_rule_days: "Betting rule window",
     bet_rule_message: "Betting rule message", withdraw_rule_enabled: "Withdrawal play-through rule",
     withdraw_rule_multiple: "Play-through multiple", withdraw_rule_message: "Play-through message",
+    withdrawal_deposit_rule_enabled: "Withdrawal deposit requirement",
+    withdrawal_required_deposits: "Required qualifying deposits",
+    withdrawal_deposit_message: "Withdrawal deposit prompt",
     withdraw_info: "Withdrawal information", rules_version: "Rules version",
     policy_heading: "Deposit page heading", policy_min_deposit: "Minimum deposit text", policy_betting: "Betting eligibility text",
     policy_funds: "Your funds text", policy_withdrawal: "Withdrawal processing text", policy_min_withdrawal: "Minimum withdrawal text",
+    policy_deposit_withdrawal: "Withdrawal deposit requirement terms",
     policy_notice: "Important notice", policy_accept: "Acceptance checkbox text",
   };
   const MR_POLICY = [["policy_heading", "Heading"], ["policy_min_deposit", "Minimum Deposit"], ["policy_betting", "Betting Eligibility"],
     ["policy_funds", "Your Funds"], ["policy_withdrawal", "Withdrawal Processing"], ["policy_min_withdrawal", "Minimum Withdrawal"],
-    ["policy_notice", "Important Notice"], ["policy_accept", "Acceptance checkbox"]];
-  const MR_TEXT = ["bet_rule_message", "withdraw_rule_message", "withdraw_info"].concat(MR_POLICY.map((x) => x[0]));
+    ["policy_deposit_withdrawal", "Withdrawal deposit requirement"], ["policy_notice", "Important Notice"],
+    ["policy_accept", "Acceptance checkbox"]];
+  const MR_TEXT = ["bet_rule_message", "withdraw_rule_message", "withdrawal_deposit_message", "withdraw_info"].concat(MR_POLICY.map((x) => x[0]));
   const MR_MATERIAL = ["min_deposit", "bet_rule_enabled", "bet_rule_days", "withdraw_rule_enabled", "withdraw_rule_multiple",
-    "policy_min_deposit", "policy_betting", "policy_funds", "policy_withdrawal", "policy_min_withdrawal", "policy_accept"];
+    "withdrawal_deposit_rule_enabled", "withdrawal_required_deposits", "policy_min_deposit", "policy_betting", "policy_funds",
+    "policy_withdrawal", "policy_min_withdrawal", "policy_deposit_withdrawal", "policy_accept"];
   const mrValue = (k, v) => {
     if (v === true) return "ON";
     if (v === false) return "OFF";
     if (k === "min_deposit") return "GHS " + esc(String(v));
     if (k === "bet_rule_days") return esc(String(v)) + " days";
     if (k === "withdraw_rule_multiple") return esc(String(v)) + "×";
+    if (k === "withdrawal_required_deposits") return esc(String(v)) + " deposits";
     if (MR_TEXT.includes(k)) return "“" + esc(String(v).length > 80 ? String(v).slice(0, 80) + "…" : String(v)) + "”";
     return esc(String(v));
   };
@@ -3027,9 +3034,19 @@
         mrField("mrWdMsg", "Message players see when a withdrawal is over what they can withdraw", mrArea("mrWdMsg", s.withdraw_rule_message),
           "Plain text, up to 1,000 characters. {held} becomes the amount held, {to_bet} what is still to bet, {multiple} the multiple.") +
       "</section>" +
+      /* the post-first-win deposit count is independent of play-through */
+      '<section class="adm-card mr-card ' + (s.withdrawal_deposit_rule_enabled ? "is-on" : "") + '">' +
+        '<div class="adm-studio-head"><div><strong>Deposits required before withdrawal</strong><small>' +
+          (s.withdrawal_deposit_rule_enabled ? "ON — applies after a qualifying deposit, bet and win" : "OFF — no deposit-count restriction") + "</small></div>" +
+          mrSwitch("withdrawal_deposit_rule_enabled", s.withdrawal_deposit_rule_enabled, "Deposit requirement before withdrawal on or off") + "</div>" +
+        '<p class="adm-note">When ON, this activates after a player has made a qualifying deposit, placed a casino bet and won. Successful deposits of at least the current minimum count toward the total, including deposits made before the first win.</p>' +
+        mrField("mrRequiredDeposits", "Qualifying deposits required", '<input id="mrRequiredDeposits" type="number" inputmode="numeric" step="1" min="1" max="100" value="' + esc(String(s.withdrawal_required_deposits)) + '">', "1 to 100 completed deposits. Default: 3.") +
+        mrField("mrWdDepositMsg", "Message shown when withdrawal is restricted", mrArea("mrWdDepositMsg", s.withdrawal_deposit_message), "Plain text, up to 1,000 characters. {min}, {required}, {completed} and {remaining} are filled in automatically.") +
+        '<div class="adm-tp-notice mr-preview"><span>Players read</span><p>' + esc(p.withdrawal_deposit_rule.message) + "</p></div>" +
+      "</section>" +
       /* the deposit page's "Before you proceed" box: every line players read and accept */
       '<section class="adm-card mr-card"><h3 class="adm-h">' + U.icon("shield") + "Deposit page conditions (what players accept)</h3>" +
-        '<p class="adm-note">Shown before every first deposit and after any change. {min} and {max} become the minimum and maximum deposit. ' +
+        '<p class="adm-note">Shown when a player starts a deposit and after any change. {min} and {max} become the minimum and maximum deposit. ' +
           "Betting Eligibility and Your Funds only show while the new-deposit requirement is ON.</p>" +
         MR_POLICY.map(([k, label]) => mrField("mr_" + k, label, mrArea("mr_" + k, s[k]), "")).join("") +
       "</section>" +
@@ -3133,6 +3150,9 @@
       withdraw_rule_enabled: sw("withdraw_rule_enabled"),
       withdraw_rule_multiple: val("mrMult").trim() === "" ? "" : Number(val("mrMult")),
       withdraw_rule_message: val("mrWdMsg").trim(),
+      withdrawal_deposit_rule_enabled: sw("withdrawal_deposit_rule_enabled"),
+      withdrawal_required_deposits: val("mrRequiredDeposits").trim() === "" ? "" : Number(val("mrRequiredDeposits")),
+      withdrawal_deposit_message: val("mrWdDepositMsg").trim(),
       withdraw_info: val("mrInfo").trim(),
       ...Object.fromEntries(MR_POLICY.map(([k]) => [k, val("mr_" + k).trim()])),
     };

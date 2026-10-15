@@ -2,7 +2,7 @@ import { logAction } from "./admin.js";
 import { notifyPendingWithdrawal } from "./notify.js";
 import type { Pool, PoolClient } from "pg";
 import { completeWithdrawal, refundWithdrawal, withdraw } from "./balanceService.js";
-import { getMoneyRules, playthroughMessage, playthroughOf } from "./moneyRules.js";
+import { getMoneyRules, playthroughMessage, playthroughOf, withdrawalDepositProgress } from "./moneyRules.js";
 import {
   checkTellerStatus,
   networkForPhone,
@@ -42,21 +42,32 @@ export async function withdrawableOf(client: Pool | PoolClient, userId: string, 
   return { withdrawable: Number(rows[0]?.withdrawable ?? 0), balance: Number(rows[0]?.available ?? 0) };
 }
 
-/** The withdraw page: what can be withdrawn now, and, while the play-through rule is on, how much is held and how much
- *  more must be bet (winnings are never held). */
+/** The withdraw page's current eligibility, play-through hold, and post-first-win deposit requirement. */
 export async function withdrawalView(db: Pool, userId: string) {
   const base = await withdrawableOf(db, userId);
   const rules = await getMoneyRules(db);
   const pt = await playthroughOf(db, userId, rules);
+  const depositProgress = await withdrawalDepositProgress(db, userId, rules);
   return {
     ...base,
-    withdrawable: Math.max(0, Math.round(Math.min(base.withdrawable, pt.withdrawable_by_rule) * 100) / 100),
+    withdrawable: depositProgress.eligible
+      ? Math.max(0, Math.round(Math.min(base.withdrawable, pt.withdrawable_by_rule) * 100) / 100)
+      : 0,
     winnings: base.withdrawable,
     held: pt.held,
     to_bet: pt.to_bet,
     playthrough: {
       enabled: pt.enabled, multiple: pt.multiple, deposits: pt.deposits, staked: pt.staked,
       message: pt.held > 0 ? playthroughMessage(rules, pt) : null,
+    },
+    deposit_requirement: {
+      enabled: rules.withdrawal_deposit_rule_enabled,
+      triggered: depositProgress.triggered,
+      eligible: depositProgress.eligible,
+      required: depositProgress.required,
+      completed: depositProgress.completed,
+      remaining: depositProgress.remaining,
+      message: depositProgress.message,
     },
     withdraw_info: rules.withdraw_info,
   };
@@ -80,6 +91,10 @@ export async function requestWithdrawal(
        part of the balance) and never deducts anything. Checked first so the player reads why and how much is left to bet. */
     const { withdrawable } = await withdrawableOf(client, user.id, true);
     const rules = await getMoneyRules(client);
+    const depositProgress = await withdrawalDepositProgress(client, user.id, rules);
+    if (!depositProgress.eligible) {
+      throw new WithdrawalError("deposits_required", depositProgress.message ?? "Complete the required qualifying deposits before withdrawing.", 403);
+    }
     if (rules.withdraw_rule_enabled) {
       const pt = await playthroughOf(client, user.id, rules);
       if (pt.held > 0 && amountMajor > pt.withdrawable_by_rule + 1e-9) {

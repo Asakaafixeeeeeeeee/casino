@@ -334,6 +334,7 @@
       const set = {
         "min-deposit": cedis(rules.min_deposit), "max-deposit": cedis(rules.max_deposit), "bet-days": days,
         "multiple": cedis(rules.withdraw_rule.multiple), "withdraw-info": rules.withdraw_info,
+        "required-deposits": String(rules.withdrawal_deposit_rule.required),
       };
       document.querySelectorAll("[data-rule]").forEach((el) => {
         const k = el.dataset.rule;
@@ -342,6 +343,8 @@
         if (k === "bet-off") el.hidden = rules.bet_rule.enabled;
         if (k === "withdraw-on") el.hidden = !rules.withdraw_rule.enabled;
         if (k === "withdraw-off") el.hidden = rules.withdraw_rule.enabled;
+        if (k === "withdraw-deposits-on") el.hidden = !rules.withdrawal_deposit_rule.enabled;
+        if (k === "withdraw-deposits-off") el.hidden = rules.withdrawal_deposit_rule.enabled;
       });
     });
   }

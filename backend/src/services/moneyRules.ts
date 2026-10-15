@@ -1,12 +1,14 @@
 // src/services/moneyRules.ts
 //
-// Admin -> "Betting & withdrawal settings": the site's minimum deposit, and two rules an admin can switch on.
+// Admin -> "Betting & withdrawal settings": the site's minimum deposit and its betting and withdrawal rules.
 //
 //   - Minimum deposit: every deposit route and page uses this live value (GHS 135 by default).
 //   - Betting sessions (switched on by migration 041): only session funds — deposited money not yet staked — can be
 //     staked (the ledger keeps the winnings part apart in user_balances.withdrawable, and stakes use deposited money
 //     first). Winnings can't be staked; they stay withdrawable. A new deposit adds session funds. It only refuses bets:
-//     nothing is deducted, deposited money can always be bet, and withdrawals are untouched.
+//     nothing is deducted, and existing deposited session funds stay stakeable.
+//   - Withdrawal deposit requirement (on by default): after a qualifying deposit, later stake and a game win,
+//     withdrawals require three successful qualifying deposits in total. Earlier qualifying deposits count too.
 //   - Withdrawal play-through (off by default): deposited money not yet bet is held from withdrawal:
 //       held = min(balance, deposited part of the balance, qualifying deposits,
 //                  max(0, multiple x qualifying deposits - stakes since the first qualifying deposit))
@@ -33,6 +35,9 @@ export interface MoneyRules {
   withdraw_rule_enabled: boolean;
   withdraw_rule_multiple: number;
   withdraw_rule_message: string;
+  withdrawal_deposit_rule_enabled: boolean;
+  withdrawal_required_deposits: number;
+  withdrawal_deposit_message: string;
   withdraw_info: string;
   policy_heading: string;
   policy_min_deposit: string;
@@ -40,6 +45,7 @@ export interface MoneyRules {
   policy_funds: string;
   policy_withdrawal: string;
   policy_min_withdrawal: string;
+  policy_deposit_withdrawal: string;
   policy_notice: string;
   policy_accept: string;
   rules_version: number;
@@ -60,19 +66,23 @@ export const DEFAULT_RULES: MoneyRules = {
   min_deposit: 135,
   bet_rule_enabled: true,
   bet_rule_days: 30,
-  bet_rule_message: "Only deposited funds can be staked. Your session funds: GHS {session}. Your winnings of GHS {winnings} cannot be staked, but they remain yours to withdraw at any time. A qualifying deposit (minimum GHS {min}) activates a new betting session.",
+  bet_rule_message: "Only deposited funds can be staked. Your session funds: GHS {session}. Your winnings of GHS {winnings} cannot be staked, but remain yours subject to the applicable withdrawal rules. A qualifying deposit (minimum GHS {min}) activates a new betting session.",
   withdraw_rule_enabled: false,
   withdraw_rule_multiple: 1,
   withdraw_rule_message: "Deposited money has to be played through before it can be withdrawn. GHS {held} of your balance is held until you place GHS {to_bet} more in bets. Your winnings are never held, and nothing is deducted.",
+  withdrawal_deposit_rule_enabled: true,
+  withdrawal_required_deposits: 3,
+  withdrawal_deposit_message: "Withdrawals are locked until you complete {remaining} more qualifying deposit(s) of at least GHS {min}. You have completed {completed} of {required}.",
   withdraw_info: "Eligible withdrawal requests are securely reviewed and processed by our dedicated Payments Team, usually within a few minutes during business hours, and paid to the Mobile Money number you registered with. The minimum withdrawal is GHS 20.00. Only winnings can be withdrawn; deposited money stays in your balance as session funds for betting. For further clarification, contact our Customer Support Team.",
   policy_heading: "BEFORE YOU PROCEED WITH YOUR DEPOSIT",
   policy_min_deposit: "The minimum permissible deposit is GHS {min} per transaction, subject to a maximum of GHS {max}.",
   policy_betting: "A qualifying deposit is required to activate a new betting session. Existing account balances do not independently qualify users to initiate additional betting sessions. Any remaining funds retain their applicable account rights.",
-  policy_funds: "Your balance is held in two parts. Session funds are your deposited money not yet staked: only session funds can be used to place bets. Winnings are kept separately: they cannot be used to stake, and they remain yours to withdraw at any time (from the minimum withdrawal). No part of your balance is ever deducted or confiscated.",
+  policy_funds: "Your balance is held in two parts. Session funds are your deposited money not yet staked: only session funds can be used to place bets. Winnings are kept separately and cannot be used to stake; withdrawals remain subject to the applicable withdrawal conditions. No part of your balance is ever deducted or confiscated.",
   policy_withdrawal: "Eligible withdrawal requests are securely reviewed and processed by our dedicated Payments Team in accordance with the platform's withdrawal policy. Approved payments are disbursed to the registered Mobile Money account.",
   policy_min_withdrawal: "GHS 20.00.",
+  policy_deposit_withdrawal: "After a qualifying deposit, a casino bet and your first win, you must complete {required} qualifying deposits in total before withdrawing. Each qualifying deposit is at least GHS {min}. Successful qualifying deposits made before your first win count toward the total.",
   policy_notice: "Please review the applicable deposit, betting and withdrawal conditions before proceeding. For further clarification, contact our Customer Support Team.",
-  policy_accept: "I acknowledge that I have carefully reviewed, understood and accepted the applicable deposit, betting and withdrawal conditions.",
+  policy_accept: "I Accept Terms & Conditions",
   rules_version: 1,
   bet_rule_enabled_at: null,
   withdraw_rule_enabled_at: null,
@@ -95,6 +105,9 @@ function fromRow(r: Record<string, unknown> | undefined): MoneyRules {
     withdraw_rule_enabled: r.withdraw_rule_enabled === true,
     withdraw_rule_multiple: r2(r.withdraw_rule_multiple),
     withdraw_rule_message: String(r.withdraw_rule_message ?? ""),
+    withdrawal_deposit_rule_enabled: r.withdrawal_deposit_rule_enabled !== false,
+    withdrawal_required_deposits: Number(r.withdrawal_required_deposits ?? DEFAULT_RULES.withdrawal_required_deposits),
+    withdrawal_deposit_message: String(r.withdrawal_deposit_message ?? DEFAULT_RULES.withdrawal_deposit_message),
     withdraw_info: String(r.withdraw_info ?? ""),
     policy_heading: String(r.policy_heading ?? DEFAULT_RULES.policy_heading),
     policy_min_deposit: String(r.policy_min_deposit ?? DEFAULT_RULES.policy_min_deposit),
@@ -102,6 +115,7 @@ function fromRow(r: Record<string, unknown> | undefined): MoneyRules {
     policy_funds: String(r.policy_funds ?? DEFAULT_RULES.policy_funds),
     policy_withdrawal: String(r.policy_withdrawal ?? DEFAULT_RULES.policy_withdrawal),
     policy_min_withdrawal: String(r.policy_min_withdrawal ?? DEFAULT_RULES.policy_min_withdrawal),
+    policy_deposit_withdrawal: String(r.policy_deposit_withdrawal ?? DEFAULT_RULES.policy_deposit_withdrawal),
     policy_notice: String(r.policy_notice ?? DEFAULT_RULES.policy_notice),
     policy_accept: String(r.policy_accept ?? DEFAULT_RULES.policy_accept),
     rules_version: Number(r.rules_version),
@@ -132,7 +146,7 @@ export const minDeposit = async (db: Db) => (await getMoneyRules(db)).min_deposi
 /** Fills {min}, {max}, {days}, {multiple}, {held}, {to_bet} and {winnings} in an admin's message (plain text; pages
  *  escape it). */
 export function fillMessage(template: string, values: Record<string, string | number>): string {
-  return template.replace(/\{(min|max|days|multiple|held|to_bet|winnings|session)\}/g, (all, key: string) =>
+  return template.replace(/\{(min|max|days|multiple|held|to_bet|winnings|session|required|completed|remaining)\}/g, (all, key: string) =>
     values[key] === undefined ? all : typeof values[key] === "number" ? amountText(values[key] as number) : String(values[key]));
 }
 
@@ -148,6 +162,11 @@ export function policyOf(r: MoneyRules) {
     ...(r.bet_rule_enabled ? [
       { label: "Betting Eligibility", text: fillMessage(r.policy_betting, v) },
       { label: "Your Funds", text: fillMessage(r.policy_funds, v) },
+    ] : []),
+    ...(r.withdrawal_deposit_rule_enabled ? [
+      { label: "Withdrawal Deposit Requirement", text: fillMessage(r.policy_deposit_withdrawal, {
+        ...v, required: r.withdrawal_required_deposits,
+      }) },
     ] : []),
     { label: "Withdrawal Processing", text: fillMessage(r.policy_withdrawal, v) },
     { label: "Minimum Withdrawal", text: fillMessage(r.policy_min_withdrawal, v) },
@@ -169,6 +188,14 @@ export function publicRules(r: MoneyRules) {
       /* the template with the amounts still to fill per player */
       message: fillMessage(r.withdraw_rule_message, { min: r.min_deposit, days: String(r.bet_rule_days), multiple: r.withdraw_rule_multiple }),
     },
+    withdrawal_deposit_rule: {
+      enabled: r.withdrawal_deposit_rule_enabled,
+      required: r.withdrawal_required_deposits,
+      message: fillMessage(r.withdrawal_deposit_message, {
+        min: r.min_deposit, required: r.withdrawal_required_deposits,
+        completed: 0, remaining: r.withdrawal_required_deposits,
+      }),
+    },
     withdraw_info: r.withdraw_info,
   };
 }
@@ -184,6 +211,65 @@ export async function fundsOf(db: Db, userId: string): Promise<{ balance: number
     `SELECT available, withdrawable FROM user_balances WHERE user_id = $1 AND currency_code = 'GHS'`, [userId])).rows[0];
   const balance = r2(b?.available), winnings = Math.min(balance, r2(b?.withdrawable));
   return { balance, session: Math.max(0, r2(balance - winnings)), winnings };
+}
+
+export interface WithdrawalDepositProgress {
+  triggered: boolean;
+  eligible: boolean;
+  required: number;
+  completed: number;
+  remaining: number;
+  message: string | null;
+}
+
+/** Derive qualification from immutable ledger credits and game movements. */
+export async function withdrawalDepositProgress(
+  db: Db,
+  userId: string,
+  rules?: MoneyRules
+): Promise<WithdrawalDepositProgress> {
+  const r = rules ?? await getMoneyRules(db);
+  const { rows } = await db.query<{ completed: string; triggered: boolean }>(
+    `WITH qualifying_deposits AS (
+       SELECT j.id, j.created_at, min(e.id) AS entry_id, e.user_id
+         FROM ledger_journal j
+         JOIN ledger_entries e ON e.journal_id = j.id
+        WHERE j.entry_type = 'DEPOSIT' AND e.direction = 'CREDIT'
+          AND e.user_id = $1 AND e.currency_code = 'GHS'
+        GROUP BY j.id, j.created_at, e.user_id
+       HAVING sum(e.amount) >= $2
+     ),
+     progress AS (
+       SELECT count(*)::int AS completed FROM qualifying_deposits
+     ),
+     activation AS (
+       SELECT EXISTS (
+         SELECT 1
+           FROM qualifying_deposits d
+           JOIN ledger_entries bet ON bet.user_id = d.user_id AND bet.currency_code = 'GHS' AND bet.direction = 'DEBIT'
+           JOIN ledger_journal bj ON bj.id = bet.journal_id AND bj.entry_type = 'BET_PLACED'
+           JOIN ledger_entries win ON win.user_id = d.user_id AND win.currency_code = 'GHS'
+                                  AND win.direction = 'CREDIT' AND win.amount > 0
+           JOIN ledger_journal wj ON wj.id = win.journal_id AND wj.entry_type = 'BET_SETTLED'
+          WHERE (bj.created_at, bet.id) > (d.created_at, d.entry_id)
+            AND (wj.created_at, win.id) > (bj.created_at, bet.id)
+       ) AS triggered
+     )
+     SELECT progress.completed, activation.triggered FROM progress CROSS JOIN activation`,
+    [userId, r.min_deposit]
+  );
+  const completed = Number(rows[0]?.completed ?? 0);
+  const triggered = rows[0]?.triggered === true;
+  const remaining = Math.max(0, r.withdrawal_required_deposits - completed);
+  const eligible = !r.withdrawal_deposit_rule_enabled || !triggered || remaining === 0;
+  return {
+    triggered, eligible, required: r.withdrawal_required_deposits, completed, remaining,
+    message: r.withdrawal_deposit_rule_enabled && triggered && remaining > 0
+      ? fillMessage(r.withdrawal_deposit_message, {
+        min: r.min_deposit, required: r.withdrawal_required_deposits, completed, remaining,
+      })
+      : null,
+  };
 }
 
 /** Whether a player may place a real-money bet of `stake`: while the session rule is on, only from session funds
@@ -296,13 +382,15 @@ export async function acceptRules(db: Db, userId: string, shownVersion?: unknown
 
 /* ---------------- the admin's settings ---------------- */
 const POLICY = ["policy_heading", "policy_min_deposit", "policy_betting", "policy_funds", "policy_withdrawal",
-  "policy_min_withdrawal", "policy_notice", "policy_accept"] as const;
+  "policy_min_withdrawal", "policy_deposit_withdrawal", "policy_notice", "policy_accept"] as const;
 const FIELDS = ["min_deposit", "bet_rule_enabled", "bet_rule_days", "bet_rule_message", "withdraw_rule_enabled",
-  "withdraw_rule_multiple", "withdraw_rule_message", "withdraw_info", ...POLICY] as const;
+  "withdraw_rule_multiple", "withdraw_rule_message", "withdrawal_deposit_rule_enabled", "withdrawal_required_deposits",
+  "withdrawal_deposit_message", "withdraw_info", ...POLICY] as const;
 type Field = typeof FIELDS[number];
 /* a change to one of these is material: players accept the rules again (the policy wording is what they accept) */
 const MATERIAL: readonly Field[] = ["min_deposit", "bet_rule_enabled", "bet_rule_days", "withdraw_rule_enabled", "withdraw_rule_multiple",
-  "policy_min_deposit", "policy_betting", "policy_funds", "policy_withdrawal", "policy_min_withdrawal", "policy_accept"];
+  "withdrawal_deposit_rule_enabled", "withdrawal_required_deposits", "policy_min_deposit", "policy_betting", "policy_funds",
+  "policy_withdrawal", "policy_min_withdrawal", "policy_deposit_withdrawal", "policy_accept"];
 
 function readInput(cur: MoneyRules, input: Record<string, unknown>) {
   const next = {} as Record<Field, unknown>;
@@ -340,11 +428,15 @@ function readInput(cur: MoneyRules, input: Record<string, unknown>) {
   next.withdraw_rule_enabled = bool("withdraw_rule_enabled", "the withdrawal rule");
   next.withdraw_rule_multiple = num("withdraw_rule_multiple", "a play-through multiple", 0, 20);
   next.withdraw_rule_message = text("withdraw_rule_message", "the withdrawal rule message");
+  next.withdrawal_deposit_rule_enabled = bool("withdrawal_deposit_rule_enabled", "the withdrawal deposit requirement");
+  next.withdrawal_required_deposits = num("withdrawal_required_deposits", "the number of qualifying deposits", 1, 100, true);
+  next.withdrawal_deposit_message = text("withdrawal_deposit_message", "the withdrawal deposit requirement message");
   next.withdraw_info = text("withdraw_info", "the withdrawal information");
   const POLICY_LABEL: Record<typeof POLICY[number], string> = {
     policy_heading: "the heading", policy_min_deposit: "the minimum deposit text", policy_betting: "the betting eligibility text",
     policy_funds: "the funds text", policy_withdrawal: "the withdrawal processing text", policy_min_withdrawal: "the minimum withdrawal text",
-    policy_notice: "the important notice", policy_accept: "the acceptance checkbox text",
+    policy_deposit_withdrawal: "the withdrawal deposit requirement text", policy_notice: "the important notice",
+    policy_accept: "the acceptance checkbox text",
   };
   for (const k of POLICY) next[k] = text(k, POLICY_LABEL[k]);
   return next;
@@ -373,14 +465,16 @@ export async function saveMoneyRules(db: Pool, admin: string, input: Record<stri
               withdraw_rule_enabled = $5, withdraw_rule_multiple = $6, withdraw_rule_message = $7, withdraw_info = $8,
               rules_version = $9,
               policy_heading = $11, policy_min_deposit = $12, policy_betting = $13, policy_funds = $14, policy_withdrawal = $15,
-              policy_min_withdrawal = $16, policy_notice = $17, policy_accept = $18,
+              policy_min_withdrawal = $16, policy_deposit_withdrawal = $17, policy_notice = $18, policy_accept = $19,
+              withdrawal_deposit_rule_enabled = $20, withdrawal_required_deposits = $21, withdrawal_deposit_message = $22,
               bet_rule_enabled_at = CASE WHEN $2 AND NOT bet_rule_enabled THEN now() ELSE bet_rule_enabled_at END,
               withdraw_rule_enabled_at = CASE WHEN $5 AND NOT withdraw_rule_enabled THEN now() ELSE withdraw_rule_enabled_at END,
               updated_by = $10, updated_at = now()
         WHERE id = 1`,
       [next.min_deposit, next.bet_rule_enabled, next.bet_rule_days, next.bet_rule_message, next.withdraw_rule_enabled,
         next.withdraw_rule_multiple, next.withdraw_rule_message, next.withdraw_info, version, admin,
-        ...POLICY.map((k) => next[k])]);
+        ...POLICY.map((k) => next[k]), next.withdrawal_deposit_rule_enabled,
+        next.withdrawal_required_deposits, next.withdrawal_deposit_message]);
     const changes: Record<string, { before: unknown; after: unknown }> = {};
     for (const k of changed) changes[k] = { before: cur[k], after: next[k] };
     if (bump) changes.rules_version = { before: cur.rules_version, after: version };
@@ -407,7 +501,8 @@ export async function moneyRulesOverview(db: Pool) {
     settings,
     preview: publicRules(settings),
     accepted_current: Number(accepted?.n ?? 0),
-    limits: { min_deposit: [1, MAX_DEPOSIT], bet_rule_days: [1, 365], withdraw_rule_multiple: [0, 20], message_max: MESSAGE_MAX },
+    limits: { min_deposit: [1, MAX_DEPOSIT], bet_rule_days: [1, 365], withdraw_rule_multiple: [0, 20],
+      withdrawal_required_deposits: [1, 100], message_max: MESSAGE_MAX },
   };
 }
 

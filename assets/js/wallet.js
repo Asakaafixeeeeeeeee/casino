@@ -198,7 +198,7 @@
     const rulesBox = $("depRules");
     const rulesAccept = $("depRulesAccept");
     const rulesErr = $("depRulesErr");
-    const rs = { rules: null, accepted: false, sending: false, funds: null };
+    const rs = { rules: null, accepted: false, sending: false, funds: null, prompt: false };
     const ruleItem = (label, text) => "<li><b>" + U.esc(label) + "</b> " + U.esc(text) + "</li>";
     function rulesHtml(r) {
       const items = (r.policy ? r.policy.items : []).map((it) => ruleItem(it.label + ":", it.text));
@@ -216,7 +216,6 @@
     }
     function renderRules() {
       const r = rs.rules;
-      const summary = $("depRulesSummary");
       if (!r || !rulesBox) return;
       $("depRulesList").innerHTML = rulesHtml(r);
       if (r.policy) {
@@ -226,13 +225,8 @@
       $("depFunds").innerHTML = fundsHtml(rs.funds, r);
       rulesAccept.checked = rs.accepted;
       rulesAccept.disabled = rs.sending;
-      $("depRulesShort").innerHTML = "Conditions accepted · minimum deposit <b>GHS " + fixed(r.min_deposit) + "</b>" +
-        (r.bet_rule.enabled ? " · only deposited funds can be staked" : "") + (r.withdraw_rule.enabled ? " · play-through on deposits" : "") +
-        " · <a href='terms.html#money-rules'>terms</a>";
-      const expanded = $("depRulesShow").getAttribute("aria-expanded") === "true";
-      rulesBox.hidden = rs.accepted && !expanded;
+      rulesBox.hidden = !rs.prompt;
       rulesBox.classList.toggle("accepted", rs.accepted);
-      summary.hidden = !rs.accepted;
     }
     function rulesError(text) {
       if (!rulesErr) return;
@@ -252,7 +246,7 @@
     function needAcceptance(text) {
       if (!rs.rules) loadRules(); /* the rules didn't arrive earlier: ask again */
       rs.accepted = false;
-      $("depRulesShow").setAttribute("aria-expanded", "false");
+      rs.prompt = true;
       renderRules();
       rulesError(text || "Please read the rules above and tick the box to accept them before depositing.");
       if (rulesBox) {
@@ -283,16 +277,10 @@
           return;
         }
         rs.accepted = true;
-        $("depRulesShow").setAttribute("aria-expanded", "false");
+        rs.prompt = false;
         applyMinimum(rs.rules);
         renderRules();
         U.toast("Rules accepted", "ok");
-      });
-      $("depRulesShow").addEventListener("click", () => {
-        const open = $("depRulesShow").getAttribute("aria-expanded") !== "true";
-        $("depRulesShow").setAttribute("aria-expanded", String(open));
-        $("depRulesShow").textContent = open ? "Hide rules" : "View rules";
-        rulesBox.hidden = !open;
       });
     }
     loadRules();
@@ -551,6 +539,18 @@
       const info = $("wdInfo");
       if (info && d.withdraw_info) { info.textContent = d.withdraw_info; info.hidden = false; }
       const pt = d.playthrough || {};
+      const deposits = d.deposit_requirement || {};
+      const depositBox = $("wdDepositRequirement");
+      if (depositBox) {
+        depositBox.hidden = !deposits.enabled || !deposits.triggered || deposits.eligible;
+        if (!depositBox.hidden) {
+          depositBox.innerHTML = "<strong>Withdrawal deposit requirement</strong><p>" + U.esc(deposits.message || "") + "</p>";
+        }
+      }
+      if (deposits.enabled && deposits.triggered && !deposits.eligible) {
+        msg.innerHTML = "";
+        return;
+      }
       const box = $("wdRule");
       if (box) {
         box.hidden = !pt.enabled;
