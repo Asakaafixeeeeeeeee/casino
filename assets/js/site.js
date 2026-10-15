@@ -1509,7 +1509,7 @@
     css.href = new URL("../css/promos.css?v=2", base).href;
     document.head.appendChild(css);
     const js = document.createElement("script");
-    js.src = new URL("promos.js?v=2", base).href;
+    js.src = new URL("promos.js?v=3", base).href;
     js.defer = true;
     js.dataset.promos = "1";
     document.head.appendChild(js);

@@ -1,7 +1,8 @@
 /* BNC WIN (bncwin.html). The server (backend games/bncWin.ts) draws each race when the player presses GO and runs it
    on its clock; this page shows the countdown, asks the server for each half-second step as it happens (it never
-   knows a step before it's run), moves the runners to match the race score (green ahead while it's above 1), and
-   sends CASH OUT, which the server pays at the moment it receives it. */
+   knows a step before it's run), and sends CASH OUT, which the server pays at the moment it receives it.
+   It also runs the TV side of the broadcast: the graphics, the commentary (which only describes the steps the server
+   has already run), and the stadium sound. The 3D picture is drawn by bncwin-stage.js from window.BNC_VIEW. */
 (function () {
   "use strict";
   const U = window.VBUtil;
@@ -11,105 +12,169 @@
   const ghs = (n) => "GHS " + Number(n || 0).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const signed = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + ghs(Math.abs(n));
   const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
   const st = {
     rules: { rtp: 0.97, up: 1.08, down: 0.93, bust: 0.01, up_chance: 0.528667, down_chance: 0.461333, steps: 60, step_ms: 500, start_ms: 3000, max_win: 50000, min_bet: 1, max_bet: 1000 },
-    race: null, offset: 0, shownX: 1, valueShown: 0, off: 0, last: 0, polling: false, busy: false, lastStep: 0, history: [],
+    race: null, offset: 0, shownX: 1, last: 0, polling: false, busy: false, history: [],
   };
   const stage = $("bnStage");
+  window.BNC_VIEW = { phase: "idle", lead: 0, prog: 0, ended: null, raceId: null };
 
-  /* ---------------- the runners ---------------- */
-  function limb(cls, parts) { return '<g class="' + cls + '">' + parts + "</g>"; }
-  function runnerSvg(kind) {
-    const g = kind === "green";
-    const id = kind;
-    const skin = g ? ["#b06c40", "#7a4224"] : ["#d79a68", "#a5683e"];
-    const cloth = g ? ["#6ff0a4", "#18b257", "#0a5c2c"] : ["#ff9a94", "#e01f2d", "#6d0710"];
-    const shoe = g ? "#18b257" : "#e01f2d";
-    const leg = (back) => limb("leg " + (back ? "back" : "front"),
-      limb("thigh", '<rect class="limb" x="61" y="124" width="18" height="42" rx="9" fill="url(#sk-' + id + ')"/>' +
-        '<path d="M58 120 h24 v22 a6 6 0 0 1 -6 6 h-12 a6 6 0 0 1 -6 -6z" fill="url(#cl-' + id + ')"/>' +
-        limb("shin", '<rect class="limb" x="63" y="158" width="14" height="40" rx="7" fill="url(#sk-' + id + ')"/>' +
-          '<path d="M60 196 q2 -6 10 -6 h6 q12 2 16 8 q1 4 -3 5 h-26 q-4 0 -3 -7z" fill="#fafafa"/><path d="M66 199 h22" stroke="' + shoe + '" stroke-width="3" stroke-linecap="round"/>')));
-    const arm = (back) => limb("arm " + (back ? "back" : "front"),
-      limb("uarm", '<rect class="limb" x="63" y="82" width="14" height="30" rx="7" fill="url(#sk-' + id + ')"/>' +
-        limb("farm", '<rect class="limb" x="64" y="104" width="12" height="27" rx="6" fill="url(#sk-' + id + ')"/><circle cx="70" cy="132" r="6.5" fill="url(#sk-' + id + ')"/>')));
-    const head = g
-      ? '<image href="assets/img/bnc/face.webp" x="31" y="-4" width="82" height="80" preserveAspectRatio="xMidYMid meet"/>'
-      : /* the red runner: her own look — a high puff with a red headband, gold earrings */
-        '<circle cx="66" cy="2" r="21" fill="#1c0f0a"/><circle cx="58" cy="-6" r="10" fill="#2a1710"/><circle cx="76" cy="-4" r="9" fill="#24130c"/>' +
-        '<ellipse cx="72" cy="40" rx="28" ry="31" fill="url(#fs-red)"/>' +
-        '<path d="M44 30 q4 -26 28 -27 q24 1 28 27 q-8 -12 -28 -13 q-20 1 -28 13z" fill="#1c0f0a"/>' +
-        '<path d="M45 24 q27 -16 54 0" stroke="#e01f2d" stroke-width="6" fill="none" stroke-linecap="round"/>' +
-        '<circle cx="44" cy="44" r="5" fill="#c98b5c"/><circle cx="100" cy="44" r="5" fill="#c98b5c"/>' +
-        '<circle cx="44" cy="52" r="2.6" fill="#ffd34d"/><circle cx="100" cy="52" r="2.6" fill="#ffd34d"/>' +
-        '<path d="M56 32 q6 -4 12 -1" stroke="#2a1710" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M78 31 q6 -3 12 1" stroke="#2a1710" stroke-width="2.4" fill="none" stroke-linecap="round"/>' +
-        '<ellipse cx="62" cy="41" rx="6.2" ry="5" fill="#fff"/><ellipse cx="83" cy="41" rx="6.2" ry="5" fill="#fff"/>' +
-        '<circle cx="63" cy="41.5" r="3.6" fill="#3b1f10"/><circle cx="84" cy="41.5" r="3.6" fill="#3b1f10"/>' +
-        '<circle cx="63" cy="41.5" r="1.7" fill="#000"/><circle cx="84" cy="41.5" r="1.7" fill="#000"/><circle cx="64.3" cy="40.2" r="1.1" fill="#fff"/><circle cx="85.3" cy="40.2" r="1.1" fill="#fff"/>' +
-        '<path d="M55.5 38 q6 -5 13 -1" stroke="#111" stroke-width="1.6" fill="none"/><path d="M76.5 37 q7 -4 13 1" stroke="#111" stroke-width="1.6" fill="none"/>' +
-        '<path d="M71 44 q-3 8 1 10 q3 1 5 -1" stroke="#8a5530" stroke-width="1.8" fill="none" stroke-linecap="round"/>' +
-        '<circle cx="56" cy="53" r="5" fill="#e0707a" opacity=".28"/><circle cx="89" cy="53" r="5" fill="#e0707a" opacity=".28"/>' +
-        '<path d="M62 59 q10 8 21 0 q-10 4 -21 0z" fill="#b5524f"/><path d="M63 59.5 q10 3 19 0" stroke="#fff" stroke-width="1.2" opacity=".6" fill="none"/>' +
-        '<ellipse cx="62" cy="27" rx="9" ry="4" fill="#fff" opacity=".12"/>';
-    return '<svg viewBox="0 0 140 220" aria-hidden="true"><defs>' +
-      '<linearGradient id="sk-' + id + '" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="' + skin[0] + '"/><stop offset="1" stop-color="' + skin[1] + '"/></linearGradient>' +
-      '<linearGradient id="cl-' + id + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + cloth[0] + '"/><stop offset=".45" stop-color="' + cloth[1] + '"/><stop offset="1" stop-color="' + cloth[2] + '"/></linearGradient>' +
-      '<radialGradient id="fs-red" cx="40%" cy="35%" r="75%"><stop offset="0" stop-color="#e8b282"/><stop offset=".7" stop-color="#c88a58"/><stop offset="1" stop-color="#9a5f36"/></radialGradient>' +
-      '</defs><g class="bob">' + arm(true) + leg(true) +
-      '<rect x="64" y="68" width="12" height="16" rx="5" fill="url(#sk-' + id + ')"/>' +
-      '<path d="M54 82 q16 -8 32 0 l4 40 q-20 6 -40 0z" fill="url(#cl-' + id + ')"/>' +
-      '<path d="M57 86 l-1 34 M83 86 l1 34" stroke="#fff" stroke-width="2.4" opacity=".8"/>' +
-      '<rect x="60" y="96" width="20" height="14" rx="2" fill="#fff"/><text class="tag" x="70" y="108" text-anchor="middle" fill="' + cloth[2] + '">' + (g ? "1" : "2") + "</text>" +
-      leg(false) + arm(false) + "<g class=\"head\">" + head + "</g></g></svg>";
-  }
-  $("bnGreen").innerHTML = runnerSvg("green");
-  $("bnRed").innerHTML = runnerSvg("red");
-
-  /* ---------------- sound (optional; made in the browser, nothing downloaded) ---------------- */
-  let audio = null;
+  /* ---------------- sound: stadium crowd, footsteps, beeps, and the commentary voice ---------------- */
+  let audio = null, crowdGain = null, crowdLevel = 0, stepBuf = null;
   let soundOn = (() => { try { return localStorage.getItem("bnc.sound") !== "off"; } catch (e) { return true; } })();
+  let voiceOn = (() => { try { return localStorage.getItem("bnc.voice") !== "off"; } catch (e) { return true; } })();
   function paintSound() {
     $("bnSound").setAttribute("aria-pressed", String(soundOn));
     $("bnSound").setAttribute("aria-label", soundOn ? "Sound on" : "Sound off");
     $("bnSound").classList.toggle("is-off", !soundOn);
-    $("bnSound").style.opacity = soundOn ? "1" : ".45";
+    $("bnVoice").setAttribute("aria-pressed", String(voiceOn));
+    $("bnVoice").textContent = "🎙 Commentary voice: " + (voiceOn ? "on" : "off");
+    $("bnVoice").classList.toggle("is-off", !voiceOn || !soundOn);
   }
-  $("bnSound").addEventListener("click", () => {
-    soundOn = !soundOn;
-    try { localStorage.setItem("bnc.sound", soundOn ? "on" : "off"); } catch (e) { /* storage unavailable */ }
-    paintSound();
-  });
-  paintSound();
-  function tone(freq, dur, type, vol, slide) {
-    if (!soundOn) return;
+  function ctx() {
+    if (!soundOn) return null;
     try {
       audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-      const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;
+      if (audio.state === "suspended") audio.resume();
+      if (!crowdGain) startCrowd();
+      return audio;
+    } catch (e) { return null; }
+  }
+  function noiseBuffer(sec, color) {
+    const len = Math.floor(audio.sampleRate * sec), buf = audio.createBuffer(1, len, audio.sampleRate), d = buf.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      if (color === "pink") { b0 = 0.997 * b0 + w * 0.029; b1 = 0.985 * b1 + w * 0.032; b2 = 0.95 * b2 + w * 0.048; d[i] = (b0 + b1 + b2) * 0.9; }
+      else d[i] = w;
+    }
+    return buf;
+  }
+  /* the crowd: a loop of murmur that swells with the race (bncwin-stage.js sets the level) */
+  function startCrowd() {
+    try {
+      const src = audio.createBufferSource(); src.buffer = noiseBuffer(3, "pink"); src.loop = true;
+      const bp = audio.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 850; bp.Q.value = 0.5;
+      const lfo = audio.createOscillator(), lg = audio.createGain(); lfo.frequency.value = 0.23; lg.gain.value = 260; lfo.connect(lg).connect(bp.frequency); lfo.start();
+      crowdGain = audio.createGain(); crowdGain.gain.value = 0;
+      src.connect(bp).connect(crowdGain).connect(audio.destination); src.start();
+    } catch (e) { crowdGain = null; }
+  }
+  function setCrowd(level) {
+    crowdLevel = level;
+    if (!crowdGain || !audio) return;
+    const g = soundOn ? 0.03 + Math.min(1, level) * 0.13 : 0;
+    crowdGain.gain.setTargetAtTime(g, audio.currentTime, 0.4);
+  }
+  function tone(freq, dur, type, vol, slide) {
+    const a = ctx(); if (!a) return;
+    try {
+      const o = a.createOscillator(), g = a.createGain(), t = a.currentTime;
       o.type = type || "sine";
       o.frequency.setValueAtTime(freq, t);
       if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + dur);
       g.gain.setValueAtTime(vol || 0.08, t);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      o.connect(g).connect(audio.destination);
-      o.start(t);
-      o.stop(t + dur);
+      o.connect(g).connect(a.destination);
+      o.start(t); o.stop(t + dur);
     } catch (e) { /* no audio */ }
   }
-  function cheer() {
-    if (!soundOn) return;
+  function roar(strength) {
+    const a = ctx(); if (!a) return;
     try {
-      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-      const len = audio.sampleRate * 1.2, buf = audio.createBuffer(1, len, audio.sampleRate), d = buf.getChannelData(0);
-      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.5) * 0.35;
-      const s = audio.createBufferSource(), f = audio.createBiquadFilter();
-      f.type = "bandpass"; f.frequency.value = 1400;
-      s.buffer = buf; s.connect(f).connect(audio.destination); s.start();
+      const s = a.createBufferSource(); s.buffer = noiseBuffer(2.2, "pink");
+      const f = a.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 1100; f.Q.value = 0.7;
+      const g = a.createGain(), t = a.currentTime;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35 * strength, t + 0.35); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+      s.connect(f).connect(g).connect(a.destination); s.start();
     } catch (e) { /* no audio */ }
-    [523, 659, 784, 1046].forEach((fq, i) => setTimeout(() => tone(fq, 0.22, "triangle", 0.07), i * 90));
+  }
+  let lastStep = 0;
+  function step(kind, speed) {
+    if (!soundOn || !audio || !crowdGain) return;
+    const t0 = performance.now(); if (t0 - lastStep < 70) return; lastStep = t0;
+    try {
+      const s = audio.createBufferSource(); s.buffer = stepBuf || (stepBuf = noiseBuffer(0.06));
+      const f = audio.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = kind === "green" ? 420 : 340;
+      const g = audio.createGain(), t = audio.currentTime;
+      g.gain.setValueAtTime(0.12 * Math.min(1, (speed || 6) / 6), t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+      s.connect(f).connect(g).connect(audio.destination); s.start();
+    } catch (e) { /* no audio */ }
+  }
+  window.BNCSound = { crowd: setCrowd, step };
+
+  $("bnSound").addEventListener("click", () => {
+    soundOn = !soundOn;
+    try { localStorage.setItem("bnc.sound", soundOn ? "on" : "off"); } catch (e) { /* storage unavailable */ }
+    if (!soundOn && window.speechSynthesis) window.speechSynthesis.cancel();
+    if (soundOn) ctx();
+    setCrowd(crowdLevel);
+    paintSound();
+  });
+  $("bnVoice").addEventListener("click", () => {
+    voiceOn = !voiceOn;
+    try { localStorage.setItem("bnc.voice", voiceOn ? "on" : "off"); } catch (e) { /* storage unavailable */ }
+    if (!voiceOn && window.speechSynthesis) window.speechSynthesis.cancel();
+    paintSound();
+  });
+  paintSound();
+
+  /* ---------------- commentary: describes only what has already happened in the race ---------------- */
+  const comm = { at: 0, text: "" };
+  let voice = null;
+  function chooseVoice() {
+    if (!window.speechSynthesis) return;
+    const vs = window.speechSynthesis.getVoices();
+    voice = vs.find((v) => /en[-_]GB/i.test(v.lang)) || vs.find((v) => /^en/i.test(v.lang)) || null;
+  }
+  if (window.speechSynthesis) { chooseVoice(); window.speechSynthesis.onvoiceschanged = chooseVoice; }
+  function say(text, urgent) {
+    const t = Date.now();
+    if (!urgent && t - comm.at < 3400) return;
+    if (text === comm.text && t - comm.at < 9000) return;
+    comm.at = t; comm.text = text;
+    const box = $("bnComm");
+    $("bnCommText").textContent = text;
+    box.classList.remove("new"); void box.offsetWidth; box.classList.add("new");
+    if (soundOn && voiceOn && window.speechSynthesis && !navigator.webdriver) {
+      try {
+        const ss = window.speechSynthesis;
+        if (urgent) ss.cancel(); else if (ss.speaking) return;
+        const u = new SpeechSynthesisUtterance(text.replace(/×/g, " times").replace(/GHS/g, "cedis").replace(/—/g, ","));
+        if (voice) u.voice = voice;
+        u.lang = voice ? voice.lang : "en-GB"; u.rate = 1.1;
+        ss.speak(u);
+      } catch (e) { /* no voice */ }
+    }
+  }
+  const L = (x) => Math.log(Math.max(x, 1e-6));
+  const story = { sign: 0, half: false, final: false, far: false, behind: false };
+  function narrate(r, prev) {
+    if (!prev || prev.race_id !== r.race_id || !r.xs || r.xs.length < 2 || r.step <= (prev.step || 0)) return;
+    const xs = r.xs, n = xs.length - 1, x = xs[n], lead = L(x);
+    const sign = lead > 0.025 ? 1 : lead < -0.025 ? -1 : story.sign;
+    const steps = st.rules.steps;
+    const trend = n >= 3 ? Math.sign(xs[n] - xs[n - 1]) + Math.sign(xs[n - 1] - xs[n - 2]) + Math.sign(xs[n - 2] - xs[n - 3]) : 0;
+    if (sign !== story.sign && sign !== 0) {
+      story.sign = sign;
+      if (sign > 0) { say(pick(["The green runner takes the lead!", "Green moves to the front!", "And green goes past — green leads!"]), true); roar(0.8); }
+      else { say(pick(["The red runner takes the lead!", "Red goes in front — green has work to do!", "Red edges ahead!"]), true); roar(0.5); }
+      return;
+    }
+    if (!story.half && n >= steps / 2) { story.half = true; say("Halfway — the race is getting intense!"); return; }
+    if (!story.final && n >= steps * 0.8) { story.final = true; say("Into the final stretch!", true); roar(0.6); return; }
+    if (!story.far && x >= 1.6) { story.far = true; say("Green is well clear — what a run!"); return; }
+    if (!story.behind && x <= 0.62) { story.behind = true; say("Red is well clear — can green respond?"); return; }
+    if (Math.abs(lead) < 0.035 && n > 4) { say(pick(["Neck and neck — what an exciting race!", "Nothing between them!"])); return; }
+    if (trend === 3 && lead > 0) say(pick(["The green runner is pushing forward!", "Green is pulling away!"]));
+    else if (trend === -3 && lead > 0) say(pick(["The red runner is catching up!", "Red is closing the gap!"]));
+    else if (trend === 3 && lead < 0) say(pick(["Green is fighting back!", "Green is reeling her in!"]));
+    else if (trend === -3 && lead < 0) say(pick(["Red is stretching the lead!", "Red pulls further ahead!"]));
   }
 
-  /* ---------------- the numbers and the scene ---------------- */
+  /* ---------------- the numbers and the graphics ---------------- */
   const stakeIn = $("bnStake");
   const race = () => st.race;
   const running = () => race() && race().status === "ACTIVE";
@@ -121,7 +186,7 @@
     const r = race();
     const stake = r ? r.stake : Number(stakeIn.value) || 0;
     const value = r ? (r.status === "BUSTED" ? 0 : r.status === "ACTIVE" ? r.value : r.payout) : 0; /* the server's figure, to the pesewa */
-    $("bnStakeShow").textContent = ghs(r ? r.stake : stake);
+    $("bnStakeShow").textContent = ghs(stake);
     $("bnValue").textContent = ghs(value);
     $("bnCashVal").textContent = ghs(r && r.status === "ACTIVE" ? r.value : 0);
     const pl = r ? value - stake : 0;
@@ -131,56 +196,33 @@
     $("bnX").textContent = (r && r.status === "BUSTED" ? 0 : st.shownX).toFixed(2) + "×";
   }
   function setStatus(text, lead) {
-    $("bnStatus").textContent = text;
+    if ($("bnStatus").textContent !== text) $("bnStatus").textContent = text;
     if (lead) stage.dataset.lead = lead; else delete stage.dataset.lead;
   }
 
-  /* every frame: runners, track, crowd and camera follow the race score */
+  /* every frame: ease the shown score toward the latest step, publish the view for the 3D stage, update the graphics */
   function frame(ts) {
     const dt = Math.min(0.1, (ts - (st.last || ts)) / 1000);
     st.last = ts;
     const r = race();
     const t = now();
-    const isRunning = r && r.status === "ACTIVE" && t >= startsAt();
-    const ended = r && r.status !== "ACTIVE";
-    /* the score shown eases toward the latest step */
-    const tx = r && r.status === "BUSTED" ? Math.min(st.shownX, targetX() || st.shownX) : targetX();
-    st.shownX += (tx - st.shownX) * Math.min(1, dt * (reduce ? 20 : 6));
-    if (r && r.status === "BUSTED") st.shownX = Math.max(0.0001, st.shownX);
-    const lead = r ? Math.max(-1, Math.min(1, Math.log(Math.max(st.shownX, 0.05)) / Math.log(2.6))) : 0;
     const busted = r && r.status === "BUSTED";
-    /* positions, in % of the stage width */
-    const base = 46;
-    let gx = base + lead * 15, rx = base - lead * 15;
-    if (busted) { rx = Math.min(108, (st.bustRx = (st.bustRx || rx) + dt * 45)); gx = Math.max(18, gx - 4); }
-    else st.bustRx = 0;
-    $("bnGreen").style.left = gx + "%";
-    $("bnRed").style.left = rx + "%";
-    $("bnGreen").classList.toggle("lead", !!r && lead > 0.02 && !busted);
-    $("bnRed").classList.toggle("lead", !!r && (lead < -0.02 || busted));
-    /* stride: running fast; the leader a touch faster; stop a moment after the end */
-    const play = isRunning || (ended && Date.now() - (st.endedAt || 0) < 1400) ? "running" : "paused";
-    $("bnGreen").style.setProperty("--play", play);
-    $("bnRed").style.setProperty("--play", play);
-    $("bnGreen").style.setProperty("--pace", (busted ? 0.7 : 0.44 - lead * 0.06).toFixed(3) + "s");
-    $("bnRed").style.setProperty("--pace", (busted ? 0.3 : 0.44 + lead * 0.06).toFixed(3) + "s");
-    /* the track and crowd slide by while they run */
-    if (play === "running" && !reduce) st.off += dt * 420;
-    $("bnLanes").style.backgroundPosition = "0 0, " + (-st.off % 300) + "px 0, " + (-st.off % 12) + "px 0";
-    document.querySelectorAll(".bn-crowd").forEach((c, i) => (c.style.backgroundPosition = (-st.off * (i ? 0.08 : 0.16)) + "px 0"));
-    document.querySelector(".bn-banner").style.transform = "translateX(" + (-(st.off * 0.16) % 600) + "px)";
-    /* the finish line comes in over the last stretch */
-    const prog = r ? Math.max(0, Math.min(1, (t - startsAt()) / (st.rules.steps * st.rules.step_ms))) : 0;
-    const shownProg = r && ended ? Math.min(1, (r.ended_step || 0) / st.rules.steps) : prog;
-    $("bnProgress").style.width = (shownProg * 100).toFixed(1) + "%";
-    if (r && shownProg > 0.85 && !busted) {
-      stage.dataset.nearFinish = "1";
-      $("bnFinish").style.left = (140 - ((shownProg - 0.85) / 0.15) * 75).toFixed(1) + "%";
-    } else delete stage.dataset.nearFinish;
-    /* the camera leans toward whoever leads and zooms in while they run */
-    const cam = isRunning && !reduce ? "scale(1.06) translateX(" + (-(Math.max(gx, rx) - 50) * 0.25).toFixed(2) + "%)" : "none";
-    if ($("bnWorld").dataset.cam !== cam) { $("bnWorld").style.transform = cam; $("bnWorld").dataset.cam = cam; }
-    if (isRunning) setStatus(lead > 0.01 ? "Green leads — value rising" : lead < -0.01 ? "Red leads — value falling" : "Neck and neck", lead > 0.01 ? "green" : lead < -0.01 ? "red" : "");
+    const tx = busted ? Math.min(st.shownX, targetX() || st.shownX) : targetX();
+    st.shownX += (tx - st.shownX) * Math.min(1, dt * (reduce ? 20 : 5));
+    if (busted) st.shownX = Math.max(0.0001, st.shownX);
+    const lead = r ? Math.max(-1, Math.min(1, L(Math.max(st.shownX, 0.05)) / Math.log(2.6))) : 0;
+    const phase = !r ? "idle" : r.status !== "ACTIVE" ? "ended" : t < startsAt() ? "countdown" : "running";
+    const prog = !r ? 0 : r.status !== "ACTIVE" ? Math.min(1, (r.ended_step || 0) / st.rules.steps) : Math.max(0, Math.min(1, (t - startsAt()) / (st.rules.steps * st.rules.step_ms)));
+    window.BNC_VIEW = { phase, lead: busted ? Math.min(lead, -0.6) : lead, prog, ended: r && r.status !== "ACTIVE" ? r.status : null, raceId: r ? r.race_id : null };
+    stage.dataset.phase = phase;
+    /* tug of war: green's share of the bar */
+    const share = 50 + (busted ? -50 : lead * 50);
+    $("bnTugG").style.width = share.toFixed(1) + "%";
+    $("bnTugR").style.width = (100 - share).toFixed(1) + "%";
+    $("bnTugMark").style.left = share.toFixed(1) + "%";
+    $("bnProgress").style.width = (prog * 100).toFixed(1) + "%";
+    $("bnDist").textContent = Math.round(prog * 210) + " m";
+    if (phase === "running") setStatus(lead > 0.01 ? "Green leads · value rising" : lead < -0.01 ? "Red leads · value falling" : "Neck and neck", lead > 0.01 ? "green" : lead < -0.01 ? "red" : "");
     paintBoard();
     requestAnimationFrame(frame);
   }
@@ -194,9 +236,10 @@
     r._startsAt = serverNow + r.starts_in_ms;
     if (prev && prev.race_id === r.race_id && r.step > (prev.step || 0)) {
       const up = r.xs[r.xs.length - 1] > r.xs[r.xs.length - 2];
-      tone(up ? 760 : 300, 0.09, "square", 0.035);
+      tone(up ? 760 : 300, 0.07, "triangle", 0.025);
     }
     st.race = r;
+    if (r.status === "ACTIVE") narrate(r, prev);
     $("bnHashRow").hidden = false;
     $("bnHash").textContent = r.hash.slice(0, 18) + "…" + r.hash.slice(-6);
     $("bnHash").title = r.seed ? "Seed: " + r.seed : r.hash;
@@ -205,28 +248,32 @@
   function ended(r) {
     if (st.shownResult === r.race_id) return;
     st.shownResult = r.race_id;
-    st.endedAt = Date.now();
     st.polling = false;
     const res = $("bnResult");
     res.hidden = false;
     if (r.status === "BUSTED") {
       res.className = "bn-result lose";
-      res.innerHTML = "<b>Red broke away</b><span>The stake of " + ghs(r.stake) + " is lost.</span>";
+      res.innerHTML = "<small>RACE RESULT</small><b>Red broke away</b><span>The stake of " + ghs(r.stake) + " is lost.</span>";
       setStatus("Red won the race", "red");
-      tone(220, 0.5, "sawtooth", 0.06, 110);
+      say("Red breaks away! That's the end of the race.", true);
+      tone(220, 0.5, "sawtooth", 0.05, 110);
+      roar(0.5);
     } else {
       const profit = Math.round((r.payout - r.stake) * 100) / 100;
+      const x = Number(r.x).toFixed(2);
       res.className = "bn-result " + (r.payout >= r.stake ? "win" : "lose");
-      res.innerHTML = "<b>" + ghs(r.payout) + "</b><span>" + (r.status === "CASHED" ? "Cashed out at " + Number(r.x).toFixed(2) + "×" : "Finish line at " + Number(r.x).toFixed(2) + "×") +
+      res.innerHTML = "<small>" + (r.status === "CASHED" ? "CASHED OUT" : "FINISH") + "</small><b>" + ghs(r.payout) + "</b><span>" + (r.status === "CASHED" ? "Cashed out at " + x + "×" : "Finish line at " + x + "×") +
         " · " + signed(profit) + "</span>";
       setStatus(r.status === "CASHED" ? "Cashed out" : "Race finished", r.payout >= r.stake ? "green" : "red");
-      cheer();
+      say(r.status === "CASHED" ? "Cashed out at " + x + "× — " + ghs(r.payout) + " banked!" : "They cross the line! Finished at " + x + "×.", true);
+      roar(1);
+      [523, 659, 784, 1046].forEach((fq, i) => setTimeout(() => tone(fq, 0.22, "triangle", 0.05), i * 90));
     }
     st.shownX = r.status === "BUSTED" ? st.shownX : Number(r.x) || st.shownX;
     $("bnCash").hidden = true;
     $("bnGo").hidden = false;
     $("bnGo").disabled = false;
-    $("bnGo").textContent = "GO";
+    $("bnGo").querySelector("span").textContent = "GO";
     stakeIn.disabled = false;
     loadState(true);
   }
@@ -258,8 +305,9 @@
         box.classList.remove("pop");
         void box.offsetWidth;
         box.classList.add("pop");
-        tone(label === "GO!" ? 880 : 440, label === "GO!" ? 0.45 : 0.18, "square", 0.06);
-        if (label === "GO!") setStatus("They're off!", "");
+        tone(label === "GO!" ? 880 : 440, label === "GO!" ? 0.45 : 0.18, "square", 0.05);
+        if (label === "2") say("On your marks…", true);
+        if (label === "GO!") { setStatus("They're off!", ""); say("And they're off!", true); roar(0.9); }
       }
       requestAnimationFrame(tick);
     };
@@ -268,10 +316,13 @@
   function begin(r) {
     st.shownResult = null;
     st.shownX = 1;
+    Object.assign(story, { sign: 0, half: false, final: false, far: false, behind: false });
     $("bnResult").hidden = true;
     adopt(r);
     if (r.status === "ACTIVE") {
-      setStatus(r.starts_in_ms > 0 ? "On your marks…" : "Racing", "");
+      const started = r.starts_in_ms <= 0;
+      setStatus(started ? "Racing" : "On your marks…", "");
+      if (!started) say("The runners are getting ready!", true);
       $("bnGo").hidden = true;
       $("bnCash").hidden = false;
       $("bnCash").disabled = false;
@@ -289,13 +340,14 @@
     if (!(stake >= st.rules.min_bet && stake <= st.rules.max_bet)) { U.toast("Stake between " + ghs(st.rules.min_bet) + " and " + ghs(st.rules.max_bet) + ".", "error"); return; }
     st.busy = true;
     $("bnGo").disabled = true;
-    $("bnGo").textContent = "…";
+    $("bnGo").querySelector("span").textContent = "…";
+    ctx(); /* the stadium sound starts on the player's press */
     tone(520, 0.08, "square", 0.04);
     const r = await U.paymentApi(API + "/race", { body: { stake, idempotency_key: "bnc:" + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2)) } });
     st.busy = false;
     if (!r.ok || !r.data || !r.data.race) {
       $("bnGo").disabled = false;
-      $("bnGo").textContent = "GO";
+      $("bnGo").querySelector("span").textContent = "GO";
       const msg = (r.data && (r.data.message || r.data.error)) || "Couldn't start the race — try again.";
       U.toast(msg, "error");
       if (r.data && r.data.error === "race_running") loadState(false);
@@ -320,14 +372,16 @@
   });
 
   /* stake */
+  function paintChips() { document.querySelectorAll("[data-chip]").forEach((b) => b.classList.toggle("on", Number(b.dataset.chip) === Number(stakeIn.value))); }
   function clampStake() {
     let v = Math.round((Number(stakeIn.value) || 0) * 100) / 100;
     v = Math.min(Math.max(v, st.rules.min_bet), st.rules.max_bet);
     stakeIn.value = String(v);
+    paintChips();
     paintBoard();
   }
   stakeIn.addEventListener("change", clampStake);
-  stakeIn.addEventListener("input", paintBoard);
+  stakeIn.addEventListener("input", () => { paintChips(); paintBoard(); });
   document.querySelectorAll(".bn-step").forEach((b) => b.addEventListener("click", () => {
     if (stakeIn.disabled) return;
     stakeIn.value = String(Math.max(0, (Number(stakeIn.value) || 0) + Number(b.dataset.step)));
@@ -359,6 +413,7 @@
     stakeIn.min = String(R.min_bet);
     stakeIn.max = String(R.max_bet);
     $("bnRulesBody").innerHTML =
+      "<p><b>A virtual race.</b> BNC WIN Racing is a computer-drawn race shown in the style of a TV broadcast, with commentary. It is not a real-world event and the athletes are not real people.</p>" +
       "<ol>" +
       "<li>Enter your stake and press <b>GO</b>. The stake is taken from your balance once, and the race starts after a 3-second countdown.</li>" +
       "<li>The race lasts " + (R.steps * R.step_ms / 1000) + " seconds, in " + R.steps + " steps of half a second. Your runner is <b style='color:#6ff0a4'>green</b>. While green is ahead, your cash-out value is above where it started and rising; while <b style='color:#ff8a84'>red</b> is ahead it's falling.</li>" +
@@ -375,8 +430,9 @@
       "<p><b>Return to player: " + Math.round(R.rtp * 100) + "%.</b> The steps are balanced, so on average a race returns " + Math.round(R.rtp * 100) +
       "% of the stake whenever you cash out — no timing does better in the long run. Results vary a lot from race to race: about " +
       Math.round((1 - Math.pow(1 - R.bust, R.steps)) * 100) + "% of races that run to the end have red break away, and you can lose your whole stake.</p>" +
-      "<p><b>Fairness.</b> The whole race is drawn from a secret seed the moment you press GO — never from your stake, your account or when you cash out. " +
-      "Its fingerprint (SHA-256) is shown during the race; the seed is shown in your race history afterwards, so the steps can be checked. The runners only show the race score.</p>" +
+      "<p><b>Fairness.</b> The whole race is drawn from a secret seed the moment you press GO — never from your stake, your balance, your account or when you cash out. " +
+      "Its fingerprint (SHA-256) is shown during the race; the seed is shown in your race history afterwards, so the steps can be checked. " +
+      "The athletes, the cameras and the commentary only show the race score the server has already drawn; they can't change it.</p>" +
       "<p>18+ only. Play only with money you can afford to lose. You can set limits or take a break from My account.</p>";
   }
   const openRules = () => $("bnRules").showModal();
@@ -403,7 +459,9 @@
   }
 
   setStatus("Ready to race", "");
+  $("bnCommText").textContent = "Welcome to BNC WIN Racing! A virtual race — set your stake and press GO.";
   paintRules();
+  paintChips();
   loadState(false);
   U.refreshBalance();
   requestAnimationFrame(frame);

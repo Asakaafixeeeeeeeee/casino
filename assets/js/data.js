@@ -36,7 +36,7 @@
     /* the player's own race, green against red (backend games/bncWin.ts, page bncwin.html): drawn from a seed at GO,
        every step balanced, cash-out value = stake × 97% × race score */
     { id: "bnc-win", name: "BNC WIN", category: "Live Casino", providerId: "accra", icon: "🏃‍♀️", rtp: 97, maxWin: "₵ 50,000",
-      volatility: "High", minBet: "₵ 1", tags: ["NEW", "HOT"], real: true, page: "bncwin.html", thumb: "assets/img/thumbs/bnc-win.webp" },
+      volatility: "High", minBet: "₵ 1", tags: ["NEW", "HOT"], real: true, page: "bncwin.html", thumb: "assets/img/thumbs/bnc-win-v2.webp" },
     /* one live round for everybody (backend games/skyRush.ts, page aviator.html): P(crash ≥ m) = 97% ÷ m, each round's
        seed fingerprint is published before take-off and the seed after it */
     { id: "aviator", name: "Aviator", category: "Live Casino", providerId: "bonwire", icon: "✈️", rtp: 97, maxWin: "₵ 250,000",

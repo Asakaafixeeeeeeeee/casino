@@ -20,7 +20,9 @@ test("BNC WIN: lobby card, GO, the race runs, CASH OUT pays once, history and ba
 
   await page.goto("/bncwin.html");
   await settle(page);
-  await expect(page.locator("#bnGreen image")).toHaveAttribute("href", /face\.webp/);
+  /* the 3D stadium and both athletes load */
+  await expect(page.locator("#bnStage")).toHaveAttribute("data-three", "ready", { timeout: 60_000 });
+  await expect(page.locator("#bnCommText")).toContainText("Welcome to BNC WIN Racing");
   await expect(page.locator("#bnRules")).toBeHidden();
   await page.locator("#bnStake").fill("20");
   await page.locator("#bnStake").dispatchEvent("change");
@@ -30,7 +32,10 @@ test("BNC WIN: lobby card, GO, the race runs, CASH OUT pays once, history and ba
   await expect(page.locator("#bnCount")).toBeVisible();
   await expect(page.locator("#bnHashRow")).toBeVisible();
   /* the race runs: steps come in */
-  await expect(page.locator("#bnStatus")).toHaveText(/leads|Neck|off|broke|Red won/, { timeout: 15_000 });
+  await expect(page.locator("#bnStatus")).toHaveText(/leads|Neck|off|broke|Red won/i, { timeout: 15_000 });
+  /* the commentary follows the race and the broadcast graphics show the money */
+  await expect(page.locator("#bnCommText")).not.toContainText("Welcome", { timeout: 15_000 });
+  await expect(page.locator("#bnStakeShow")).toHaveText("GHS 20.00");
   await page.waitForTimeout(2500);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/bnc-race-phone.png` });
 
@@ -74,8 +79,10 @@ test("BNC WIN looks right on a computer mid-race", async ({ browser }) => {
   await fundedPlayer(page, 50);
   await page.goto("/bncwin.html");
   await settle(page);
+  await expect(page.locator("#bnStage")).toHaveAttribute("data-three", "ready", { timeout: 60_000 });
   await page.locator("#bnGo").click();
   await page.waitForTimeout(6500);
+  await expect(page.locator("#bnCam")).toContainText("CAM");
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/bnc-race-desktop.png` });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);

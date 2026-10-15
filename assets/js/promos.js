@@ -50,7 +50,7 @@
       text: "Get your WIN B Lotto ticket before betting closes. Winners are paid straight to their balance.", cta: "Stake Lotto" },
   ];
   const OTHERS = [
-    { page: "bncwin.html", img: "assets/img/thumbs/bnc-win.webp", tag: "New", fallback: "BNC WIN", text: "Green against red: cash out while your runner leads the race." },
+    { page: "bncwin.html", img: "assets/img/thumbs/bnc-win-v2.webp", tag: "New", fallback: "BNC WIN", text: "Green against red: cash out while your runner leads the race." },
     { page: "aviator.html", img: "assets/img/thumbs/sky-rush.webp", tag: "Live", fallback: "Aviator", text: "Watch the plane climb and cash out before it flies away." },
     { page: "mines.html", img: "assets/img/thumbs/volta-mines.webp", tag: "Popular", fallback: "Mines", text: "Find the gems, dodge the mines, and cash out when you like." },
     { page: "magicball.html", img: "assets/img/thumbs/magic-ball.webp", tag: "Instant", fallback: "Magic Ball", text: "Call the colour of the next ball and win in seconds." },
