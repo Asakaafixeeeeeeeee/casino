@@ -1,15 +1,17 @@
-/* BNC WIN (bncwin.html). The server (backend games/bncWin.ts) draws each race when the player presses GO and runs it
-   on its clock; this page shows the countdown, asks the server for each half-second step as it happens (it never
-   knows a step before it's run), and sends CASH OUT, which the server pays at the moment it receives it.
-   It also runs the TV side of the broadcast: the graphics, the commentary (which only describes the steps the server
-   has already run), and the stadium sound. The 3D picture is drawn by bncwin-stage.js from window.BNC_VIEW. */
+/* BNC WIN (bncwin.html). Real-money races are drawn and settled by the server; free races use virtual credits in this
+   page and never contact the wagering endpoints. This page also runs the TV graphics, commentary and stadium sound. */
 (function () {
   "use strict";
   const U = window.VBUtil;
   const $ = (id) => document.getElementById(id);
   const esc = U.esc;
   const API = "/api/games/bnc-win";
-  const ghs = (n) => "GHS " + Number(n || 0).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const params = new URLSearchParams(location.search);
+  let mode = params.get("mode") === "real" ? "real" : "fun";
+  const isDemo = () => mode === "fun";
+  const ghs = (n) => isDemo()
+    ? Number(n || 0).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " credits"
+    : "GHS " + Number(n || 0).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const signed = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + ghs(Math.abs(n));
   const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -18,6 +20,7 @@
     rules: { rtp: 0.97, up: 1.08, down: 0.93, bust: 0.01, up_chance: 0.528667, down_chance: 0.461333, steps: 60, step_ms: 500, start_ms: 3000, max_win: 50000, min_bet: 1, max_bet: 1000 },
     race: null, offset: 0, shownX: 1, last: 0, polling: false, busy: false, history: [],
   };
+  let demoCredits = [1000, 2000, 3000][Math.floor(Math.random() * 3)];
   const stage = $("bnStage");
   window.BNC_VIEW = { phase: "idle", lead: 0, prog: 0, ended: null, raceId: null };
 
@@ -200,6 +203,16 @@
   const startsAt = () => race() ? race()._startsAt : 0;
   const targetX = () => (race() ? (race().status === "BUSTED" ? 0 : race().x) : 1);
 
+  function paintMode() {
+    $("bnBalanceLabel").textContent = isDemo() ? "CREDITS" : "GHS";
+    $("bnStakeUnit").textContent = isDemo() ? "CREDITS" : "GHS";
+    $("bnBalance").textContent = Number(isDemo() ? demoCredits : U.wallet.balance()).toLocaleString("en-GH", {
+      minimumFractionDigits: 2, maximumFractionDigits: 2,
+    });
+    $("bnMode").textContent = isDemo() ? "Play for real" : "Try free";
+    $("bnMode").setAttribute("aria-label", isDemo() ? "Switch to real-money play" : "Switch to free demo play");
+  }
+
   function paintBoard() {
     const r = race();
     const stake = r ? r.stake : Number(stakeIn.value) || 0;
@@ -258,9 +271,11 @@
     }
     st.race = r;
     if (r.status === "ACTIVE") narrate(r, prev);
-    $("bnHashRow").hidden = false;
-    $("bnHash").textContent = r.hash.slice(0, 18) + "…" + r.hash.slice(-6);
-    $("bnHash").title = r.seed ? "Seed: " + r.seed : r.hash;
+    $("bnHashRow").hidden = !!r.is_demo;
+    if (!r.is_demo) {
+      $("bnHash").textContent = r.hash.slice(0, 18) + "…" + r.hash.slice(-6);
+      $("bnHash").title = r.seed ? "Seed: " + r.seed : r.hash;
+    }
     if (r.status !== "ACTIVE") ended(r);
   }
   function ended(r) {
@@ -294,7 +309,10 @@
     $("bnGo").disabled = false;
     $("bnGo").querySelector("span").textContent = "GO";
     stakeIn.disabled = false;
-    loadState(true);
+    if (isDemo()) {
+      $("bnHistory").innerHTML = '<p class="bn-none">Free-play races use virtual credits and are not saved.</p>';
+      paintMode();
+    } else loadState(true);
   }
   async function poll() {
     if (st.polling) return;
@@ -306,7 +324,10 @@
       const r = await U.paymentApi(API + "/race/" + encodeURIComponent(race().race_id));
       if (r.ok && r.data && r.data.race) {
         adopt(r.data.race);
-        if (r.data.balance !== undefined) U.wallet.setBalance(r.data.balance);
+        if (r.data.balance !== undefined) {
+          U.wallet.setBalance(r.data.balance);
+          paintMode();
+        }
       }
     }
     st.polling = false;
@@ -348,16 +369,125 @@
       $("bnCash").disabled = false;
       stakeIn.disabled = true;
       countdown();
-      poll();
+      if (r.is_demo) demoLoop(r);
+      else poll();
     }
   }
 
+  function demoLoop(r) {
+    const next = () => {
+      if (!running() || race() !== r) return;
+      const left = startsAt() - now();
+      if (left > 0) {
+        setTimeout(next, Math.min(left, 250));
+        return;
+      }
+      const stepNo = r.step + 1;
+      if (stepNo > r._path.length) return;
+      const event = r._path[stepNo - 1];
+      r.step = stepNo;
+      if (event === "B") {
+        r.status = "BUSTED";
+        r.x = 0;
+        r.value = 0;
+        r.payout = 0;
+        r.ended_step = stepNo;
+      } else {
+        r.xs.push(r.xs[r.xs.length - 1] * (event === "U" ? st.rules.up : st.rules.down));
+        r.x = r.xs[r.xs.length - 1];
+        r.value = Math.floor(Math.min(r.stake * st.rules.rtp * r.x, st.rules.max_win) * 100 + 1e-6) / 100;
+        if (r.value >= st.rules.max_win || stepNo >= st.rules.steps) {
+          r.status = "FINISHED";
+          r.payout = r.value;
+          r.ended_step = stepNo;
+        }
+      }
+      if (r.status !== "ACTIVE") settleDemoPayout(r);
+      r.starts_in_ms = r._startsAt - Date.now();
+      r.server_now = new Date().toISOString();
+      adopt(r);
+      if (running()) setTimeout(next, st.rules.step_ms);
+    };
+    setTimeout(next, Math.max(0, startsAt() - now()));
+  }
+
+  function settleDemoPayout(r) {
+    if (r._demoSettled) return;
+    r._demoSettled = true;
+    if (r.payout > 0) demoCredits = Math.round((demoCredits + r.payout) * 100) / 100;
+    paintMode();
+  }
+
+  function makeDemoRace(stake) {
+    const path = Array.from({ length: st.rules.steps }, () => {
+      const n = Math.random();
+      return n < st.rules.bust ? "B" : n < st.rules.bust + st.rules.up_chance ? "U" : "D";
+    });
+    const startedAt = Date.now() + st.rules.start_ms;
+    const id = "demo-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+    return {
+      race_id: id, is_demo: true, status: "ACTIVE", stake, hash: "", starts_in_ms: st.rules.start_ms,
+      step_ms: st.rules.step_ms, steps: st.rules.steps, xs: [1], step: 0, x: 1,
+      value: Math.floor(stake * st.rules.rtp * 100 + 1e-6) / 100, payout: 0,
+      server_now: new Date().toISOString(), _startsAt: startedAt, _path: path,
+    };
+  }
+
+  $("bnMode").addEventListener("click", async () => {
+    if (st.busy || running()) {
+      U.toast("Finish the current race before switching play mode.");
+      return;
+    }
+    if (isDemo()) {
+      if (!U.session.get()) {
+        U.toast("Log in to play for real money.");
+        location.href = "register.html#login";
+        return;
+      }
+      mode = "real";
+      history.replaceState(null, "", "?mode=real");
+      st.race = null;
+      st.shownResult = null;
+      st.shownX = 1;
+      $("bnResult").hidden = true;
+      $("bnHashRow").hidden = true;
+      $("bnCash").hidden = true;
+      $("bnGo").hidden = false;
+      await loadState(false);
+    } else {
+      mode = "fun";
+      history.replaceState(null, "", "?mode=fun");
+      demoCredits = [1000, 2000, 3000][Math.floor(Math.random() * 3)];
+      st.race = null;
+      st.shownResult = null;
+      st.shownX = 1;
+      st.history = [];
+      $("bnResult").hidden = true;
+      $("bnHashRow").hidden = true;
+      $("bnCash").hidden = true;
+      $("bnGo").hidden = false;
+      $("bnHistory").innerHTML = '<p class="bn-none">Free-play races use virtual credits and are not saved.</p>';
+    }
+    paintMode();
+    paintBoard();
+  });
+
   $("bnGo").addEventListener("click", async () => {
-    if (!U.session.get()) { U.toast("Log in to race for real money."); location.href = "register.html#login"; return; }
     if (st.busy || running()) return;
     clampStake();
     const stake = Number(stakeIn.value);
     if (!(stake >= st.rules.min_bet && stake <= st.rules.max_bet)) { U.toast("Stake between " + ghs(st.rules.min_bet) + " and " + ghs(st.rules.max_bet) + ".", "error"); return; }
+    if (isDemo()) {
+      if (!U.freePlay.allowed("bnc-win")) { U.toast("Free play is not available for BNC WIN right now.", "error"); return; }
+      if (stake > demoCredits) { U.toast("Not enough free credits for that stake.", "error"); return; }
+      ctx();
+      tone(520, 0.08, "square", 0.04);
+      demoCredits = Math.round((demoCredits - stake) * 100) / 100;
+      begin(makeDemoRace(stake));
+      paintMode();
+      return;
+    }
+    if (!U.session.get()) { U.toast("Log in to race for real money."); location.href = "register.html#login"; return; }
     st.busy = true;
     $("bnGo").disabled = true;
     $("bnGo").querySelector("span").textContent = "…";
@@ -374,16 +504,47 @@
       return;
     }
     U.wallet.setBalance(r.data.balance);
+    paintMode();
     begin(r.data.race);
   });
 
   $("bnCash").addEventListener("click", async () => {
     if (!running() || $("bnCash").disabled) return;
     if (now() < startsAt()) { U.toast("Wait for the start — the race begins on GO."); return; }
+    if (race().is_demo) {
+      const r = race();
+      const reached = Math.max(0, Math.min(r.steps, Math.floor((Date.now() - r._startsAt) / r.step_ms)));
+      const event = r._path.slice(r.step, reached);
+      for (const tick of event) {
+        const no = r.step + 1;
+        r.step = no;
+        if (tick === "B") {
+          r.status = "BUSTED"; r.x = 0; r.value = 0; r.payout = 0; r.ended_step = no;
+          break;
+        }
+        r.xs.push(r.xs[r.xs.length - 1] * (tick === "U" ? st.rules.up : st.rules.down));
+        r.x = r.xs[r.xs.length - 1];
+        r.value = Math.floor(Math.min(r.stake * st.rules.rtp * r.x, st.rules.max_win) * 100 + 1e-6) / 100;
+        if (r.value >= st.rules.max_win || no >= r.steps) {
+          r.status = "FINISHED"; r.payout = r.value; r.ended_step = no;
+          break;
+        }
+      }
+      if (r.status === "ACTIVE") {
+        r.status = "CASHED"; r.payout = r.value; r.ended_step = r.step;
+      }
+      settleDemoPayout(r);
+      r.starts_in_ms = r._startsAt - Date.now();
+      r.server_now = new Date().toISOString();
+      adopt(r);
+      paintMode();
+      return;
+    }
     $("bnCash").disabled = true; /* one press is one cash-out; the server also pays a race only once */
     const r = await U.paymentApi(API + "/race/cashout", { body: { race_id: race().race_id, idempotency_key: "bnc-cash:" + race().race_id } });
     if (r.ok && r.data && r.data.race) {
       U.wallet.setBalance(r.data.balance);
+      paintMode();
       adopt(r.data.race);
     } else {
       $("bnCash").disabled = false;
@@ -433,14 +594,18 @@
     stakeIn.min = String(R.min_bet);
     stakeIn.max = String(R.max_bet);
     $("bnRulesBody").innerHTML =
-      "<p><b>A virtual race.</b> BNC WIN Racing is a computer-drawn race shown in the style of a TV broadcast, with commentary. It is not a real-world event and the athletes are not real people.</p>" +
+      "<p><b>A virtual race.</b> BNC WIN Racing is a computer-drawn race shown in the style of a TV broadcast, with commentary. It is not a real-world event and the athletes are not real people. " +
+      (isDemo() ? "Free play uses virtual credits only and does not affect your wallet." : "") + "</p>" +
       "<ol>" +
-      "<li>Enter your stake and press <b>GO</b>. The stake is taken from your balance once, and the race starts after a 3-second countdown.</li>" +
+      "<li>Enter your stake and press <b>GO</b>. " + (isDemo() ? "The stake is taken from your virtual credits." : "The stake is taken from your balance once.") +
+      " The race starts after a 3-second countdown.</li>" +
       "<li>The race lasts " + (R.steps * R.step_ms / 1000) + " seconds, in " + R.steps + " steps of half a second. Your runner is <b style='color:#6ff0a4'>green</b>. Green is shown ahead exactly while your cash-out value is above your stake, and <b style='color:#ff8a84'>red</b> ahead while it's below; the gap between them is how far above or below.</li>" +
-      "<li>Press <b>CASH OUT</b> whenever you like: you're paid the cash-out value at the moment the server receives it, straight to your balance. A race can be cashed out only once.</li>" +
+      "<li>Press <b>CASH OUT</b> whenever you like: " + (isDemo() ? "the cash-out value is returned to your virtual credits." : "the server pays the cash-out value to your balance when it receives your request.") +
+      " A race can be cashed out only once.</li>" +
       "<li>If you don't cash out, the race pays the value at the finish line. If red breaks away, the race ends at once and the stake is lost.</li>" +
       "</ol>" +
-      "<p><b>How the value is worked out.</b> The race score starts at 1.00×. Every step is drawn by the server:</p>" +
+      "<p><b>How the value is worked out.</b> The race score starts at 1.00×. " +
+      (isDemo() ? "Every free-play step is randomly simulated in your browser." : "Every real-money step is drawn by the server.") + "</p>" +
       "<table><tr><th>Step</th><th>Chance</th><th>Race score</th></tr>" +
       "<tr><td>Green surges</td><td>" + pct(R.up_chance) + "</td><td>× " + R.up + "</td></tr>" +
       "<tr><td>Red surges</td><td>" + pct(R.down_chance) + "</td><td>× " + R.down + "</td></tr>" +
@@ -450,9 +615,11 @@
       "<p><b>Return to player: " + Math.round(R.rtp * 100) + "%.</b> The steps are balanced, so on average a race returns " + Math.round(R.rtp * 100) +
       "% of the stake whenever you cash out — no timing does better in the long run. Results vary a lot from race to race: about " +
       Math.round((1 - Math.pow(1 - R.bust, R.steps)) * 100) + "% of races that run to the end have red break away, and you can lose your whole stake.</p>" +
-      "<p><b>Fairness.</b> The whole race is drawn from a secret seed the moment you press GO — never from your stake, your balance, your account or when you cash out. " +
-      "Its fingerprint (SHA-256) is shown during the race; the seed is shown in your race history afterwards, so the steps can be checked. " +
-      "The athletes, the cameras and the commentary only show the race score the server has already drawn; they can't change it.</p>" +
+      (isDemo()
+        ? "<p>Demo outcomes are for trying the game only. They are not server-verified and cannot win real money.</p>"
+        : "<p><b>Fairness.</b> The whole race is drawn from a secret seed the moment you press GO — never from your stake, your balance, your account or when you cash out. " +
+          "Its fingerprint (SHA-256) is shown during the race; the seed is shown in your race history afterwards, so the steps can be checked. " +
+          "The athletes, the cameras and the commentary only show the race score the server has already drawn; they can't change it.</p>") +
       "<p>18+ only. Play only with money you can afford to lose. You can set limits or take a break from My account.</p>";
   }
   const openRules = () => $("bnRules").showModal();
@@ -460,6 +627,14 @@
   $("bnRulesLink").addEventListener("click", openRules);
 
   async function loadState(quiet) {
+    if (isDemo()) {
+      $("bnHistory").innerHTML = '<p class="bn-none">Free-play races use virtual credits and are not saved.</p>';
+      const r = await U.paymentApi(API + "/rules");
+      if (r.ok && r.data) Object.assign(st.rules, r.data);
+      paintRules();
+      paintMode();
+      return;
+    }
     if (!U.session.get()) {
       const r = await U.paymentApi(API + "/rules");
       if (r.ok && r.data) Object.assign(st.rules, r.data);
@@ -475,14 +650,21 @@
     U.wallet.setBalance(r.data.balance);
     paintRules();
     paintHistory();
+    paintMode();
     if (r.data.race && r.data.race.status === "ACTIVE" && !running()) begin(r.data.race); /* a reload carries on */
   }
 
+  U.freePlay.enforce("bnc-win", { mode, canReal: !!U.session.get() });
+  if (mode === "real" && !U.session.get()) {
+    mode = "fun";
+    history.replaceState(null, "", "?mode=fun");
+  }
   setStatus("Ready to race", "");
   $("bnCommText").textContent = "Welcome to BNC WIN Racing! The athletes are warming up — set your stake and press GO.";
   paintRules();
   paintChips();
+  paintMode();
   loadState(false);
-  U.refreshBalance();
+  U.refreshBalance().then(paintMode);
   requestAnimationFrame(frame);
 })();

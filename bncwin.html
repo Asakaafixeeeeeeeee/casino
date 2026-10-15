@@ -32,7 +32,7 @@
 <header class="mg-header bn-header">
   <a class="mg-icon-btn" href="games.html?category=Live%20Casino" aria-label="Back to the lobby"><i data-icon="arrowLeft"></i></a>
   <h1 class="mg-title bn-title"><img src="assets/img/bnc/face.webp" alt="" width="30" height="30"><span>BNC WIN <em>RACING</em></span></h1>
-  <span class="mg-balance bn-bal">GHS <b data-wallet-balance-num>0.00</b></span>
+  <span class="mg-balance bn-bal"><span id="bnBalanceLabel">CREDITS</span> <b id="bnBalance">1,000</b></span>
   <button class="mg-icon-btn" type="button" id="bnSound" aria-pressed="true" aria-label="Sound on"><i data-icon="sound"></i></button>
   <button class="mg-icon-btn" type="button" id="bnRulesBtn" aria-label="How to play"><i data-icon="info"></i></button>
 </header>
@@ -64,9 +64,9 @@
       </div>
       <p class="bn-comm" id="bnComm" aria-live="polite"><b>COMMENTARY</b><span id="bnCommText">Welcome to BNC WIN Racing!</span></p>
       <div class="bn-money" aria-label="Your race">
-        <div><span>Stake</span><b id="bnStakeShow">GHS 0.00</b></div>
-        <div class="bn-value"><span>Cash-out value</span><b id="bnValue">GHS 0.00</b></div>
-        <div><span>Win / loss</span><b id="bnPl">GHS 0.00</b></div>
+        <div><span>Stake</span><b id="bnStakeShow">0.00 credits</b></div>
+        <div class="bn-value"><span>Cash-out value</span><b id="bnValue">0.00 credits</b></div>
+        <div><span>Win / loss</span><b id="bnPl">0.00 credits</b></div>
       </div>
     </div>
 
@@ -78,7 +78,7 @@
   <!-- the controls -->
   <section class="bn-controls" aria-label="Play">
     <div class="bn-stake-wrap">
-      <label for="bnStake">Your stake <small>GHS</small></label>
+      <label for="bnStake">Your stake <small id="bnStakeUnit">CREDITS</small></label>
       <div class="bn-stake">
         <button type="button" class="bn-step" data-step="-1" aria-label="Lower the stake">−</button>
         <input id="bnStake" type="number" inputmode="decimal" min="1" step="1" value="10">
@@ -90,8 +90,9 @@
       </div>
     </div>
     <div class="bn-actions">
+      <button type="button" class="bn-voice" id="bnMode" aria-label="Switch play mode">Play for real</button>
       <button type="button" class="bn-go" id="bnGo"><span>GO</span><small>Start the race</small></button>
-      <button type="button" class="bn-cash" id="bnCash" hidden><span>CASH OUT</span><b id="bnCashVal">GHS 0.00</b></button>
+      <button type="button" class="bn-cash" id="bnCash" hidden><span>CASH OUT</span><b id="bnCashVal">0.00 credits</b></button>
       <button type="button" class="bn-voice" id="bnVoice" aria-pressed="true">🎙 Commentary voice: on</button>
     </div>
     <p class="bn-limits" id="bnLimits"></p>
@@ -103,7 +104,7 @@
     <div class="bn-history" id="bnHistory"><p class="bn-none">No races yet. Set your stake and press GO.</p></div>
   </section>
 
-  <p class="mg-note">18+ · play responsibly · a virtual race with TV-style commentary, drawn by the server · the cash-out value can fall to nothing</p>
+  <p class="mg-note">18+ · play responsibly · demo races use virtual credits; real-money races are drawn by the server · the cash-out value can fall to nothing</p>
 </main>
 
 <dialog class="mg-dialog bn-rules" id="bnRules" aria-labelledby="bnRulesTitle">
@@ -113,7 +114,7 @@
 </dialog>
 
 <script src="assets/js/site.js?v=56"></script>
-<script src="assets/js/bncwin.js?v=3"></script>
+<script src="assets/js/bncwin.js?v=4"></script>
 <script type="module" src="assets/js/bncwin-stage.js?v=2"></script>
 </body>
 </html>

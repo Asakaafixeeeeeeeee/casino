@@ -1,7 +1,8 @@
 /* BNC WIN's 3D broadcast (bncwin.html): a night stadium, two athletes, a crowd and TV cameras, drawn with three.js.
-   This file only draws. The race itself is the server's: bncwin.js publishes what to show in window.BNC_VIEW every
-   frame (phase, who leads and by how much, how far the race has run, how it ended) and the athletes and cameras follow
-   it. Nothing here can change a race or a payout. If WebGL isn't available the race still runs with the TV graphics.
+   This file only draws. bncwin.js publishes what to show in window.BNC_VIEW every frame (phase, who leads and by how
+   much, how far the race has run, how it ended) and the athletes and cameras follow it. Real-money outcomes remain
+   server-authoritative; free-play outcomes only affect virtual credits. If WebGL isn't available the race still runs
+   with the TV graphics.
 
    The athletes are one rigged character model (Mixamo character "Ch03", via the three.js examples). Their motions are
    Mixamo captures (run, walk, idle, a dejected pose and a head shake, from the "X Bot" rig) carried over bone by bone in
