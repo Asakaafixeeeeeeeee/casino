@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
+<link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
+<meta name="theme-color" content="#06180f">
+<title>BNC WIN — WIN B WIN</title>
+<meta name="description" content="BNC WIN: stake, press GO and watch the green runner race the red one. Green ahead, your cash-out value rises; red ahead, it falls. Cash out any time.">
+<link rel="stylesheet" href="assets/css/styles.css?v=39">
+<link rel="stylesheet" href="assets/css/minigame.css">
+<link rel="stylesheet" href="assets/css/bncwin.css?v=1">
+<link rel="icon" href="assets/img/winb-mark.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/img/app/w-apple-touch-icon-180.png">
+<link rel="preload" as="image" href="assets/img/bnc/face.webp">
+<meta name="apple-mobile-web-app-title" content="WIN B casino">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<script src="assets/js/data.js?v=57"></script>
+</head>
+<body class="game-page bn-page" data-shell="game">
+
+<header class="mg-header bn-header">
+  <a class="mg-icon-btn" href="games.html?category=Live%20Casino" aria-label="Back to the lobby"><i data-icon="arrowLeft"></i></a>
+  <h1 class="mg-title bn-title"><img src="assets/img/bnc/face.webp" alt="" width="28" height="28">BNC WIN</h1>
+  <span class="mg-balance bn-bal">GHS <b data-wallet-balance-num>0.00</b></span>
+  <button class="mg-icon-btn" type="button" id="bnSound" aria-pressed="true" aria-label="Sound on"><i data-icon="sound"></i></button>
+  <button class="mg-icon-btn" type="button" id="bnRulesBtn" aria-label="How to play"><i data-icon="info"></i></button>
+</header>
+
+<main class="bn-main">
+  <!-- the race -->
+  <section class="bn-stage" id="bnStage" aria-label="The race" data-phase="idle">
+    <div class="bn-world" id="bnWorld">
+      <div class="bn-sky">
+        <span class="bn-light l1"></span><span class="bn-light l2"></span><span class="bn-light l3"></span><span class="bn-light l4"></span>
+      </div>
+      <div class="bn-stands" aria-hidden="true"><div class="bn-crowd"></div><div class="bn-crowd far"></div><div class="bn-banner">WIN B · BNC WIN · WIN B · BNC WIN · WIN B · BNC WIN ·</div></div>
+      <div class="bn-field" aria-hidden="true"></div>
+      <div class="bn-track" id="bnTrack" aria-hidden="true"><div class="bn-lanes" id="bnLanes"></div><div class="bn-finish" id="bnFinish"></div></div>
+      <div class="bn-runner red" id="bnRed" aria-hidden="true"></div>
+      <div class="bn-runner green" id="bnGreen" aria-hidden="true"></div>
+    </div>
+
+    <div class="bn-hud">
+      <span class="bn-status" id="bnStatus">Ready to race</span>
+      <div class="bn-progress" aria-label="Race distance"><i id="bnProgress"></i><span class="bn-flag" aria-hidden="true">🏁</span></div>
+      <span class="bn-x" id="bnX" title="Race score">1.00×</span>
+    </div>
+    <div class="bn-count" id="bnCount" aria-live="assertive" hidden></div>
+    <div class="bn-result" id="bnResult" role="status" hidden></div>
+    <p class="bn-hash" id="bnHashRow" hidden>Race fingerprint <code id="bnHash"></code></p>
+  </section>
+
+  <!-- the numbers -->
+  <section class="bn-board" aria-label="Your race">
+    <div><span>Stake</span><b id="bnStakeShow">GHS 0.00</b></div>
+    <div class="bn-value"><span>Cash-out value</span><b id="bnValue">GHS 0.00</b></div>
+    <div><span>Win / loss</span><b id="bnPl">GHS 0.00</b></div>
+  </section>
+
+  <!-- the controls -->
+  <section class="bn-controls" aria-label="Play">
+    <div class="bn-stake-wrap">
+      <label for="bnStake">Stake (GHS)</label>
+      <div class="bn-stake">
+        <button type="button" class="bn-step" data-step="-1" aria-label="Lower the stake">−</button>
+        <input id="bnStake" type="number" inputmode="decimal" min="1" step="1" value="10">
+        <button type="button" class="bn-step" data-step="1" aria-label="Raise the stake">+</button>
+      </div>
+      <div class="bn-chips">
+        <button type="button" data-chip="5">5</button><button type="button" data-chip="10">10</button><button type="button" data-chip="50">50</button>
+        <button type="button" data-chip="100">100</button><button type="button" data-chip="500">500</button>
+      </div>
+      <p class="bn-limits" id="bnLimits"></p>
+    </div>
+    <div class="bn-actions">
+      <button type="button" class="bn-go" id="bnGo">GO</button>
+      <button type="button" class="bn-cash" id="bnCash" hidden><span>CASH OUT</span><b id="bnCashVal">GHS 0.00</b></button>
+    </div>
+  </section>
+
+  <!-- history -->
+  <section class="bn-card" aria-labelledby="bnHistTitle">
+    <div class="bn-card-head"><h2 id="bnHistTitle">Your races</h2><button type="button" class="bn-link" id="bnRulesLink">How it works</button></div>
+    <div class="bn-history" id="bnHistory"><p class="bn-none">No races yet. Set your stake and press GO.</p></div>
+  </section>
+
+  <p class="mg-note">18+ · play responsibly · the cash-out value can fall to nothing</p>
+</main>
+
+<dialog class="mg-dialog bn-rules" id="bnRules" aria-labelledby="bnRulesTitle">
+  <h2 id="bnRulesTitle">How BNC WIN works</h2>
+  <div id="bnRulesBody"></div>
+  <form method="dialog"><button class="btn btn-primary btn-block">Got it</button></form>
+</dialog>
+
+<script src="assets/js/site.js?v=53"></script>
+<script src="assets/js/bncwin.js?v=1"></script>
+</body>
+</html>

@@ -11,6 +11,7 @@ import { startLiveSweep } from "./games/minesLive.js";
 import { startSessionSweep } from "./games/sessions.js";
 import { startSkySweep } from "./games/skyRush.js";
 import { startLottoSweep } from "./games/lotto.js";
+import { startBncSweep } from "./games/bncWin.js";
 import { startPartnerSweep } from "./services/affiliates.js";
 import { startKeepWarm } from "./keepWarm.js";
 
@@ -34,6 +35,7 @@ async function main(): Promise<void> {
   startSessionSweep(db);
   startSkySweep(db);
   startLottoSweep(db);
+  startBncSweep(db);
   startPartnerSweep(db);
   startKeepWarm();
 }

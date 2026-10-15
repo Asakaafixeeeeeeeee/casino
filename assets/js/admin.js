@@ -560,11 +560,11 @@
   /* Game management: every game as a card (on/off, paused, today's numbers, live play), the studios' switches, and
      a control sheet per game (pause and resume, bet limits, round timing, live activity, statistics, history and
      players' wins and losses). Results are drawn by the server; nothing here can see or change one before it's over. */
-  const GM_KIND = { flight: "Rounds", aviator: "Shared rounds", live: "Live", lotto: "Daily draw", instant: "Instant", session: "Step by step", demo: "Demo" };
+  const GM_KIND = { race: "Race", flight: "Rounds", aviator: "Shared rounds", live: "Live", lotto: "Daily draw", instant: "Instant", session: "Step by step", demo: "Demo" };
   const GM_FILTERS = [["all", "All games"], ["rounds", "Round games"], ["instant", "Instant & step"], ["paused", "Paused"], ["off", "Off"]];
   const GAME_PAGE = { aviator: "aviator.html", knockout: "knockout.html", crash: "crash.html", mines: "mines.html", "hi-lo": "hilo.html",
     roulette: "roulette.html", olympus: "olympus.html", "blaze-fruits": "fruits.html", "magic-ball": "magicball.html", "red-black": "redblack.html",
-    "even-odd": "evenodd.html", bottle: "bottle.html", coin: "coin.html", goal: "goal.html", crossing: "crossing.html", wings: "wings.html", lotto: "lotto.html", jet: "volta-jet/index.html" };
+    "even-odd": "evenodd.html", bottle: "bottle.html", coin: "coin.html", goal: "goal.html", crossing: "crossing.html", wings: "wings.html", lotto: "lotto.html", "bnc-win": "bncwin.html", jet: "volta-jet/index.html" };
   const gmState = (g) => (!g.enabled || !g.studio_enabled ? ["bad", g.studio_enabled ? "Off" : "Studio off"] : g.paused ? ["warn", "Paused"] : ["ok", "On"]);
   const xSecs = (x) => Math.log(Math.max(1, x)) / 0.12;
   const secs = (s) => (s >= 60 ? Math.floor(s / 60) + " min " + Math.round(s % 60) + " s" : Math.round(s) + " s");

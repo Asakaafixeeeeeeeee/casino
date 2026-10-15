@@ -29,6 +29,7 @@ export const CATALOG: Record<string, { id: string; name: string; provider: strin
   "volta-coin": { id: "coin", name: "Flip Da' Coin", provider: "accra" },
   "volta-mines-live": { id: "mines-live", name: "Live Mines", provider: "accra" },
   "lotto": { id: "lotto", name: "WIN B Lotto", provider: "accra" },
+  "bnc-win": { id: "bnc-win", name: "BNC WIN", provider: "accra" },
 };
 
 /** The studios behind the games (data.js providers). */

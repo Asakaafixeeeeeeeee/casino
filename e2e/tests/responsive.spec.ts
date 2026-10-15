@@ -11,7 +11,7 @@ const PAGES = [
   "index.html", "games.html", "promotions.html", "support.html", "register.html", "terms.html", "privacy.html",
   "game.html?id=hi-lo", "wallet.html", "withdraw.html", "transactions.html", "me.html", "partners.html",
   "bottle.html", "coin.html", "crash.html", "crossing.html", "evenodd.html", "fruits.html", "goal.html", "hilo.html",
-  "knockout.html", "magicball.html", "mines.html", "olympus.html", "redblack.html", "roulette.html", "wings.html", "aviator.html",
+  "knockout.html", "magicball.html", "mines.html", "olympus.html", "redblack.html", "roulette.html", "wings.html", "aviator.html", "bncwin.html",
 ];
 
 for (const vp of VIEWPORTS) {

@@ -15,6 +15,7 @@ import { SESSION_GAMES } from "../src/games/sessionCatalog.js";
 import { FLIGHT_GAMES, placeFlightBet, nextFlight } from "../src/games/flights.js";
 import { SKY_ID } from "../src/games/skyRush.js";
 import { LOTTO_ID } from "../src/games/lotto.js";
+import { BNC_ID } from "../src/games/bncWin.js";
 import { playRound } from "../src/games/rounds.js";
 import { cashOutSession, openSession, startSession, stepSession } from "../src/games/sessions.js";
 import { suspendedMayDo } from "../src/middleware/authenticate.js";
@@ -46,7 +47,7 @@ test("Every server game maps to a lobby game with the same name and studio", asy
     { window: {}, document: { addEventListener() {} } };
   vm.runInNewContext(await readFile(new URL("../../assets/js/data.js", import.meta.url), "utf8"), sandbox);
   const lobby = sandbox.window.VB!.games;
-  const serverGames = [...Object.keys(GAMES), ...Object.keys(SESSION_GAMES), ...Object.keys(FLIGHT_GAMES), "volta-mines-live", "volta-magicball-live", SKY_ID, LOTTO_ID];
+  const serverGames = [...Object.keys(GAMES), ...Object.keys(SESSION_GAMES), ...Object.keys(FLIGHT_GAMES), "volta-mines-live", "volta-magicball-live", SKY_ID, LOTTO_ID, BNC_ID];
   assert.deepEqual(serverGames.sort(), Object.keys(CATALOG).sort(), "every server game has a catalog entry");
   for (const [serverId, c] of Object.entries(CATALOG)) {
     const g = lobby.find((x) => x.id === c.id);

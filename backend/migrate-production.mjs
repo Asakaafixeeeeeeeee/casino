@@ -44,6 +44,7 @@ const migrationFiles = [
   "036_lotto_sales_switch.sql",
   "037_payment_settings.sql",
   "038_account_control.sql",
+  "039_bnc_win.sql",
 ];
 
 if (!process.env.DATABASE_URL) {

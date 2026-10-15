@@ -14,6 +14,7 @@ import {
 } from "../games/minesLive.js";
 import { buyLottoTicket, getLottoSettings, LOTTO_ID, LOTTO_NAME, lottoState, myLottoTickets } from "../games/lotto.js";
 import { latestLottoResult, lottoWinners } from "../games/lottoWinners.js";
+import { BNC_ID, bncRace, bncState, cashOutBnc, publicRules, startBncRace } from "../games/bncWin.js";
 import { cancelSkyBet, cashOutSkyBet, createSkyLive, placeSkyBet, SKY, SKY_ID } from "../games/skyRush.js";
 
 /** Real-money play: the server draws every outcome and settles it in the ledger. */
@@ -155,6 +156,13 @@ export function gamesRouter(db: Pool): Router {
   r.get(`/${LOTTO_ID}/winners`, open(() => lottoWinners(db)));
   /* the latest published result, for the congratulations popup every page shows once it's out */
   r.get(`/${LOTTO_ID}/latest-result`, open(() => latestLottoResult(db)));
+  /* BNC WIN: the player's own race, drawn at GO; the rules and odds are public */
+  r.get(`/${BNC_ID}/rules`, open(async () => publicRules()));
+  r.get(`/${BNC_ID}/state`, authenticate, handle((_req, userId) => bncState(db, userId)));
+  r.post(`/${BNC_ID}/race`, arrived, authenticate, handle((req, userId) => startBncRace(db, userId, req.body ?? {}, at(req))));
+  r.get(`/${BNC_ID}/race/:id`, authenticate, handle((req, userId) => bncRace(db, userId, req.params.id)));
+  /* under /race: the generic /:game/cashout above would otherwise take it */
+  r.post(`/${BNC_ID}/race/cashout`, arrived, authenticate, handle((req, userId) => cashOutBnc(db, userId, req.body ?? {}, at(req).now)));
   r.get(`/${LOTTO_ID}/tickets`, authenticate, handle((req, userId) => myLottoTickets(db, userId, req.query.status)));
   r.post(`/${LOTTO_ID}/ticket`, arrived, authenticate, handle((req, userId) => buyLottoTicket(db, userId, req.body ?? {}, at(req))));
 
