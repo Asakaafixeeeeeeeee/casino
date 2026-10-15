@@ -7,7 +7,7 @@
       security section is there, and the page fits a phone with no sideways scroll. Set E2E_SHOTS=<folder> to save
       screenshots. */
 import { expect, test } from "@playwright/test";
-import { adminSession, adminTab, API, GATEWAY, register, serverBalance, settle, trackErrors } from "./helpers";
+import { acceptRules, adminSession, adminTab, API, GATEWAY, register, serverBalance, settle, trackErrors } from "./helpers";
 
 const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 const OFF = "Payments are temporarily unavailable. Please try again later.";
@@ -25,6 +25,7 @@ test("payments switch: OFF stops new payments everywhere, a started payment is s
 
   try {
     /* a card payment started while payments are ON; the customer pays on the checkout page later */
+    await acceptRules(request, player.token);
     const started = await request.post(`${API}/api/payments/teller/checkout`, {
       headers: auth(player.token), data: { amount: 25, currency: "GHS", idempotency_key: "deposit:e2e-switch-" + Date.now() } });
     expect(started.status()).toBe(201);

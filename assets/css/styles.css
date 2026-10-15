@@ -963,6 +963,52 @@ a.provider:hover { border-color: var(--yellow); transform: translateY(-1px); }
 .pay-notes li { margin-bottom: 4px; }
 .pay-note-extra { margin: 12px 2px 0; color: var(--muted); font-size: .86rem; line-height: 1.55; }
 .pay-err { color: var(--err); font-size: .85rem; margin: -6px 2px 12px; min-height: 1em; }
+
+/* deposit page: "Before you deposit" (Admin -> Betting & withdrawal settings), accepted once per version of the rules */
+.dep-rules {
+  margin: 0 0 16px; padding: 14px 16px; border-radius: var(--r);
+  border: 1px solid rgba(255, 200, 61, .45); background: rgba(255, 200, 61, .06);
+}
+.dep-rules[hidden], .dep-rules-summary[hidden], .dep-rules-err[hidden], .wd-rule[hidden] { display: none; }
+.dep-rules.accepted { border-color: var(--line); background: var(--surface); }
+.dep-rules-title { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 1rem; color: var(--yellow); }
+.dep-rules-title .ic { width: 18px; height: 18px; flex: none; }
+.dep-rules-list { margin: 0 0 12px; padding-left: 18px; color: var(--muted); font-size: .86rem; line-height: 1.55; overflow-wrap: anywhere; }
+.dep-rules-list li { margin-bottom: 6px; white-space: pre-line; }
+.dep-rules-list b { color: var(--text); }
+.dep-rules-accept {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r-sm);
+  background: var(--bg-raised); border: 1px solid var(--line); font-size: .9rem; font-weight: 600; cursor: pointer;
+}
+.dep-rules-accept input { width: 20px; height: 20px; margin: 1px 0 0; flex: none; accent-color: var(--yellow); }
+.dep-rules-err { margin: 8px 2px 0; color: var(--err); font-size: .85rem; }
+.dep-rules-more { margin: 8px 2px 0; color: var(--dim); font-size: .8rem; }
+.dep-rules-more a, .dep-rules-summary a { color: var(--yellow); }
+.dep-rules-summary {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 14px; padding: 10px 14px;
+  border-radius: var(--r-sm); border: 1px solid var(--line-soft); background: var(--surface); color: var(--muted); font-size: .84rem;
+}
+.dep-rules-summary .ic { width: 16px; height: 16px; color: var(--green); flex: none; }
+.dep-rules-summary span { flex: 1; min-width: 0; }
+.dep-rules-summary b { color: var(--text); }
+.dep-rules-summary .link-btn { color: var(--yellow); font: inherit; font-weight: 600; }
+
+/* withdraw page: what the play-through rule holds (never winnings) */
+.wd-rule {
+  margin: 0 0 14px; padding: 12px 14px; border-radius: var(--r-sm);
+  border: 1px solid rgba(255, 200, 61, .4); background: rgba(255, 200, 61, .06); color: var(--muted); font-size: .86rem;
+}
+.wd-rule strong { color: var(--text); }
+.wd-rule p { margin: 6px 0 0; line-height: 1.5; overflow-wrap: anywhere; }
+.wd-rule-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0 0; }
+.wd-rule-nums div { padding: 8px; border-radius: var(--r-sm); background: var(--bg-raised); }
+.wd-rule-nums dt { font-size: .74rem; color: var(--dim); }
+.wd-rule-nums dd { margin: 2px 0 0; color: var(--text); font-weight: 700; }
+@media (max-width: 380px) { .wd-rule-nums { grid-template-columns: 1fr; } }
+
+/* a bet refused by the betting rule (any game) */
+.vb-depreq .me-dialog-ico { background: rgba(255, 200, 61, .12); color: var(--yellow); }
+.vb-depreq .me-dialog-actions .btn { display: grid; place-items: center; text-decoration: none; }
 .pay-history { margin-top: 28px; }
 .pay-history[hidden] { display: none; }
 .pay-history-title { font-size: 1rem; margin: 0 2px 12px; }

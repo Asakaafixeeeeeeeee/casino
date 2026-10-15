@@ -23,9 +23,13 @@ import { checkDeposit, LimitError } from "../services/responsibleGaming.js";
 import { partnerOf } from "../services/affiliates.js";
 import { permissionsOf } from "../services/partnerPlatform.js";
 import { PAYMENTS_OFF_MESSAGE, paymentsEnabled } from "../services/paymentSettings.js";
+import {
+  acceptRules, amountText, getMoneyRules, hasAcceptedRules, MAX_DEPOSIT, MoneyRuleError, publicRules,
+} from "../services/moneyRules.js";
 
-const MIN_DEPOSIT = 5;     // GHS; well under US$ 1 (the page shows the dollar figure)
-const MAX_DEPOSIT = 50000;
+/* the minimum deposit is the admin's live setting (Admin -> Betting & withdrawal settings; GHS 135 by default) */
+export const RULES_NOT_ACCEPTED_MESSAGE =
+  "Before depositing, please read and accept the deposit, betting and withdrawal rules shown on the deposit page.";
 const NETWORKS: readonly MomoNetwork[] = ["MTN", "VDF", "ATL", "TGO"];
 
 // Momo prompts TheTeller hasn't answered yet; the status route reports these as pending without asking.
@@ -36,11 +40,12 @@ function siteUrl(): string {
   return (process.env.SITE_URL ?? process.env.PUBLIC_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 }
 
-function readAmount(raw: unknown): number | null {
+function readAmount(raw: unknown, min: number): number | null {
   const n = Number(raw);
-  if (!Number.isFinite(n) || n < MIN_DEPOSIT || n > MAX_DEPOSIT) return null;
+  if (!Number.isFinite(n) || n < min || n > MAX_DEPOSIT) return null;
   return Math.round(n * 100) / 100;
 }
+const ghs = (n: number) => "GHS " + amountText(n);
 
 function badRequest(res: Response, error: string, message: string): void {
   res.status(400).json({ error, message });
@@ -64,6 +69,24 @@ export function paymentsRouter(db: Pool): Router {
   async function refuseWhenOff(res: Response): Promise<boolean> {
     if (await paymentsEnabled(db)) return false;
     res.status(503).json({ error: "payments_off", message: PAYMENTS_OFF_MESSAGE });
+    return true;
+  }
+
+  /* the amount against the live minimum deposit (and the largest single deposit) */
+  async function depositAmount(raw: unknown, res: Response): Promise<number | null> {
+    const rules = await getMoneyRules(db);
+    const amt = readAmount(raw, rules.min_deposit);
+    if (amt === null) {
+      badRequest(res, "invalid_amount", `Amount must be between ${ghs(rules.min_deposit)} and ${ghs(MAX_DEPOSIT)}`);
+      return null;
+    }
+    return amt;
+  }
+  /* no deposit until the player has accepted the current deposit, betting and withdrawal rules */
+  async function refuseUntilAccepted(userId: string, res: Response): Promise<boolean> {
+    const rules = await getMoneyRules(db);
+    if (await hasAcceptedRules(db, userId, rules.rules_version)) return false;
+    res.status(409).json({ error: "rules_not_accepted", message: RULES_NOT_ACCEPTED_MESSAGE, rules_version: rules.rules_version });
     return true;
   }
 
@@ -126,8 +149,16 @@ export function paymentsRouter(db: Pool): Router {
       next(e);
       return;
     }
-    /* the site's pages read paymentsOn to show the "temporarily unavailable" notice */
-    const sw = { paymentsOn: on, ...(on ? {} : { message: PAYMENTS_OFF_MESSAGE }) };
+    /* the site's pages read paymentsOn to show the "temporarily unavailable" notice, and the live minimum deposit
+       and the betting and withdrawal rules (deposit page, withdraw page, terms) */
+    let rules;
+    try {
+      rules = publicRules(await getMoneyRules(db));
+    } catch (e) {
+      next(e);
+      return;
+    }
+    const sw = { paymentsOn: on, ...(on ? {} : { message: PAYMENTS_OFF_MESSAGE }), minDeposit: rules.min_deposit, maxDeposit: rules.max_deposit, rules };
     try {
       const config = loadTellerConfig(process.env);
       res.json({
@@ -148,6 +179,36 @@ export function paymentsRouter(db: Pool): Router {
     }
   });
 
+  /* The deposit page's "Before you deposit" box: the current rules, and whether this player has accepted them. */
+  router.get("/rules", authenticate, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = requireUser(req);
+      const rules = await getMoneyRules(db);
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ rules: publicRules(rules), accepted: await hasAcceptedRules(db, user.id, rules.rules_version) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /* The player ticked "I have read and accept…": records acceptance of the version the page showed (a page showing
+     an older version is told to read the new rules first). Body: { rules_version, idempotency_key }. */
+  router.post("/accept-rules", authenticate, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = requireUser(req);
+      const { rules_version } = (req.body ?? {}) as Record<string, unknown>;
+      const accepted = await acceptRules(db, user.id, rules_version);
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ accepted: true, ...accepted, rules: publicRules(await getMoneyRules(db)) });
+    } catch (error) {
+      if (error instanceof MoneyRuleError) {
+        res.status(error.status).json({ error: error.code, message: error.message, rules: publicRules(await getMoneyRules(db, true)) });
+        return;
+      }
+      next(error);
+    }
+  });
+
   /* Hosted checkout: the customer pays on TheTeller's page and comes back to wallet.html?transaction_id=… */
   router.post("/teller/checkout", authenticate, async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -158,12 +219,13 @@ export function paymentsRouter(db: Pool): Router {
         return;
       }
       const { amount, currency, idempotency_key } = (req.body ?? {}) as Record<string, unknown>;
-      const amt = readAmount(amount);
-      if (amt === null) return badRequest(res, "invalid_amount", `Amount must be between GHS ${MIN_DEPOSIT} and GHS ${MAX_DEPOSIT}`);
+      const amt = await depositAmount(amount, res);
+      if (amt === null) return;
       if (currency !== "GHS") return badRequest(res, "unsupported_currency", "Only GHS deposits are supported");
       if (typeof idempotency_key !== "string" || !idempotency_key.trim()) {
         return badRequest(res, "invalid_idempotency_key", "A non-empty idempotency_key is required");
       }
+      if (await refuseUntilAccepted(user.id, res)) return;
 
       const config = loadTellerConfig(process.env);
       const site = siteUrl();
@@ -224,12 +286,13 @@ export function paymentsRouter(db: Pool): Router {
         return;
       }
       const { amount, currency, idempotency_key, account_number, network } = (req.body ?? {}) as Record<string, unknown>;
-      const amt = readAmount(amount);
-      if (amt === null) return badRequest(res, "invalid_amount", `Amount must be between GHS ${MIN_DEPOSIT} and GHS ${MAX_DEPOSIT}`);
+      const amt = await depositAmount(amount, res);
+      if (amt === null) return;
       if (currency !== "GHS") return badRequest(res, "unsupported_currency", "Only GHS deposits are supported");
       if (typeof idempotency_key !== "string" || !idempotency_key.trim()) {
         return badRequest(res, "invalid_idempotency_key", "A non-empty idempotency_key is required");
       }
+      if (await refuseUntilAccepted(user.id, res)) return;
       const subscriber = String(account_number ?? "").replace(/\D/g, "");
       if (!/^233[235]\d{8}$/.test(subscriber)) return badRequest(res, "invalid_account", "Enter a valid Ghanaian mobile money number");
       if (!NETWORKS.includes(network as MomoNetwork)) return badRequest(res, "invalid_network", "Choose MTN, Telecel or AirtelTigo");

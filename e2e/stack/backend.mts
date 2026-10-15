@@ -14,6 +14,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const stackDir = path.join(here, "..", ".stack");
 mkdirSync(stackDir, { recursive: true });
 
+/* The suite's specs fund players with GHS 25-100 deposits, from when the site's minimum deposit was GHS 5. The stack
+   starts with that minimum (Admin -> Betting & withdrawal settings; production's default is GHS 135), so those specs
+   keep their amounts; money-rules.spec.ts sets GHS 135 itself and puts this back when it's done. */
+export const E2E_MIN_DEPOSIT = 5;
+const SET_MIN = "UPDATE money_rules SET min_deposit = " + E2E_MIN_DEPOSIT + " WHERE id = 1";
+
 const freePort = () => new Promise<number>((resolve) => {
   const s = net.createServer();
   s.listen(0, "127.0.0.1", () => { const p = (s.address() as net.AddressInfo).port; s.close(() => resolve(p)); });
@@ -24,6 +30,7 @@ if (process.env.E2E_DB === "pglite") {
   const { createApp } = await import("../../backend/src/app.ts");
   const shared = await import("../../backend/src/db.ts");
   const env = await setupWalletDb();
+  await env.db.query(SET_MIN);
   (shared.db as unknown as { query: unknown }).query = env.db.query.bind(env.db);
   (shared.db as unknown as { connect: unknown }).connect = env.db.connect.bind(env.db);
   writeFileSync(path.join(stackDir, "db-url"), "pglite");
@@ -48,5 +55,10 @@ if (process.env.E2E_DB === "pglite") {
   writeFileSync(path.join(stackDir, "db-url"), process.env.DATABASE_URL);
   console.log(`[e2e] Postgres on 127.0.0.1:${port}; applying migrations`);
   await import("../../backend/migrate-production.mjs");
+  const { default: pgLib } = await import("pg");
+  const setup = new pgLib.Client({ connectionString: process.env.DATABASE_URL, options: "-c search_path=wallet,public" });
+  await setup.connect();
+  await setup.query(SET_MIN);
+  await setup.end();
   await import("../../backend/src/server.ts");
 }

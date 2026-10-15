@@ -111,10 +111,29 @@ export async function gatewayRequests(request: APIRequestContext): Promise<{ met
   return (await request.get(`${GATEWAY}/requests`)).json();
 }
 
+/** On the wallet page: ticks "I have read and accept these deposit, betting and withdrawal rules" when the
+ *  "Before you deposit" box asks for it (once per version of the rules), and waits for it to be saved. */
+export async function acceptRulesOnPage(page: Page) {
+  const box = page.locator("#depRules");
+  const summary = page.locator("#depRulesSummary");
+  await expect(box.or(summary).first(), "the deposit rules load").toBeVisible({ timeout: 30_000 });
+  if (await summary.isVisible()) return;
+  await page.locator("#depRulesAccept").check();
+  await expect(summary).toBeVisible();
+}
+
+/** Accepts the current deposit, betting and withdrawal rules straight through the API (for deposits made by API). */
+export async function acceptRules(request: APIRequestContext, token: string) {
+  const r = await request.post(`${API}/api/payments/accept-rules`, {
+    headers: { Authorization: `Bearer ${token}` }, data: { idempotency_key: "accept-rules:" + Date.now() + Math.random() } });
+  expect(r.status(), "the rules are accepted").toBe(200);
+}
+
 /** Deposits through the wallet page and waits for the page's verdict ("ok", "error" or "info"). */
 export async function deposit(page: Page, amount: number, opts: { from?: string } = {}) {
   await page.goto("/wallet.html");
   await settle(page);
+  await acceptRulesOnPage(page);
   if (opts.from) await page.locator("#depPhone").fill(opts.from);
   await page.locator("#depAmount").fill(String(amount));
   await expect(page.locator("#depSubmit")).toBeEnabled();

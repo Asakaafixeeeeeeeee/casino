@@ -65,14 +65,14 @@ test("Per-player limits: a deposit tier and a maximum bet, enforced and reversib
   const env = await funded();
   const uid = env.userId;
   /* nothing set: no limit trips */
-  await savePlayerRisk(env.db, ADMIN, uid, { min_deposit: 50, max_deposit: 500, max_bet: 10 });
+  await savePlayerRisk(env.db, ADMIN, uid, { min_deposit: 150, max_deposit: 500, max_bet: 10 });
   const got = await getPlayerRisk(env.db, uid);
-  assert.deepEqual([got.risk.min_deposit, got.risk.max_deposit, got.risk.max_bet], [50, 500, 10]);
+  assert.deepEqual([got.risk.min_deposit, got.risk.max_deposit, got.risk.max_bet], [150, 500, 10]);
 
   /* deposits below the tier or above the cap are refused with the limit named */
-  await assert.rejects(() => checkDeposit(env.db, uid, 20), isLimit("below_min_deposit"));
+  await assert.rejects(() => checkDeposit(env.db, uid, 140), isLimit("below_min_deposit"));
   await assert.rejects(() => checkDeposit(env.db, uid, 600), isLimit("above_max_deposit"));
-  await checkDeposit(env.db, uid, 100); /* within the tier: fine */
+  await checkDeposit(env.db, uid, 200); /* within the tier: fine */
 
   /* a bet over the player's max is refused; at or under is fine */
   await assert.rejects(() => assertStakeAllowed(env.db, "volta-coin", 25, uid), isGame("invalid_stake"));
@@ -83,8 +83,8 @@ test("Per-player limits: a deposit tier and a maximum bet, enforced and reversib
   assert.equal(await env.balance(), before, "a refused bet never moves money");
 
   /* validation and the limits list */
-  await assert.rejects(() => savePlayerRisk(env.db, ADMIN, uid, { min_deposit: 1 }), isAdmin("invalid_min_deposit"), "below the site's GHS 5");
-  await assert.rejects(() => savePlayerRisk(env.db, ADMIN, uid, { min_deposit: 600, max_deposit: 100 }), isAdmin("invalid_max_deposit"));
+  await assert.rejects(() => savePlayerRisk(env.db, ADMIN, uid, { min_deposit: 1 }), isAdmin("invalid_min_deposit"), "below the site's minimum deposit (GHS 135)");
+  await assert.rejects(() => savePlayerRisk(env.db, ADMIN, uid, { min_deposit: 600, max_deposit: 200 }), isAdmin("invalid_max_deposit"));
   assert.equal((await playersWithLimits(env.db)).players.length, 1);
 
   /* clearing a limit removes it, and the player can deposit and bet freely again */

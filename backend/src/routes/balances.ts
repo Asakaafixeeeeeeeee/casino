@@ -21,7 +21,7 @@ import type { Pool } from "pg";
 import { getUserBalances } from "../services/balanceService.js";
 import { requireUser } from "../middleware/authenticate.js";
 import { FeedbackError, listTransactions, saveFeedback } from "../services/accountActivity.js";
-import { requestWithdrawal, withdrawableOf, WithdrawalError } from "../services/withdrawals.js";
+import { requestWithdrawal, withdrawalView, WithdrawalError } from "../services/withdrawals.js";
 import { getLimits, LimitError, selfExclude, setLimits } from "../services/responsibleGaming.js";
 import { convert } from "../services/conversions.js";
 import { dismissReview, publishedReviews, reviewPrompt, ReviewError, submitReview } from "../services/reviews.js";
@@ -72,7 +72,7 @@ export function balancesRouter(db: Pool): Router {
     try {
       const user = requireUser(req);
       res.setHeader("Cache-Control", "no-store");
-      res.json(await withdrawableOf(db, user.id));
+      res.json(await withdrawalView(db, user.id));
     } catch (e) {
       next(e);
     }

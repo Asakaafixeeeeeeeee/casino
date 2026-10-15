@@ -1,13 +1,14 @@
 /* When a service is down or slow, the player sees a clear message, nothing crashes, no money moves twice,
    and the page works again once the service is back. */
 import { expect, test } from "@playwright/test";
-import { ACCOUNTS, API, cents, fundedPlayer, login, register, serverBalance, settle, trackErrors } from "./helpers";
+import { acceptRulesOnPage, ACCOUNTS, API, cents, fundedPlayer, login, register, serverBalance, settle, trackErrors } from "./helpers";
 
 test("a deposit with the balance service down fails with a message, not a crash", async ({ page, request }) => {
   const errors = trackErrors(page);
   const { token } = await register(page);
   await page.goto("/wallet.html");
   await settle(page);
+  await acceptRulesOnPage(page);
   await page.route(`${API}/api/payments/**`, (r) => r.abort("connectionrefused"));
   await page.locator("#depAmount").fill("100");
   await page.locator("#depSubmit").click();

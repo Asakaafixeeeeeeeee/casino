@@ -1,7 +1,7 @@
 /* Concurrency on the real stack (real Postgres, real row locks): the money races found in the audit, replayed over
    HTTP. Each test ends by checking the ledger in SQL: no negative balance, every journal balanced, cache = ledger. */
 import { expect, test } from "@playwright/test";
-import { adminSession, API, expectLedgerSound, fundedPlayer, play, realPostgres, register, serverBalance, sql } from "./helpers";
+import { acceptRules, adminSession, API, expectLedgerSound, fundedPlayer, play, realPostgres, register, serverBalance, sql } from "./helpers";
 
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
@@ -38,6 +38,7 @@ test("deposits started at once can't slip past a daily deposit limit", async ({ 
   const { phone, token } = await register(page);
   const set = await request.post(`${API}/api/user/limits`, { headers: auth(token), data: { daily: 200, idempotency_key: "limits-" + Date.now() } });
   expect(set.status()).toBe(200);
+  await acceptRules(request, token);
   const results = await Promise.all(Array.from({ length: 5 }, (_, i) =>
     request.post(`${API}/api/payments/teller/momo`, { headers: auth(token),
       data: { amount: 200, currency: "GHS", network: "MTN", account_number: "233" + phone.slice(1), idempotency_key: `deposit:limit-${Date.now()}-${i}` } })));

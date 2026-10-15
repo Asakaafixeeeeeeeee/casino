@@ -6,8 +6,9 @@
   const payments = (window.VB && window.VB.payments) || [];
   const MOMO = payments.filter((m) => m.type === "momo");
 
-  const DEPOSIT_MIN = 5;
-  const DEPOSIT_MAX = 50000;
+  /* the live minimum (Admin -> Betting & withdrawal settings) replaces this as soon as the rules arrive */
+  let DEPOSIT_MIN = (U.minDeposit && U.minDeposit()) || 135;
+  let DEPOSIT_MAX = 50000;
   const WITHDRAW_MIN = 20;
 
   const $ = (id) => document.getElementById(id);
@@ -170,6 +171,20 @@
     });
     $("provMenu").addEventListener("click", () => setTimeout(phoneHint, 0));
     phoneChanged();
+
+    /* the live minimum deposit on every payment method: the amount fields, the "min." labels and the notes */
+    const fixed = (n) => Number(n).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    function applyMinimum(rules) {
+      if (!rules) return;
+      DEPOSIT_MIN = Number(rules.min_deposit) || DEPOSIT_MIN;
+      DEPOSIT_MAX = Number(rules.max_deposit) || DEPOSIT_MAX;
+      document.querySelectorAll("[data-dep-min]").forEach((el) => (el.textContent = fixed(DEPOSIT_MIN)));
+      ["depAmount", "pbAmount", "cdAmount"].forEach((id) => { if ($(id)) $(id).min = String(DEPOSIT_MIN); });
+      showMinUsd();
+      if (resync) resync();
+    }
+    let resync = null; /* the Top Up button's state, once the signed-in form is wired */
+    if (U.moneyRules) U.moneyRules().then(applyMinimum);
     if (!requireSignIn(submit)) return;
 
     const showMsg = (kind, text) => { msg.innerHTML = "<div class='alert alert-" + kind + "'>" + text + "</div>"; };
@@ -178,6 +193,101 @@
       amt < DEPOSIT_MIN ? "Minimum deposit is GHS " + DEPOSIT_MIN.toFixed(2) + "." :
       amt > DEPOSIT_MAX ? "Maximum deposit is GHS " + DEPOSIT_MAX.toLocaleString() + "." : "";
     const newKey = () => "deposit:" + crypto.randomUUID() + ":" + Date.now();
+
+    /* ---------------- "Before you deposit": the rules, accepted once per version ---------------- */
+    const rulesBox = $("depRules");
+    const rulesAccept = $("depRulesAccept");
+    const rulesErr = $("depRulesErr");
+    const rs = { rules: null, accepted: false, sending: false };
+    const ruleItem = (label, text) => "<li><b>" + U.esc(label) + "</b> " + U.esc(text) + "</li>";
+    function rulesHtml(r) {
+      const items = [ruleItem("Minimum deposit:", "GHS " + fixed(r.min_deposit) + " per deposit (up to GHS " + fixed(r.max_deposit) + ").")];
+      items.push(r.bet_rule.enabled
+        ? ruleItem("Betting:", r.bet_rule.message)
+        : ruleItem("Betting:", "you can bet with your whole balance."));
+      if (r.withdraw_rule.enabled) {
+        items.push(ruleItem("Withdrawals:", "money you deposit while this rule is on has to be bet " + r.withdraw_rule.multiple +
+          " time(s) before that deposited money can be withdrawn. Your winnings are never held, rules never apply to earlier deposits, and nothing is ever deducted from your balance."));
+      }
+      if (r.withdraw_info) items.push(ruleItem("Withdrawing:", r.withdraw_info));
+      return items.join("");
+    }
+    function renderRules() {
+      const r = rs.rules;
+      const summary = $("depRulesSummary");
+      if (!r || !rulesBox) return;
+      $("depRulesList").innerHTML = rulesHtml(r);
+      rulesAccept.checked = rs.accepted;
+      rulesAccept.disabled = rs.sending;
+      $("depRulesShort").innerHTML = "Rules accepted · minimum deposit <b>GHS " + fixed(r.min_deposit) + "</b>" +
+        (r.bet_rule.enabled ? " · betting needs a recent deposit" : "") + (r.withdraw_rule.enabled ? " · play-through on deposits" : "") +
+        " · <a href='terms.html#money-rules'>terms</a>";
+      const expanded = $("depRulesShow").getAttribute("aria-expanded") === "true";
+      rulesBox.hidden = rs.accepted && !expanded;
+      rulesBox.classList.toggle("accepted", rs.accepted);
+      summary.hidden = !rs.accepted;
+    }
+    function rulesError(text) {
+      if (!rulesErr) return;
+      rulesErr.textContent = text || "";
+      rulesErr.hidden = !text;
+    }
+    async function loadRules() {
+      const r = await U.paymentApi("/api/payments/rules");
+      if (!r.ok || !r.data || !r.data.rules) return;
+      rs.rules = r.data.rules;
+      rs.accepted = !!r.data.accepted;
+      applyMinimum(rs.rules);
+      renderRules();
+    }
+    /* asks the player to tick the box first (the server refuses a deposit until the current rules are accepted) */
+    function needAcceptance(text) {
+      if (!rs.rules) loadRules(); /* the rules didn't arrive earlier: ask again */
+      rs.accepted = false;
+      $("depRulesShow").setAttribute("aria-expanded", "false");
+      renderRules();
+      rulesError(text || "Please read the rules above and tick the box to accept them before depositing.");
+      if (rulesBox) {
+        rulesBox.hidden = false;
+        rulesBox.scrollIntoView({ block: "center", behavior: "smooth" });
+        rulesAccept.focus({ preventScroll: true });
+      }
+      return false;
+    }
+    const rulesOk = () => (rs.accepted ? true : needAcceptance());
+    if (rulesAccept) {
+      rulesAccept.addEventListener("change", async () => {
+        if (!rulesAccept.checked || !rs.rules) { rulesAccept.checked = rs.accepted; return; }
+        rs.sending = true;
+        rulesError("");
+        renderRules();
+        rulesAccept.checked = true;
+        const r = await U.paymentApi("/api/payments/accept-rules", {
+          body: { rules_version: rs.rules.rules_version, idempotency_key: "accept-rules:" + crypto.randomUUID() }
+        });
+        rs.sending = false;
+        if (r.data && r.data.rules) rs.rules = r.data.rules;
+        if (!r.ok) {
+          rs.accepted = false;
+          applyMinimum(rs.rules);
+          renderRules();
+          rulesError((r.data && r.data.message) || "Couldn't save your acceptance. Try again in a moment.");
+          return;
+        }
+        rs.accepted = true;
+        $("depRulesShow").setAttribute("aria-expanded", "false");
+        applyMinimum(rs.rules);
+        renderRules();
+        U.toast("Rules accepted", "ok");
+      });
+      $("depRulesShow").addEventListener("click", () => {
+        const open = $("depRulesShow").getAttribute("aria-expanded") !== "true";
+        $("depRulesShow").setAttribute("aria-expanded", String(open));
+        $("depRulesShow").textContent = open ? "Hide rules" : "View rules";
+        rulesBox.hidden = !open;
+      });
+    }
+    loadRules();
 
     /* asks our server every 4 s for up to 4 minutes; leaving the page doesn't cancel the payment */
     async function waitForPayment(txId) {
@@ -267,12 +377,19 @@
     async function startCheckout(amt, errId, btn) {
       if (paymentsOff) return paymentsUnavailable();
       if (!showError(errId, amountError(amt))) return;
+      if (!rulesOk()) return;
       btn.disabled = true;
       showMsg("info", "Starting secure payment…");
       const result = await U.paymentApi("/api/payments/teller/checkout", {
         body: { amount: amt, currency: "GHS", idempotency_key: newKey() }
       });
       if (result.data && result.data.error === "payments_off") return paymentsUnavailable(result.data.message);
+      if (result.data && result.data.error === "rules_not_accepted") {
+        btn.disabled = false;
+        msg.innerHTML = "";
+        loadRules().then(() => needAcceptance(result.data.message));
+        return;
+      }
       if (!result.ok || !result.data.checkout_url) {
         btn.disabled = false;
         showMsg("error", "Payment could not start. " + U.esc(result.data.message || result.data.error || "Try again in a moment."));
@@ -290,6 +407,7 @@
       showError("depAmountErr", "");
       submit.disabled = waiting || paused || paymentsOff || !(Number(depAmount.value) >= DEPOSIT_MIN);
     };
+    resync = sync;
     const OFF_TEXT = "Payments are temporarily unavailable. Please try again later.";
     function paymentsUnavailable(text) {
       paymentsOff = true;
@@ -327,6 +445,7 @@
         showMsg("error", "Choose the mobile money network.");
         return;
       }
+      if (!rulesOk()) return;
       try {
         localStorage.setItem(LAST, local);
       } catch (e) { /* storage unavailable */ }
@@ -348,6 +467,13 @@
         waiting = false;
         PayFX.close();
         return paymentsUnavailable(result.data.message);
+      }
+      if (result.data && result.data.error === "rules_not_accepted") {
+        waiting = false;
+        sync();
+        PayFX.close();
+        loadRules().then(() => needAcceptance(result.data.message));
+        return;
       }
       if (!result.ok || !result.data.transaction_id) {
         waiting = false;
@@ -404,11 +530,30 @@
     wdAmount.addEventListener("input", sync);
     wireIncrements("wquick", wdAmount, sync);
 
-    /* only winnings can be withdrawn: say how much of the balance that is, when part of it is deposited money */
+    /* only winnings can be withdrawn: say how much of the balance that is, when part of it is deposited money; and,
+       while the play-through rule is on (Admin -> Betting & withdrawal settings), how much deposited money is held
+       and how much more must be bet. Winnings are never held; nothing is ever deducted. */
     const showWithdrawable = async () => {
       const r = await U.paymentApi("/api/user/withdraw/available");
-      if (!r.ok || !r.data || !(r.data.balance > r.data.withdrawable)) return;
-      msg.innerHTML = "<div class='alert alert-info'>You can withdraw " + U.money(r.data.withdrawable) +
+      if (!r.ok || !r.data) return;
+      const d = r.data;
+      const info = $("wdInfo");
+      if (info && d.withdraw_info) { info.textContent = d.withdraw_info; info.hidden = false; }
+      const pt = d.playthrough || {};
+      const box = $("wdRule");
+      if (box) {
+        box.hidden = !pt.enabled;
+        if (pt.enabled) {
+          box.innerHTML = "<strong>Play-through rule</strong>" +
+            (d.held > 0
+              ? "<p>" + U.esc(pt.message || "") + "</p><dl class='wd-rule-nums'><div><dt>Withdrawable now</dt><dd>" + U.money(d.withdrawable) +
+                "</dd></div><div><dt>Held (deposits not yet bet)</dt><dd>" + U.money(d.held) + "</dd></div><div><dt>Still to bet</dt><dd>" + U.money(d.to_bet) + "</dd></div></dl>"
+              : "<p>Nothing in your balance is held by the play-through rule. Money you deposit has to be bet " + U.esc(String(pt.multiple)) +
+                " time(s) before that deposited money can be withdrawn; winnings are never held.</p>");
+        }
+      }
+      if (!(d.balance > d.withdrawable)) return;
+      msg.innerHTML = "<div class='alert alert-info'>You can withdraw " + U.money(d.withdrawable) +
         " (your winnings). Deposited money can't be withdrawn; it stays in your balance for betting.</div>";
     };
     showWithdrawable();
@@ -448,12 +593,13 @@
   initDeposit();
   initWithdraw();
 
-  /* "about $X" next to the minimum, from the live USD rate (the mid rate, before any conversion spread) */
-  (async () => {
+  /* "about $X" next to the minimum, from the live USD rate (the mid rate, before any conversion spread); asked again
+     when the live minimum arrives */
+  async function showMinUsd() {
     const el = document.getElementById("depMinUsd");
     if (!el || !U.session.get()) return;
     const r = await U.paymentApi("/api/user/convert/quote?from=GHS&to=USD&amount=" + DEPOSIT_MIN);
     if (!r.ok || !r.data || !(r.data.mid > 0)) return;
     el.textContent = " (about $ " + (DEPOSIT_MIN * r.data.mid).toFixed(2) + " at today's rate)";
-  })();
+  }
 })();

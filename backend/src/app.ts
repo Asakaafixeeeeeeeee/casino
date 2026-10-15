@@ -42,6 +42,8 @@ export function createApp(db: Pool): express.Express {
   // Support chat messages run to 1,000 characters, which as JSON in UTF-8 (₵, ɛ, ɔ, emoji, line breaks) can pass
   // 1 KB; those paths get a parser of their own, and the 1 KB one below skips a body that's already been read.
   app.use(["/api/support", "/api/admin/support"], express.json({ limit: "8kb" }));
+  // Betting & withdrawal settings: three messages of up to 1,000 characters each
+  app.use("/api/admin/money-rules", express.json({ limit: "16kb" }));
   // promotional images an admin uploads (as data: URLs, up to 2 MB of image), and the partner forms and campaigns
   app.use("/api/admin/flyer-assets", express.json({ limit: "3mb" }));
   app.use(["/api/admin/partners", "/api/admin/partner-permissions", "/api/admin/partner-invites", "/api/partners/invite", "/api/admin/flyer-templates", "/api/admin/flyer-campaigns",

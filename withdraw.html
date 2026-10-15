@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0d0e10">
 <title>Withdraw | WIN B WIN</title>
 <meta name="description" content="Withdraw your WIN B casino balance to your registered mobile money wallet.">
-<link rel="stylesheet" href="assets/css/styles.css?v=39">
+<link rel="stylesheet" href="assets/css/styles.css?v=40">
 <link rel="icon" href="assets/img/winb-mark.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="assets/img/app/w-apple-touch-icon-180.png">
@@ -68,6 +68,9 @@
         <button type="button" data-add="max">Max</button>
       </div>
 
+      <!-- the play-through rule, when an admin has switched it on: what's held and what's left to bet -->
+      <div class="wd-rule" id="wdRule" aria-live="polite" hidden></div>
+
       <button class="btn-topup" type="button" id="wdSubmit" disabled>Withdraw Now</button>
 
       <ol class="pay-notes">
@@ -77,12 +80,14 @@
         <li>Withdrawals are paid to the mobile number you registered with.</li>
         <li>Mobile money payouts are usually approved within a few minutes during business hours.</li>
       </ol>
+      <p class="pay-note-extra" id="wdInfo" hidden></p>
+      <p class="pay-note-extra">Deposit, betting and withdrawal rules: see the <a href="terms.html#money-rules">terms</a>.</p>
     </section>
   </div>
 </main>
 
 <script src="assets/js/data.js?v=58"></script>
-<script src="assets/js/site.js?v=54"></script>
-<script src="assets/js/wallet.js?v=38"></script>
+<script src="assets/js/site.js?v=55"></script>
+<script src="assets/js/wallet.js?v=39"></script>
 </body>
 </html>

@@ -374,8 +374,8 @@
         "</div>" +
         '<h3 class="me-sheet-sub">Deposit and bet limits</h3>' +
         '<form class="adm-adjust agm-reward" data-act="limits">' +
-          '<div class="field"><label for="rkMinDep">Smallest deposit (GHS)</label><input id="rkMinDep" type="number" step="0.01" min="5" inputmode="decimal" placeholder="no minimum"></div>' +
-          '<div class="field"><label for="rkMaxDep">Largest single deposit (GHS)</label><input id="rkMaxDep" type="number" step="0.01" min="5" inputmode="decimal" placeholder="no maximum"></div>' +
+          '<div class="field"><label for="rkMinDep">Smallest deposit (GHS)</label><input id="rkMinDep" type="number" step="0.01" min="1" inputmode="decimal" placeholder="no minimum"></div>' +
+          '<div class="field"><label for="rkMaxDep">Largest single deposit (GHS)</label><input id="rkMaxDep" type="number" step="0.01" min="1" inputmode="decimal" placeholder="no maximum"></div>' +
           '<div class="field"><label for="rkMaxBet">Largest bet (GHS)</label><input id="rkMaxBet" type="number" step="0.01" min="0.1" inputmode="decimal" placeholder="no maximum"></div>' +
           '<div class="field"><label for="rkNote">Note (admin only)</label><input id="rkNote" type="text" maxlength="160" placeholder="why, for the record"></div>' +
           '<button class="btn btn-primary btn-sm" type="submit">Save limits</button></form>' +
@@ -2958,6 +2958,200 @@
     if (tp.last) renderPaymentSettings(tp.last);
   }
 
+  /* ================= Betting & withdrawal settings ================= */
+  /* The site's minimum deposit, the betting eligibility rule and the withdrawal play-through rule, with the wording
+     players see; who each rule affects; and every change. Each save is confirmed, audited and kept in the history.
+     Neither rule ever deducts money; a material change asks players to accept the rules again before depositing. */
+  const mr = { data: null, affected: null, history: null, q: "", timer: 0, saving: false };
+  const MR_LABEL = {
+    min_deposit: "Minimum deposit", bet_rule_enabled: "Betting rule", bet_rule_days: "Betting rule window",
+    bet_rule_message: "Betting rule message", withdraw_rule_enabled: "Withdrawal play-through rule",
+    withdraw_rule_multiple: "Play-through multiple", withdraw_rule_message: "Play-through message",
+    withdraw_info: "Withdrawal information", rules_version: "Rules version",
+  };
+  const MR_TEXT = ["bet_rule_message", "withdraw_rule_message", "withdraw_info"];
+  const MR_MATERIAL = ["min_deposit", "bet_rule_enabled", "bet_rule_days", "withdraw_rule_enabled", "withdraw_rule_multiple"];
+  const mrValue = (k, v) => {
+    if (v === true) return "ON";
+    if (v === false) return "OFF";
+    if (k === "min_deposit") return "GHS " + esc(String(v));
+    if (k === "bet_rule_days") return esc(String(v)) + " days";
+    if (k === "withdraw_rule_multiple") return esc(String(v)) + "×";
+    if (MR_TEXT.includes(k)) return "“" + esc(String(v).length > 80 ? String(v).slice(0, 80) + "…" : String(v)) + "”";
+    return esc(String(v));
+  };
+  const mrField = (id, label, input, hint) => '<div class="field"><label for="' + id + '">' + label + "</label>" + input + (hint ? '<small class="hint">' + hint + "</small>" : "") + "</div>";
+  const mrSwitch = (key, on, label) => '<label class="adm-switch"><input type="checkbox" data-mr="' + key + '"' + (on ? " checked" : "") + ' aria-label="' + esc(label) + '"><span aria-hidden="true"></span></label>';
+  const mrArea = (id, value) => '<textarea id="' + id + '" class="me-textarea mr-text" rows="4" maxlength="1000">' + esc(value) + "</textarea>";
+
+  function renderMoneyRules() {
+    const panel = panelOf("moneyrules");
+    const d = mr.data;
+    if (!d) return;
+    const s = d.settings;
+    const p = d.preview;
+    panel.innerHTML =
+      '<form class="mr-form" data-form="moneyrules" novalidate>' +
+      /* minimum deposit */
+      '<section class="adm-card mr-card"><h3 class="adm-h">' + U.icon("wallet") + "Minimum deposit</h3>" +
+        mrField("mrMin", "Minimum deposit (GHS)", '<input id="mrMin" type="number" inputmode="decimal" step="0.01" min="1" max="50000" value="' + esc(String(s.min_deposit)) + '">',
+          "Every deposit (mobile money, Paybill and card) must be at least this much. GHS 1 to GHS 50,000.") +
+      "</section>" +
+      /* betting eligibility */
+      '<section class="adm-card mr-card ' + (s.bet_rule_enabled ? "is-on" : "") + '">' +
+        '<div class="adm-studio-head"><div><strong>Betting eligibility rule</strong><small>' +
+          (s.bet_rule_enabled ? "ON — since " + when(s.bet_rule_enabled_at) : "OFF — everyone with a balance can bet") + "</small></div>" +
+          mrSwitch("bet_rule_enabled", s.bet_rule_enabled, "Betting eligibility rule on or off") + "</div>" +
+        '<p class="adm-note">When ON, a real-money casino bet (every game) needs a completed deposit of at least the minimum within the last N days. ' +
+          "It only refuses new bets: balances are never deducted, stay visible, and withdrawals are not affected.</p>" +
+        mrField("mrDays", "Days a qualifying deposit counts for", '<input id="mrDays" type="number" inputmode="numeric" step="1" min="1" max="365" value="' + esc(String(s.bet_rule_days)) + '">', "1 to 365 days.") +
+        mrField("mrBetMsg", "Message players see when a bet is refused", mrArea("mrBetMsg", s.bet_rule_message), "Plain text, up to 1,000 characters. {min} becomes the minimum deposit and {days} the number of days.") +
+        '<div class="adm-tp-notice mr-preview"><span>Players read</span><p data-mr-preview="bet">' + esc(p.bet_rule.message) + "</p></div>" +
+      "</section>" +
+      /* withdrawal play-through */
+      '<section class="adm-card mr-card ' + (s.withdraw_rule_enabled ? "is-on" : "") + '">' +
+        '<div class="adm-studio-head"><div><strong>Withdrawal play-through rule</strong><small>' +
+          (s.withdraw_rule_enabled ? "ON — counts deposits made since " + when(s.withdraw_rule_enabled_at) : "OFF — nothing is held") + "</small></div>" +
+          mrSwitch("withdraw_rule_enabled", s.withdraw_rule_enabled, "Withdrawal play-through rule on or off") + "</div>" +
+        '<p class="adm-note">When ON, deposited money not yet bet is held from withdrawal: held = the smaller of the balance, the deposited part of the balance, ' +
+          "the qualifying deposits, and (multiple × qualifying deposits − stakes since). Only deposits made after the rule is switched on and after the player's " +
+          "last paid withdrawal count. Winnings are never held and nothing is deducted.</p>" +
+        mrField("mrMult", "Play-through multiple (×)", '<input id="mrMult" type="number" inputmode="decimal" step="0.1" min="0" max="20" value="' + esc(String(s.withdraw_rule_multiple)) + '">', "0 to 20. 1 means each qualifying deposit has to be bet once.") +
+        mrField("mrWdMsg", "Message players see when a withdrawal is over what they can withdraw", mrArea("mrWdMsg", s.withdraw_rule_message),
+          "Plain text, up to 1,000 characters. {held} becomes the amount held, {to_bet} what is still to bet, {multiple} the multiple.") +
+      "</section>" +
+      /* general withdrawal information */
+      '<section class="adm-card mr-card"><h3 class="adm-h">' + U.icon("withdraw") + "Withdrawal information</h3>" +
+        mrField("mrInfo", "Shown on the withdraw page, the deposit page's rules box and the terms", mrArea("mrInfo", s.withdraw_info), "Plain text, up to 1,000 characters.") +
+      "</section>" +
+      '<div class="mr-save"><button class="btn btn-primary btn-lg" type="submit"' + (mr.saving ? " disabled" : "") + ">Save settings</button>" +
+        '<p class="adm-note">Rules version <b>' + s.rules_version + "</b> · " + count(d.accepted_current) + " player(s) accepted it · " +
+        (s.updated_by ? "last changed " + when(s.updated_at) + " by " + esc(s.updated_by) : "never changed (defaults)") +
+        ". Changing the minimum, a switch, the days or the multiple asks players to accept the rules again before their next deposit; wording changes don't.</p></div>" +
+      "</form>" +
+      '<section class="adm-card mr-card" id="mrAffected">' + loading + "</section>" +
+      '<section class="adm-card mr-card" id="mrHistory">' + loading + "</section>";
+    renderAffected();
+    renderHistory();
+  }
+
+  function renderAffected() {
+    const host = $("mrAffected");
+    if (!host) return;
+    const a = mr.affected;
+    if (!a) { host.innerHTML = loading; return; }
+    const who = (p) => "<td><b>" + esc(p.name) + "</b>" + (p.phone ? "<small>" + esc(p.phone) + "</small>" : "") + "</td>";
+    const last = (p) => (p.last_deposit === null ? "none" : money(p.last_deposit) + "<small>" + when(p.last_deposit_at) + "</small>");
+    const bet = a.bet_rule;
+    const wd = a.withdraw_rule;
+    host.innerHTML = '<h3 class="adm-h">' + U.icon("users") + "Affected players</h3>" +
+      '<div class="adm-toolbar"><label class="searchbar adm-search">' + U.icon("search") +
+      '<input id="mrQ" type="search" placeholder="Find a player by name or number" autocomplete="off" aria-label="Find an affected player" value="' + esc(mr.q) + '"></label></div>' +
+      '<h4 class="mr-sub">' + (bet.enabled ? "Can't bet right now" : "Would be stopped from betting if the rule were ON") +
+        ' <span class="adm-chip-count">' + count(bet.players.length) + (bet.players.length >= 100 ? "+" : "") + "</span></h4>" +
+      '<p class="adm-note">Players with money in their balance and no deposit of at least ' + money(bet.min_deposit) + " in the last " + bet.days + " days. Their balance is untouched and they can still withdraw.</p>" +
+      (bet.players.length
+        ? table(["Player", "Balance", "Last deposit"], bet.players.map((p) =>
+            '<tr class="adm-rowlink" data-user="' + esc(p.id) + '" tabindex="0" role="button">' + who(p) + "<td>" + money(p.balance) + "</td><td>" + last(p) + "</td></tr>"))
+        : '<p class="me-sheet-note">' + (mr.q ? "No players match." : "No one.") + "</p>") +
+      '<h4 class="mr-sub">Money held by the play-through rule <span class="adm-chip-count">' + count(wd.players.length) + (wd.players.length >= 100 ? "+" : "") + "</span></h4>" +
+      (wd.enabled
+        ? (wd.players.length
+            ? table(["Player", "Balance", "Held", "Still to bet", "Last qualifying deposit"], wd.players.map((p) =>
+                '<tr class="adm-rowlink" data-user="' + esc(p.id) + '" tabindex="0" role="button">' + who(p) + "<td>" + money(p.balance) + '</td><td class="bad"><b>' + money(p.held) +
+                "</b></td><td>" + money(p.to_bet) + "</td><td>" + last(p) + "</td></tr>"))
+            : '<p class="me-sheet-note">' + (mr.q ? "No players match." : "Nothing is held for anyone.") + "</p>")
+        : '<p class="me-sheet-note">The play-through rule is OFF, so nothing is held.</p>');
+    const q = $("mrQ");
+    q.addEventListener("input", () => {
+      clearTimeout(mr.timer);
+      mr.timer = setTimeout(async () => {
+        mr.q = q.value.trim();
+        const r = await api("/money-rules/affected?" + new URLSearchParams({ q: mr.q }));
+        if (!r.ok || state.tab !== "moneyrules") return;
+        mr.affected = r.data;
+        const pos = q.selectionStart;
+        renderAffected();
+        const again = $("mrQ");
+        again.focus();
+        try { again.setSelectionRange(pos, pos); } catch (e) { /* not a text field */ }
+      }, 300);
+    });
+  }
+
+  function renderHistory() {
+    const host = $("mrHistory");
+    if (!host) return;
+    const h = mr.history;
+    if (!h) { host.innerHTML = loading; return; }
+    host.innerHTML = '<h3 class="adm-h">' + U.icon("history") + "Change history</h3>" +
+      (h.changes.length
+        ? table(["When", "Admin", "What changed"], h.changes.map((c) =>
+            "<tr><td>" + when(c.at) + "</td><td>" + esc(c.admin) + '</td><td class="mr-changes">' +
+            Object.keys(c.changes).map((k) => "<div><b>" + esc(MR_LABEL[k] || k) + ":</b> " +
+              (MR_TEXT.includes(k) ? "edited " + mrValue(k, c.changes[k].after) : mrValue(k, c.changes[k].before) + " → " + mrValue(k, c.changes[k].after)) + "</div>").join("") +
+            "</td></tr>"))
+        : '<p class="me-sheet-note">No changes yet: the defaults are in force (minimum deposit GHS 135, both rules OFF).</p>');
+  }
+
+  async function loadMoneyRules(fresh) {
+    const panel = panelOf("moneyrules");
+    if (fresh !== false) { panel.innerHTML = loading; mr.affected = null; mr.history = null; }
+    const [r, a, h] = await Promise.all([api("/money-rules"), api("/money-rules/affected?" + new URLSearchParams({ q: mr.q })), api("/money-rules/history")]);
+    if (state.tab !== "moneyrules") return;
+    if (!r.ok) { panel.innerHTML = ""; return flash("error", errText(r, "Couldn't load the betting & withdrawal settings.")); }
+    mr.data = r.data;
+    mr.affected = a.ok ? a.data : null;
+    mr.history = h.ok ? h.data : null;
+    renderMoneyRules();
+    if (!a.ok) $("mrAffected").innerHTML = '<p class="me-sheet-note">' + errText(a, "Couldn't load the affected players.") + "</p>";
+    if (!h.ok) $("mrHistory").innerHTML = '<p class="me-sheet-note">' + errText(h, "Couldn't load the history.") + "</p>";
+  }
+
+  /* the form's values; a switch flipped in the form is saved with everything else */
+  function moneyRulesForm(form) {
+    const val = (id) => form.querySelector("#" + id).value;
+    const sw = (k) => form.querySelector('input[data-mr="' + k + '"]').checked;
+    return {
+      min_deposit: val("mrMin").trim() === "" ? "" : Number(val("mrMin")),
+      bet_rule_enabled: sw("bet_rule_enabled"),
+      bet_rule_days: val("mrDays").trim() === "" ? "" : Number(val("mrDays")),
+      bet_rule_message: val("mrBetMsg").trim(),
+      withdraw_rule_enabled: sw("withdraw_rule_enabled"),
+      withdraw_rule_multiple: val("mrMult").trim() === "" ? "" : Number(val("mrMult")),
+      withdraw_rule_message: val("mrWdMsg").trim(),
+      withdraw_info: val("mrInfo").trim(),
+    };
+  }
+  async function saveMoneyRules(form) {
+    if (!mr.data || mr.saving) return;
+    const cur = mr.data.settings;
+    const next = moneyRulesForm(form);
+    const changed = Object.keys(next).filter((k) => next[k] !== cur[k]);
+    if (!changed.length) return flash("info", "Nothing changed.");
+    const material = changed.some((k) => MR_MATERIAL.includes(k));
+    const lines = changed.map((k) => "<b>" + esc(MR_LABEL[k]) + ":</b> " +
+      (MR_TEXT.includes(k) ? "new wording" : mrValue(k, cur[k]) + " → " + mrValue(k, next[k])));
+    const ok = await ask({
+      title: "Save these changes?",
+      text: lines.join("<br>") + "<br><br>" + (material
+        ? "Players will be asked to accept the updated rules before their next deposit. "
+        : "Wording only: players are not asked to accept again. ") +
+        "No balance is ever deducted by these rules.",
+      yes: "Save",
+      danger: next.bet_rule_enabled && !cur.bet_rule_enabled,
+    });
+    if (ok === null) return;
+    mr.saving = true;
+    const body = {};
+    changed.forEach((k) => (body[k] = next[k]));
+    const r = await api("/money-rules", body);
+    mr.saving = false;
+    if (!r.ok) return flash("error", errText(r, "Couldn't save the settings."));
+    flash("ok", "Betting &amp; withdrawal settings saved" + (r.data.version_bumped ? " (rules version " + r.data.settings.rules_version + ": players accept again before depositing)." : "."));
+    loadMoneyRules(false);
+  }
+
   /* ================= Blocked, Banned and Deleted users ================= */
   /* three menus, one shape: find a player and act, the list with its reasons and dates, and the history. A restriction
      never touches a balance, a bet or a record; banning or deleting also stops log-in (the accounts server is told). */
@@ -3328,7 +3522,7 @@
     if (r.ok) loadRisk(true);
   }
 
-  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, deposits: loadDeposits, payments: () => loadPaymentSettings(true), blocked: () => loadAccounts("blocked"), banned: () => loadAccounts("banned"), deleted: () => loadAccounts("deleted"), games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), lotto: () => loadLotto(true), partners: loadPartners, withdrawals: loadWithdrawals, risk: loadRisk, reviews: loadReviews, support: () => loadSupport() };
+  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, deposits: loadDeposits, payments: () => loadPaymentSettings(true), moneyrules: () => loadMoneyRules(true), blocked: () => loadAccounts("blocked"), banned: () => loadAccounts("banned"), deleted: () => loadAccounts("deleted"), games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), lotto: () => loadLotto(true), partners: loadPartners, withdrawals: loadWithdrawals, risk: loadRisk, reviews: loadReviews, support: () => loadSupport() };
   const ADD_MONEY = '<button class="btn btn-primary btn-sm" type="button" data-credit>' + U.icon("plus") + "Add / take money</button>";
   /* each section's title, a line on what it's for, and its buttons */
   const SECTIONS = {
@@ -3340,6 +3534,7 @@
     banned: { title: AC.banned.title, lead: AC.banned.lead },
     deleted: { title: AC.deleted.title, lead: AC.deleted.lead },
     payments: { title: "TheTeller Payment Settings", lead: "Switch TheTeller payments ON or OFF for the whole website, and check the merchant ID and the connection. OFF stops new payments only; payments already started are still verified and credited. API keys and passwords stay hidden." },
+    moneyrules: { title: "Betting & withdrawal settings", lead: "The minimum deposit, the betting eligibility rule and the withdrawal play-through rule, with the messages players see. Both rules are OFF by default, never deduct money and never hold winnings. Every change is confirmed, logged and shown in the history below." },
     withdrawals: { title: "Withdrawals", lead: "Players' requests to cash out. Send the money by hand, then Approve marks it paid; Reject returns it to the player's balance." },
     games: { title: "Games", lead: "Manage every game: switch it on or off, choose whether it offers free play (same odds as real money) and a strip of real big wins, pause and resume it, set bet limits and round timing, and watch live play, statistics and players' wins and losses. Results are drawn by the server and can't be seen or changed before a round ends." },
     risk: { title: "Risk management", lead: "Each player's deposits, winnings, withdrawals and net; per-player deposit tiers and bet limits (set from a player's profile); and alerts for big payouts, big winners and failed-deposit bursts. Limits are told to the player and never touch a balance, a win or a result." },
@@ -3419,6 +3614,7 @@
 
   document.querySelector(".adm-wrap").addEventListener("submit", (e) => {
     if (e.target.matches('form[data-act="risk-settings"]')) { e.preventDefault(); saveRiskSettings(e.target); }
+    if (e.target.matches('form[data-form="moneyrules"]')) { e.preventDefault(); saveMoneyRules(e.target); }
     if (e.target.matches('form[data-form="aviator"]')) { e.preventDefault(); saveAviator(e.target); }
     if (e.target.matches('form[data-form="lotto"]')) { e.preventDefault(); saveLotto(e.target); }
     if (e.target.matches('form[data-form="psettings"]')) { e.preventDefault(); savePartnerSettings(e.target); }

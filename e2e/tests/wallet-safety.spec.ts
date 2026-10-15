@@ -1,7 +1,7 @@
 /* Money under pressure, through the real stack: double clicks, concurrent requests, bad inputs and refused payments.
    Whatever happens, a balance never goes negative, never changes without a matching record, and agrees with the UI. */
 import { expect, test } from "@playwright/test";
-import { API, cents, deposit, fundedPlayer, gatewayRequests, play, register, serverBalance, settle } from "./helpers";
+import { acceptRulesOnPage, API, cents, deposit, fundedPlayer, gatewayRequests, play, register, serverBalance, settle } from "./helpers";
 
 test("the same bet sent twice at once is one bet, and neither copy fails", async ({ page, request }) => {
   const { token } = await fundedPlayer(page);
@@ -62,11 +62,15 @@ test("a deposit under the minimum never reaches the gateway", async ({ page, req
   const { phone } = await register(page);
   await page.goto("/wallet.html");
   await settle(page);
-  await page.locator("#depAmount").fill("50");
+  /* just under the live minimum (Admin -> Betting & withdrawal settings) */
+  const min = Number((await (await request.get(`${API}/api/payments/config`)).json()).minDeposit);
+  const under = Math.max(1, min - 1);
+  await expect(page.locator("#depAmount")).toHaveAttribute("min", String(min));
+  await page.locator("#depAmount").fill(String(under));
   await expect(page.locator("#depSubmit")).toBeDisabled();
   const direct = await request.post(`${API}/api/payments/teller/momo`, {
     headers: { Authorization: `Bearer ${await page.evaluate(() => JSON.parse(localStorage.getItem("voltabet.session") || "{}").token)}` },
-    data: { amount: 50, currency: "GHS", network: "MTN", account_number: "233" + phone.slice(1), idempotency_key: "deposit:under-" + Date.now() },
+    data: { amount: under, currency: "GHS", network: "MTN", account_number: "233" + phone.slice(1), idempotency_key: "deposit:under-" + Date.now() },
   });
   expect(direct.status()).toBe(400);
   const sent = (await gatewayRequests(request)).filter((r) => r.body.subscriber_number === "233" + phone.slice(1));
@@ -77,6 +81,7 @@ test("double-clicking Top Up sends one payment prompt", async ({ page, request }
   const { phone, token } = await register(page);
   await page.goto("/wallet.html");
   await settle(page);
+  await acceptRulesOnPage(page);
   await page.locator("#depAmount").fill("100");
   await page.locator("#depSubmit").dblclick();
   await expect(page.locator("#msg")).toContainText("successful", { timeout: 30_000 });

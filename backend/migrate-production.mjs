@@ -45,6 +45,7 @@ const migrationFiles = [
   "037_payment_settings.sql",
   "038_account_control.sql",
   "039_bnc_win.sql",
+  "040_money_rules.sql",
 ];
 
 if (!process.env.DATABASE_URL) {

@@ -34,6 +34,7 @@ import { partnerOf } from "../services/affiliates.js";
 import { cancelInvite, createInvite, listInvites, renewInvite } from "../services/partnerInvites.js";
 import { paymentSettingsOverview, pingTeller, setPaymentsEnabled } from "../services/paymentSettings.js";
 import { accountRestriction, controlAccount, restrictedUsers } from "../services/accountControl.js";
+import { affectedPlayers, moneyRulesHistory, moneyRulesOverview, saveMoneyRules } from "../services/moneyRules.js";
 
 const STATUSES = ["REQUESTED", "PAYING", "PAID", "DECLINED"];
 
@@ -147,6 +148,13 @@ export function adminRouter(db: Pool): Router {
   r.get("/payment-settings", send(() => paymentSettingsOverview(db)));
   r.post("/payment-settings", send((req) => setPaymentsEnabled(db, adminOf(req), req.body ?? {})));
   r.post("/payment-settings/test", send(() => pingTeller()));
+
+  /* Betting & withdrawal settings: the minimum deposit, the betting eligibility rule, the withdrawal play-through rule
+     and their wording; who each rule affects; and every change (each save is audited) */
+  r.get("/money-rules", send(() => moneyRulesOverview(db)));
+  r.post("/money-rules", send((req) => saveMoneyRules(db, adminOf(req), req.body ?? {})));
+  r.get("/money-rules/affected", send((req) => affectedPlayers(db, query(req))));
+  r.get("/money-rules/history", send(() => moneyRulesHistory(db)));
 
   /* recent deposits: every attempt (successful, pending, failed), searchable; separate from withdrawals */
   r.get("/deposits/recent", send((req) => recentDeposits(db, query(req))));

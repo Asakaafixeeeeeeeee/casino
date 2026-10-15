@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import { GameError } from "./catalog.js";
+import { betEligibility, betRuleMessage } from "../services/moneyRules.js";
 
 /*
  * Which games and studios are open. The lobby (assets/js/data.js) knows each game by its own id and studio; the
@@ -144,10 +145,14 @@ export async function playerRisk(db: Pool | PoolClient, userId: string): Promise
 }
 export const clearPlayerRiskCache = (userId?: string) => (userId ? riskCache.delete(userId) : riskCache.clear());
 
-/** An admin's tighter bet limits for a game (the game's own limits are checked by the game itself), and the player's
- *  own maximum bet if an admin set one. Either way the player is told the limit. */
+/** An admin's tighter bet limits for a game (the game's own limits are checked by the game itself), the player's
+ *  own maximum bet if an admin set one, and the site's betting eligibility rule (Admin -> Betting & withdrawal
+ *  settings). Every real-money bet in every game passes here before its stake is taken; the player is told why. */
 export async function assertStakeAllowed(db: Pool, serverGameId: string, stake: number, userId?: string): Promise<void> {
   if (userId) {
+    /* the betting rule: no qualifying deposit in the window, no new bet. Nothing is taken; the balance stays as it is */
+    const bet = await betEligibility(db, userId);
+    if (!bet.eligible) throw new GameError("deposit_required", betRuleMessage(bet.rules), 403);
     const risk = await playerRisk(db, userId);
     if (risk.max_bet !== null && stake > risk.max_bet) {
       throw new GameError("invalid_stake", `Your maximum bet is GHS ${risk.max_bet.toLocaleString("en-GH", { minimumFractionDigits: 2 })}. Contact support if you'd like it changed.`);

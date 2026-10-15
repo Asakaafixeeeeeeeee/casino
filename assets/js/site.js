@@ -270,12 +270,80 @@
         session.clear();
         toast(data.message || "This account can't be used. Contact customer care.", "error");
       }
+      /* the betting rule (Admin -> Betting & withdrawal settings): every game's refused bet explains itself here */
+      if (res.status === 403 && data && data.error === "deposit_required") depositRequired(data.message);
       return { ok: res.ok, status: res.status, data };
     } catch (e) {
       return { ok: false, status: 0, data: { error: "Can't reach the payment server. Check your connection and try again." } };
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /* A bet refused by the betting rule: the admin's message (filled with the minimum and the days) and a way to the
+     deposit page. Nothing was taken; the balance stays visible and withdrawable. Shown once per refusal burst. */
+  let depositRequiredAt = 0;
+  function depositRequired(message) {
+    if (Date.now() - depositRequiredAt < 4000 || document.getElementById("vbDepositRequired")) return;
+    depositRequiredAt = Date.now();
+    const dlg = document.createElement("div");
+    dlg.className = "me-dialog";
+    dlg.id = "vbDepositRequired";
+    dlg.setAttribute("role", "alertdialog");
+    dlg.setAttribute("aria-modal", "true");
+    dlg.setAttribute("aria-labelledby", "vbDepositRequiredTitle");
+    dlg.innerHTML = '<div class="me-dialog-card vb-depreq"><span class="me-dialog-ico">' + icon("wallet") + "</span>" +
+      '<h2 id="vbDepositRequiredTitle">A deposit is needed to bet</h2><p>' +
+      esc(message || "A recent deposit is needed to place casino bets. Your balance is not affected.") + "</p>" +
+      '<div class="me-dialog-actions"><button class="btn btn-ghost btn-lg" type="button" data-no>Not now</button>' +
+      '<a class="btn btn-primary btn-lg" href="wallet.html">Deposit</a></div></div>';
+    const close = () => { dlg.remove(); document.removeEventListener("keydown", onKey); };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    dlg.addEventListener("click", (e) => { if (e.target === dlg || e.target.closest("[data-no]")) close(); });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(dlg);
+    dlg.querySelector("[data-no]").focus();
+  }
+
+  /* The live minimum deposit and the betting and withdrawal rules (Admin -> Betting & withdrawal settings), read once
+     per page from /api/payments/config. The last minimum seen is kept so help texts read right before it arrives. */
+  const MIN_DEP_KEY = "vb.minDeposit";
+  let rulesFetch = null;
+  function minDepositNow() {
+    const n = Number(read(MIN_DEP_KEY, 0));
+    return n > 0 ? n : 135;
+  }
+  const cedis = (n) => Number(n).toLocaleString("en-GH", { minimumFractionDigits: Number.isInteger(Number(n)) ? 0 : 2, maximumFractionDigits: 2 });
+  function moneyRules() {
+    if (!rulesFetch) {
+      rulesFetch = paymentApi("/api/payments/config", { timeout: 20000 }).then((r) => {
+        if (!r.ok || !r.data || !r.data.rules) { rulesFetch = null; return null; }
+        write(MIN_DEP_KEY, r.data.rules.min_deposit);
+        return r.data.rules;
+      });
+    }
+    return rulesFetch;
+  }
+  /* any page: [data-rule="min-deposit"] and friends are filled with the live values (the markup holds a fallback) */
+  function fillLiveRules() {
+    const els = document.querySelectorAll("[data-rule]");
+    if (!els.length) return;
+    moneyRules().then((rules) => {
+      if (!rules) return;
+      const days = String(rules.bet_rule.days);
+      const set = {
+        "min-deposit": cedis(rules.min_deposit), "max-deposit": cedis(rules.max_deposit), "bet-days": days,
+        "multiple": cedis(rules.withdraw_rule.multiple), "withdraw-info": rules.withdraw_info,
+      };
+      document.querySelectorAll("[data-rule]").forEach((el) => {
+        const k = el.dataset.rule;
+        if (k in set) el.textContent = set[k];
+        if (k === "bet-on") el.hidden = !rules.bet_rule.enabled;
+        if (k === "bet-off") el.hidden = rules.bet_rule.enabled;
+        if (k === "withdraw-on") el.hidden = !rules.withdraw_rule.enabled;
+        if (k === "withdraw-off") el.hidden = rules.withdraw_rule.enabled;
+      });
+    });
   }
 
   /* on each page: a session from before accounts moved to the server (no token) is dropped, and one the server no
@@ -595,7 +663,8 @@
 
   const FAQ = [
     { q: "How do I deposit?",
-      a: 'Open the <a href="wallet.html">wallet</a>, pick MTN MoMo, Telecel Cash, AirtelTigo Money, a bank transfer or a card, and enter ₵ 5 or more.' },
+      /* the live minimum deposit (Admin -> Betting & withdrawal settings) */
+      get a() { return 'Open the <a href="wallet.html">wallet</a>, pick MTN MoMo, Telecel Cash, AirtelTigo Money, a bank transfer or a card, and enter ₵ ' + cedis(minDepositNow()) + ' or more. The deposit page shows the deposit, betting and withdrawal rules to accept first; see also the <a href="terms.html#money-rules">terms</a>.'; } },
     { q: "How fast are withdrawals?",
       a: 'Mobile money withdrawals are approved in about two minutes during business hours. The minimum is ₵ 20 — start from the <a href="withdraw.html">withdraw page</a>.' },
     { q: "Is this real money?",
@@ -948,13 +1017,13 @@
       [/fail|declin|denied|error|not approved|unsuccessful/i,
         'A failed deposit never takes money. The reason from our payment partner is shown under it on the <a href="wallet.html">Deposit</a> page. Check your wallet balance and that you approved the PIN prompt, then try again.'],
       [/deposit|top ?up|fund|add money|momo|mobile money|pay in/i,
-        'Go to <a href="wallet.html">Deposit</a>, enter ₵ 5 or more and tap Top Up Now. A payment prompt is sent to your registered number — approve it with your MoMo PIN. MTN users without a prompt can dial *170#, then 6 and 3.'],
+        () => 'Go to <a href="wallet.html">Deposit</a>, enter ₵ ' + cedis(minDepositNow()) + ' or more and tap Top Up Now. A payment prompt is sent to your registered number — approve it with your MoMo PIN. MTN users without a prompt can dial *170#, then 6 and 3.'],
       [/\bpin\b|otp|password|hack|scam|someone (called|asked)/i,
         'Never share your MoMo PIN, an OTP or your password with anyone — WIN B casino will never ask for them. To change a forgotten password, use “Forgot password” on the <a href="register.html#login">log-in page</a>.'],
       [/bonus|promo|cashback|cash back|reward|free spin|offer/i,
         'Cashback, VIP perks and a welcome bonus are coming soon but aren\'t live yet, so no bonus is paid on deposits for now. See what\'s planned on the <a href="promotions.html">Promotions</a> page.'],
       [/limit|minimum|maximum|\bmin\b|\bmax\b|how much/i,
-        "Deposits: ₵ 5 to ₵ 50,000 per transaction. Withdrawals: from ₵ 20, paid to your registered number."],
+        () => "Deposits: ₵ " + cedis(minDepositNow()) + " to ₵ 50,000 per transaction. Withdrawals: from ₵ 20, paid to your registered number."],
       [/addict|stop gambling|self.?exclu|responsib|too much|problem/i, FAQ[3].a],
       [/human|agent|person|call (you|me)|phone number|email|talk to|contact|customer care|whatsapp/i,
         'To message our team, <a href="register.html#login">log in</a> — then write here and a member of our team will reply in this chat. ' +
@@ -963,7 +1032,7 @@
     ];
     const reply = (text) => {
       const hit = REPLIES.find(([re]) => re.test(text));
-      return hit ? hit[1] :
+      return hit ? (typeof hit[1] === "function" ? hit[1]() : hit[1]) :
         "I'm not sure about that one. Try asking about deposits, withdrawals, bonuses or your account — or pick a topic below.";
     };
     const form = sheet.querySelector(".chat-form");
@@ -1063,6 +1132,7 @@
 
     let opener = null; /* whatever opened the chat gets focus back when it closes */
     chat.open = (topic) => {
+      moneyRules(); /* the live minimum deposit for the answers below (cached for the next ones) */
       if (sheet.hidden) opener = document.activeElement;
       setOpen(true);
       if (topic !== undefined && FAQ[topic]) answer(topic);
@@ -1347,7 +1417,7 @@
     format, money: format, esc, normalizePhone, isGhanaMobile, categoryIcon: (c) => CATEGORY_ICONS[c] || "grid", thumbFace,
     testMode, openChat: (topic) => chat.open(topic), openConvert, switchCurrency, moneyInDollars, attributeRef,
     referral: { get: storedRef, setPromo: setRefPromo }, freePlay, showcase, activity,
-    paymentBase: PAYMENT_API
+    paymentBase: PAYMENT_API, moneyRules, minDeposit: minDepositNow
   };
 
   /* Leaving a game must not trap the browser Back button. A "back to the lobby" control is a plain <a href>, which
@@ -1368,6 +1438,8 @@
 
   /* scripts load at the end of <body>, so the page markup is already parsed */
   initShell();
+  /* the live minimum deposit and rules in any [data-rule] element (terms, help); also refreshes the cached minimum */
+  fillLiveRules();
   /* mirror the server-held wallet balance into the UI when signed in */
   refreshBalance();
 

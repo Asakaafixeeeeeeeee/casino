@@ -651,3 +651,25 @@
 .lta-key-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: var(--bg-raised); font-size: .86rem; }
 .lta-key-none { padding: 10px 0; }
 @media (max-width: 480px) { .lta-key-ball { --s: 46px; } .lta-publish { width: 100%; } }
+
+/* Betting & withdrawal settings */
+.mr-form { display: grid; gap: 14px; }
+.mr-card + .mr-card, .mr-form + .mr-card { margin-top: 14px; }
+.mr-card.is-on { border-color: rgba(255, 200, 61, .45); background: linear-gradient(180deg, rgba(255, 200, 61, .07), var(--surface) 70%); }
+.mr-card .adm-studio-head { margin-top: 0; }
+.mr-card .adm-studio-head small { display: block; margin-top: 2px; color: var(--dim); font-size: .8rem; }
+.mr-card.is-on .adm-studio-head strong { color: var(--yellow); }
+.mr-card .adm-h .ic { width: 15px; height: 15px; }
+.mr-card .field { margin-bottom: 12px; }
+.mr-card .field input { max-width: 220px; }
+.mr-card .hint { display: block; line-height: 1.45; }
+.mr-text { width: 100%; min-height: 96px; resize: vertical; font: inherit; font-size: .9rem; line-height: 1.5; }
+.mr-preview { border-color: rgba(255, 200, 61, .45); }
+.mr-preview p { font-weight: 600; overflow-wrap: anywhere; }
+.mr-save { display: grid; gap: 8px; }
+.mr-save .btn { justify-self: start; min-width: 200px; }
+.mr-save .adm-note { margin: 0 2px; }
+.mr-sub { margin: 16px 2px 6px; font-size: .92rem; }
+.mr-changes div { overflow-wrap: anywhere; }
+.mr-changes div + div { margin-top: 3px; }
+@media (max-width: 560px) { .mr-save .btn { justify-self: stretch; } .mr-card .field input { max-width: none; } }

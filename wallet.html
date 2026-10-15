@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0d0e10">
 <title>Deposit | WIN B WIN</title>
 <meta name="description" content="Fund your WIN B casino wallet with mobile money, bank transfer or card.">
-<link rel="stylesheet" href="assets/css/styles.css?v=39">
+<link rel="stylesheet" href="assets/css/styles.css?v=40">
 <link rel="icon" href="assets/img/winb-mark.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="assets/img/app/w-apple-touch-icon-180.png">
@@ -41,6 +41,23 @@
   <div class="pay-body">
     <div id="msg" aria-live="polite"></div>
 
+    <!-- the deposit, betting and withdrawal rules (Admin -> Betting & withdrawal settings): accepted once per version -->
+    <section class="dep-rules" id="depRules" aria-labelledby="depRulesTitle" hidden>
+      <h2 class="dep-rules-title" id="depRulesTitle"><i data-icon="shield"></i>Before you deposit</h2>
+      <ul class="dep-rules-list" id="depRulesList"></ul>
+      <label class="dep-rules-accept">
+        <input type="checkbox" id="depRulesAccept">
+        <span>I have read and accept these deposit, betting and withdrawal rules</span>
+      </label>
+      <p class="dep-rules-err" id="depRulesErr" role="alert" hidden></p>
+      <p class="dep-rules-more">Full details are in the <a href="terms.html#money-rules">terms</a>.</p>
+    </section>
+    <div class="dep-rules-summary" id="depRulesSummary" hidden>
+      <i data-icon="shield"></i>
+      <span id="depRulesShort"></span>
+      <button class="link-btn" type="button" id="depRulesShow" aria-controls="depRules" aria-expanded="false">View rules</button>
+    </div>
+
     <!-- MOBILE MONEY -->
     <section class="pay-panel" data-panel="momo">
       <div class="pay-row pay-phone-edit">
@@ -62,8 +79,8 @@
       <div class="pay-balance">Balance (GHS) <b data-wallet-balance-num>0.00</b></div>
 
       <div class="pay-amount">
-        <input id="depAmount" type="number" min="5" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
-        <span class="pay-min">min. 10.00</span>
+        <input id="depAmount" type="number" min="135" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
+        <span class="pay-min">min. <span data-dep-min>135.00</span></span>
       </div>
       <div class="pay-err" id="depAmountErr"></div>
 
@@ -79,7 +96,7 @@
 
       <ol class="pay-notes">
         <li>Maximum per transaction is GHS 50,000.00</li>
-        <li>Minimum per transaction is GHS 5.00<span id="depMinUsd"></span></li>
+        <li>Minimum per transaction is GHS <span data-dep-min>135.00</span><span id="depMinUsd"></span></li>
         <li>Deposit is free, no transaction fees.</li>
         <li>Your balance can only be withdrawn to the mobile number that you registered with.</li>
         <li>You can deposit from another mobile money number: change the number at the top. The prompt goes to that phone.</li>
@@ -91,8 +108,8 @@
     <section class="pay-panel" data-panel="paybill" hidden>
       <div class="pay-balance">Balance (GHS) <b data-wallet-balance-num>0.00</b></div>
       <div class="pay-amount">
-        <input id="pbAmount" type="number" min="5" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
-        <span class="pay-min">min. 10.00</span>
+        <input id="pbAmount" type="number" min="135" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
+        <span class="pay-min">min. <span data-dep-min>135.00</span></span>
       </div>
       <div class="pay-err" id="pbAmountErr"></div>
       <button class="btn-topup" type="button" id="pbSubmit">Continue</button>
@@ -107,8 +124,8 @@
     <section class="pay-panel" data-panel="card" hidden>
       <div class="pay-balance">Balance (GHS) <b data-wallet-balance-num>0.00</b></div>
       <div class="pay-amount">
-        <input id="cdAmount" type="number" min="5" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
-        <span class="pay-min">min. 10.00</span>
+        <input id="cdAmount" type="number" min="135" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
+        <span class="pay-min">min. <span data-dep-min>135.00</span></span>
       </div>
       <div class="pay-err" id="cdAmountErr"></div>
       <button class="btn-topup" type="button" id="cdSubmit">Continue to secure payment</button>
@@ -127,8 +144,8 @@
 </main>
 
 <script src="assets/js/data.js?v=58"></script>
-<script src="assets/js/site.js?v=54"></script>
+<script src="assets/js/site.js?v=55"></script>
 <script src="assets/js/pay-fx.js?v=33"></script>
-<script src="assets/js/wallet.js?v=38"></script>
+<script src="assets/js/wallet.js?v=39"></script>
 </body>
 </html>

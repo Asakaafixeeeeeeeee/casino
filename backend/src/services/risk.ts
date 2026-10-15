@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 import { CATALOG, clearPlayerRiskCache, playerRisk, type PlayerRisk } from "../games/availability.js";
 import { AdminError, logAction, rangeStart } from "./admin.js";
+import { minDeposit } from "./moneyRules.js";
 
 /*
  * Risk management and recent deposits for the admin (the owner's brief, 12 October 2026).
@@ -9,10 +10,9 @@ import { AdminError, logAction, rangeStart } from "./admin.js";
  *   - Limits for one player: a deposit tier (smallest and largest deposit) and a maximum bet. Each is told to the
  *     player when it applies; none of them touches a balance, a win already made, or how a result is drawn.
  *   - Alerts: big payouts, big multipliers, players far up in a day, bursts of failed deposits.
- * The site's own smallest deposit (GHS 5) is the floor for a player's deposit tier.
+ * The site's own minimum deposit (Admin -> Betting & withdrawal settings) is the floor for a player's deposit tier.
  */
 
-const SITE_MIN_DEPOSIT = 5;
 const num = (v: unknown) => Number(v ?? 0);
 const r2 = (v: unknown) => Math.round(num(v) * 100) / 100;
 const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
@@ -190,8 +190,9 @@ export async function savePlayerRisk(db: Pool, admin: string, id: unknown, input
     if (!Number.isFinite(n) || n < floor) throw new AdminError("invalid_" + key, `Enter a valid ${label} (at least GHS ${floor})`);
     return n;
   };
-  const min_deposit = money("min_deposit", "minimum deposit", SITE_MIN_DEPOSIT);
-  const max_deposit = money("max_deposit", "maximum deposit", SITE_MIN_DEPOSIT);
+  const siteMin = await minDeposit(db);
+  const min_deposit = money("min_deposit", "minimum deposit", siteMin);
+  const max_deposit = money("max_deposit", "maximum deposit", siteMin);
   const max_bet = money("max_bet", "maximum bet", 0.1);
   if (min_deposit !== null && max_deposit !== null && min_deposit > max_deposit) {
     throw new AdminError("invalid_max_deposit", "The maximum deposit must be at least the minimum deposit");

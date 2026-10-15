@@ -2,6 +2,7 @@ import { logAction } from "./admin.js";
 import { notifyPendingWithdrawal } from "./notify.js";
 import type { Pool, PoolClient } from "pg";
 import { completeWithdrawal, refundWithdrawal, withdraw } from "./balanceService.js";
+import { getMoneyRules, playthroughMessage, playthroughOf } from "./moneyRules.js";
 import {
   checkTellerStatus,
   networkForPhone,
@@ -41,6 +42,26 @@ export async function withdrawableOf(client: Pool | PoolClient, userId: string, 
   return { withdrawable: Number(rows[0]?.withdrawable ?? 0), balance: Number(rows[0]?.available ?? 0) };
 }
 
+/** The withdraw page: what can be withdrawn now, and, while the play-through rule is on, how much is held and how much
+ *  more must be bet (winnings are never held). */
+export async function withdrawalView(db: Pool, userId: string) {
+  const base = await withdrawableOf(db, userId);
+  const rules = await getMoneyRules(db);
+  const pt = await playthroughOf(db, userId, rules);
+  return {
+    ...base,
+    withdrawable: Math.max(0, Math.round(Math.min(base.withdrawable, pt.withdrawable_by_rule) * 100) / 100),
+    winnings: base.withdrawable,
+    held: pt.held,
+    to_bet: pt.to_bet,
+    playthrough: {
+      enabled: pt.enabled, multiple: pt.multiple, deposits: pt.deposits, staked: pt.staked,
+      message: pt.held > 0 ? playthroughMessage(rules, pt) : null,
+    },
+    withdraw_info: rules.withdraw_info,
+  };
+}
+
 /** A player's request: the money leaves their balance into the hold at once, to be paid to their registered number. */
 export async function requestWithdrawal(
   db: Pool,
@@ -54,8 +75,18 @@ export async function requestWithdrawal(
   const client = await db.connect();
   try {
     await client.query("BEGIN");
-    /* only winnings can be withdrawn; deposited money stays in the balance until it's used for betting */
+    /* the play-through rule (Admin -> Betting & withdrawal settings), when on: deposited money not yet bet is held, and
+       a request over the rest is refused with the admin's message. It never holds winnings (capped by the deposited
+       part of the balance) and never deducts anything. Checked first so the player reads why and how much is left to bet. */
     const { withdrawable } = await withdrawableOf(client, user.id, true);
+    const rules = await getMoneyRules(client);
+    if (rules.withdraw_rule_enabled) {
+      const pt = await playthroughOf(client, user.id, rules);
+      if (pt.held > 0 && amountMajor > pt.withdrawable_by_rule + 1e-9) {
+        throw new WithdrawalError("playthrough_required", playthroughMessage(rules, pt), 403);
+      }
+    }
+    /* only winnings can be withdrawn; deposited money stays in the balance until it's used for betting */
     if (amountMajor > withdrawable) {
       throw new WithdrawalError("winnings_only",
         `Only winnings can be withdrawn. You can withdraw up to GHS ${withdrawable.toFixed(2)}; ` +
