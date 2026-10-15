@@ -6,13 +6,12 @@
 // confirmation — the draw is then locked); and the settlement history. Every change is in the admin audit log.
 // Switching lotto on/off for the whole site uses the Games tab's switch (catalog_settings, game id "lotto").
 
-import crypto from "node:crypto";
 import type { Pool } from "pg";
 import { hiddenCatalog } from "../games/availability.js";
 import { GameError } from "../games/catalog.js";
 import {
   cancelLottoDraw, createLottoDraw, getLottoSettings, lottoAdminDraws, lottoChance, lottoPlacements, pauseLottoDraw,
-  lottoNumbersFromSeed, previewLottoDraw, releaseLottoDraw, saveLottoSettings,
+  lottoResultCommitmentValid, previewLottoDraw, releaseLottoDraw, saveLottoSettings,
 } from "../games/lotto.js";
 import { AdminError, logAction } from "./admin.js";
 
@@ -68,7 +67,10 @@ export const saveLottoAdminSettings = (db: Pool, admin: string, input: Record<st
 
 export const createLotto = (db: Pool, admin: string, input: Record<string, unknown>) => asAdmin(async () => {
   const d = await createLottoDraw(db, admin, input);
-  await logAction(db, admin, "lotto.draw_create", `lotto:${d.id}`, { name: d.name, opens_at: d.opens_at, closes_at: d.closes_at, draw_at: d.draw_at });
+  await logAction(db, admin, "lotto.draw_create", `lotto:${d.id}`, {
+    name: d.name, opens_at: d.opens_at, closes_at: d.closes_at, draw_at: d.draw_at,
+    number_source: d.number_source, commitment: d.hash, ...(d.number_source === "MANUAL" ? { numbers: d.numbers } : {}),
+  });
   return { id: Number(d.id), name: d.name };
 });
 
@@ -94,9 +96,8 @@ export const cancelLotto = (db: Pool, admin: string, id: unknown) => asAdmin(asy
 });
 
 /**
- * The Lotto Key: every draw whose betting has closed, with the winning numbers the server drew from its seed at the
- * close (never typed by anyone), the proof they're locked (the seed's SHA-256 is the fingerprint shown to players while
- * betting was open, and the seed gives exactly these numbers), what publishing will pay, and the draw's audit trail.
+ * The Lotto Key: every draw whose betting has closed, with its committed numbers, proof they match the fingerprint
+ * shown to players while betting was open, what publishing will pay, and the draw's audit trail.
  * Opening it is itself recorded (once per draw and admin) as lotto.preview.
  */
 export async function lottoKey(db: Pool, admin: string) {
@@ -104,27 +105,23 @@ export async function lottoKey(db: Pool, admin: string) {
   const closed = draws.filter((d) => d.status === "CLOSED");
   const pending = [];
   for (const d of closed) {
-    const row = (await db.query<{ seed: string; hash: string; numbers: number[] | null; closes_at: Date }>(
-      `SELECT seed, hash, numbers, closes_at FROM lotto_draws WHERE id = $1`, [d.id])).rows[0]!;
-    const fromSeed = lottoNumbersFromSeed(row.seed, Number(d.id));
+    const row = (await db.query<{ seed: string; hash: string; numbers: number[] | null; closes_at: Date; number_source: "SERVER" | "MANUAL" }>(
+      `SELECT seed, hash, numbers, closes_at, number_source FROM lotto_draws WHERE id = $1`, [d.id])).rows[0]!;
     const stored = (row.numbers ?? []).map(Number);
-    const locked = crypto.createHash("sha256").update(row.seed).digest("hex") === row.hash
-      && stored.length === fromSeed.length && stored.every((n, i) => n === fromSeed[i]);
+    const locked = lottoResultCommitmentValid(row.seed, Number(d.id), row.hash, stored, row.number_source);
     const seen = await db.query(`SELECT 1 FROM admin_actions WHERE admin = $1 AND action = 'lotto.preview' AND target = $2`, [admin, `lotto:${d.id}`]);
     if (!seen.rowCount) await logAction(db, admin, "lotto.preview", `lotto:${d.id}`, { numbers: stored, hash: row.hash });
     pending.push({ id: d.id, name: d.name, draw_at: d.draw_at, closed_at: new Date(row.closes_at).toISOString(), numbers: stored, hash: row.hash,
-      locked, tickets: d.tickets, staked: d.staked, projected: d.projected });
+      locked, number_source: row.number_source, tickets: d.tickets, staked: d.staked, projected: d.projected });
   }
   const published = [];
   for (const d of draws.filter((x) => x.status === "RELEASED").slice(0, 10)) {
-    const row = (await db.query<{ seed: string; hash: string; numbers: number[] | null }>(
-      `SELECT seed, hash, numbers FROM lotto_draws WHERE id = $1`, [d.id])).rows[0]!;
+    const row = (await db.query<{ seed: string; hash: string; numbers: number[] | null; number_source: "SERVER" | "MANUAL" }>(
+      `SELECT seed, hash, numbers, number_source FROM lotto_draws WHERE id = $1`, [d.id])).rows[0]!;
     const numbers = (row.numbers ?? []).map(Number);
-    const expected = lottoNumbersFromSeed(row.seed, Number(d.id));
-    const verified = crypto.createHash("sha256").update(row.seed).digest("hex") === row.hash
-      && numbers.length === expected.length && numbers.every((n, i) => n === expected[i]);
+    const verified = lottoResultCommitmentValid(row.seed, Number(d.id), row.hash, numbers, row.number_source);
     published.push({
-      id: d.id, name: d.name, draw_at: d.draw_at, numbers, seed: row.seed, hash: row.hash, verified,
+      id: d.id, name: d.name, draw_at: d.draw_at, numbers, seed: row.seed, hash: row.hash, verified, number_source: row.number_source,
       winners: d.winners, paid: d.paid, published_by: d.decided_by, published_at: d.released_at,
     });
   }

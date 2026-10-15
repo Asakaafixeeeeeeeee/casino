@@ -15,14 +15,13 @@ import { assertGameOpen, assertStakeAllowed } from "./availability.js";
  * Each line pays its stake × the Direct-k multiplier fixed when the ticket was bought; a ticket's total win is capped
  * at the top win per ticket.
  *
- * Each draw gets its seed (32 random bytes) the moment it's created, and the seed's SHA-256 hash is public from then
- * on. When betting closes the 5 numbers are worked out from the seed — nobody chooses them, and they can't be changed
- * afterwards: once the results are published the seed is public too, so anyone can check it matches the hash and
- * gives those numbers. The admin previews every ticket's result once betting has closed, then publishes with an
+ * Server draws get a random seed when created and derive their numbers at close. Named draws may instead use five
+ * admin-selected numbers committed at creation, before betting opens. Both modes publish a fingerprint while betting
+ * is open and never allow the result to be edited after creation; the seed is revealed with the result so the
+ * commitment can be checked. The admin previews every ticket's result once betting has closed, then publishes with an
  * explicit confirmation: every winning ticket is paid once and the draw is locked. A draw can be cancelled (every
- * ticket refunded in full) only while betting is open, before anyone knows the numbers; a closed draw nobody published
- * is published automatically a day after its draw time. Real-money ticket sales stay off until an admin switches
- * them on.
+ * ticket refunded in full) only while betting is open; a closed draw nobody published is published automatically a
+ * day after its draw time. Real-money ticket sales stay off until an admin switches them on.
  *
  * Odds: P(Direct-k wins) = C(5,k) ÷ C(90,k). The default multiplier is RTP ÷ that chance, rounded down; an admin can
  * set each one, never above the fair figure (1 ÷ chance), so no ticket size is expected to lose the house money.
@@ -245,7 +244,7 @@ export async function saveLottoSettings(db: Pool, admin: string, input: Record<s
 
 export interface DrawRow {
   id: string; name: string; draw_at: Date; opens_at: Date | null; closes_at: Date; seed: string; hash: string;
-  numbers: number[] | null; status: "OPEN" | "CLOSED" | "RELEASED" | "CANCELLED"; paused: boolean; auto: boolean;
+  numbers: number[] | null; number_source: "SERVER" | "MANUAL"; status: "OPEN" | "CLOSED" | "RELEASED" | "CANCELLED"; paused: boolean; auto: boolean;
   decided_by: string | null; created_by: string | null; released_at: Date | null; created_at: Date;
 }
 interface TicketRow {
@@ -270,6 +269,15 @@ async function inTransaction<T>(db: Pool, fn: (client: PoolClient) => Promise<T>
 }
 
 const newSeed = () => crypto.randomBytes(32).toString("hex");
+export const lottoResultHash = (seed: string, id: number, numbers: number[], source: "SERVER" | "MANUAL") =>
+  sha256(source === "MANUAL" ? `${seed}:lotto-manual:${id}:${numbers.join(",")}` : seed);
+export function lottoResultCommitmentValid(
+  seed: string, id: number, hash: string, numbers: number[], source: "SERVER" | "MANUAL",
+): boolean {
+  const expected = source === "MANUAL" ? numbers : lottoNumbersFromSeed(seed, id);
+  return lottoResultHash(seed, id, expected, source) === hash
+    && numbers.length === expected.length && numbers.every((n, i) => n === expected[i]);
+}
 
 /** The daily draw taking bets now, opened (with its seed drawn) the first time anyone asks; null when the daily
  *  schedule is switched off. */
@@ -305,16 +313,31 @@ export async function createLottoDraw(db: Pool, admin: string, input: Record<str
   const opens = Number.isNaN(t("opens_at")) ? now : t("opens_at");
   const closes = t("closes_at");
   const drawAt = Number.isNaN(t("draw_at")) ? closes : t("draw_at");
+  const manualInput = input.manual_numbers;
+  const manualNumbers = manualInput === undefined || manualInput === null || manualInput === ""
+    ? null
+    : (Array.isArray(manualInput) ? manualInput : String(manualInput).split(",")).map(Number);
+  if (manualNumbers && (manualNumbers.length !== LOTTO_DRAWN
+    || manualNumbers.some((n) => !Number.isInteger(n) || n < 1 || n > LOTTO_BALLS)
+    || new Set(manualNumbers).size !== LOTTO_DRAWN)) {
+    throw new GameError("invalid_picks", "Manual results must be exactly 5 different whole numbers from 1 to 90.");
+  }
+  if (manualNumbers) manualNumbers.sort((a, b) => a - b);
   if (Number.isNaN(closes)) throw new GameError("invalid_times", "Set when betting closes");
   if (closes <= now) throw new GameError("invalid_times", "Betting must close in the future");
   if (opens >= closes) throw new GameError("invalid_times", "Betting must open before it closes");
   if (drawAt < closes) throw new GameError("invalid_times", "The draw time can't be before betting closes");
   if (closes - now > 60 * 86400e3) throw new GameError("invalid_times", "Draws can be set up to 60 days ahead");
   const seed = newSeed();
-  return (await db.query<DrawRow>(
-    `INSERT INTO lotto_draws (name, opens_at, closes_at, draw_at, seed, hash, auto, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, false, $7) RETURNING *`,
-    [name, new Date(opens), new Date(closes), new Date(drawAt), seed, sha256(seed), admin])).rows[0]!;
+  const source = manualNumbers ? "MANUAL" : "SERVER";
+  return inTransaction(db, async (client) => {
+    const d = (await client.query<DrawRow>(
+      `INSERT INTO lotto_draws (name, opens_at, closes_at, draw_at, seed, hash, auto, created_by, number_source, numbers)
+       VALUES ($1, $2, $3, $4, $5, $6, false, $7, $8, $9) RETURNING *`,
+      [name, new Date(opens), new Date(closes), new Date(drawAt), seed, sha256(seed), admin, source, manualNumbers])).rows[0]!;
+    const hash = lottoResultHash(seed, Number(d.id), manualNumbers ?? [], source);
+    return (await client.query<DrawRow>(`UPDATE lotto_draws SET hash = $2 WHERE id = $1 RETURNING *`, [d.id, hash])).rows[0]!;
+  });
 }
 
 /** Stops (or restarts) new tickets on one draw; tickets already bought stay in it. */
@@ -326,12 +349,15 @@ export async function pauseLottoDraw(db: Pool, id: unknown, paused: boolean): Pr
   return d;
 }
 
-/** Closes betting on every draw past its cut-off and works out its numbers from the seed. */
+/** Closes betting on every draw past its cut-off, preserving precommitted numbers or drawing from the server seed. */
 export async function closeDueLottoDraws(db: Pool, now = Date.now()): Promise<number> {
   const due = (await db.query<DrawRow>(
     `SELECT * FROM lotto_draws WHERE status = 'OPEN' AND closes_at <= $1 ORDER BY id`, [new Date(now)])).rows;
   for (const d of due) {
-    await db.query(`UPDATE lotto_draws SET status = 'CLOSED', numbers = $2 WHERE id = $1 AND status = 'OPEN'`,
+    await db.query(
+      `UPDATE lotto_draws SET status = 'CLOSED',
+         numbers = CASE WHEN number_source = 'SERVER' THEN $2 ELSE numbers END
+       WHERE id = $1 AND status = 'OPEN'`,
       [d.id, lottoNumbersFromSeed(d.seed, Number(d.id))]);
   }
   return due.length;
@@ -354,12 +380,12 @@ function drawIdOf(id: unknown): number {
   return drawId;
 }
 
-/** The winning numbers for a closed draw: the ones its seed gives. */
+/** Fixed winning numbers for a closed draw: precommitted numbers, or the server seed's result. */
 const winningNumbersOf = (d: DrawRow): number[] => (d.numbers ?? lottoNumbersFromSeed(d.seed, Number(d.id))).map(Number);
 
 function assertPublishable(d: DrawRow | undefined): asserts d is DrawRow {
   if (!d) throw new GameError("not_found", "That draw wasn't found", 404);
-  if (d.status === "OPEN") throw new GameError("still_open", "Betting is still open on this draw — the numbers are drawn when it closes.", 409);
+  if (d.status === "OPEN") throw new GameError("still_open", "Betting is still open on this draw — its committed result is available after it closes.", 409);
   if (d.status === "RELEASED") throw new GameError("already_decided", "These results are already published and locked.", 409);
   if (d.status === "CANCELLED") throw new GameError("already_decided", "This draw was cancelled and every ticket refunded.", 409);
 }
@@ -393,7 +419,7 @@ export async function previewLottoDraw(db: Pool, id: unknown, now = Date.now()) 
   };
 }
 
-/** Publishes a closed draw's results (the numbers its seed gives): pays every winning ticket once, marks the rest
+/** Publishes a closed draw's committed results: pays every winning ticket once, marks the rest
  *  lost, and locks the draw. */
 export async function releaseLottoDraw(db: Pool, id: unknown, by: string, now = Date.now()) {
   await closeDueLottoDraws(db, now);
@@ -402,6 +428,9 @@ export async function releaseLottoDraw(db: Pool, id: unknown, by: string, now = 
     const d = (await client.query<DrawRow>(`SELECT * FROM lotto_draws WHERE id = $1 FOR UPDATE`, [drawId])).rows[0];
     assertPublishable(d);
     const numbers = winningNumbersOf(d);
+    if (!lottoResultCommitmentValid(d.seed, drawId, d.hash, numbers, d.number_source ?? "SERVER")) {
+      throw new GameError("invalid_result_commitment", "The draw result does not match its published commitment and cannot be released.", 409);
+    }
     const tickets = (await client.query<TicketRow>(
       `SELECT * FROM lotto_tickets WHERE draw_id = $1 AND status = 'ACTIVE' FOR UPDATE`, [drawId])).rows;
     let winners = 0;
@@ -443,7 +472,7 @@ export async function cancelLottoDraw(db: Pool, id: unknown, by: string, now = D
       throw new GameError("already_decided", `This draw is already ${d.status === "RELEASED" ? "published" : "cancelled"}.`, 409);
     }
     if (d.status === "CLOSED") {
-      throw new GameError("too_late", "Betting has closed and the numbers are drawn, so this draw can only be published now.", 409);
+      throw new GameError("too_late", "Betting has closed and the result is locked, so this draw can only be published now.", 409);
     }
     const tickets = (await client.query<TicketRow>(
       `SELECT * FROM lotto_tickets WHERE draw_id = $1 AND status = 'ACTIVE' FOR UPDATE`, [drawId])).rows;
@@ -509,13 +538,15 @@ function ticketView(t: TicketRow): LottoTicketView {
 /** The public draw: numbers and seed only once its results are published. */
 const drawView = (d: DrawRow) => ({
   id: Number(d.id), name: d.name, draw_at: iso(d.draw_at), opens_at: iso(d.opens_at), closes_at: iso(d.closes_at),
-  status: d.status === "CLOSED" ? "DRAWING" : d.status, paused: d.paused, hash: d.hash,
-  ...(d.status === "RELEASED" ? { numbers: (d.numbers ?? []).map(Number), seed: d.seed, published_at: iso(d.released_at) } : {}),
+  status: d.status === "CLOSED" ? "DRAWING" : d.status, paused: d.paused, hash: d.hash, number_source: d.number_source ?? "SERVER",
+  ...(d.status === "RELEASED" ? {
+    numbers: (d.numbers ?? []).map(Number), seed: d.seed, published_at: iso(d.released_at),
+  } : {}),
 });
 /** The admin's draw: numbers once betting has closed (never while it's open). */
 const adminDrawView = (d: DrawRow) => ({
   id: Number(d.id), name: d.name, draw_at: iso(d.draw_at), opens_at: iso(d.opens_at), closes_at: iso(d.closes_at),
-  status: d.status, paused: d.paused, auto: d.auto, hash: d.hash,
+  status: d.status, paused: d.paused, auto: d.auto, hash: d.hash, number_source: d.number_source ?? "SERVER",
   created_by: d.created_by ?? null,
   numbers: d.status === "OPEN" || !d.numbers ? null : d.numbers.map(Number),
   ...(d.status === "RELEASED" ? { seed: d.seed } : {}),

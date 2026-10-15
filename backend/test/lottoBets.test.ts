@@ -5,9 +5,9 @@ import { ensureWalletAccount } from "../src/services/accountLink.js";
 import { GameError } from "../src/games/catalog.js";
 import {
   buyLottoTicket, choose, createLottoDraw, currentLottoDraw, linesOf, lottoNumbersFromSeed, lottoPlacements, lottoState,
-  myLottoTickets, pauseLottoDraw, previewLottoDraw, releaseLottoDraw, saveLottoSettings, shapeTicket, winningLines,
+  lottoResultHash, myLottoTickets, pauseLottoDraw, previewLottoDraw, releaseLottoDraw, saveLottoSettings, shapeTicket, winningLines,
 } from "../src/games/lotto.js";
-import { lottoOverview, releaseLotto } from "../src/services/lottoAdmin.js";
+import { createLotto as createAdminLotto, lottoKey, lottoOverview, releaseLotto } from "../src/services/lottoAdmin.js";
 import { setupWalletDb } from "./helpers/walletDb.js";
 
 /* Lotto, part two: Perm and Banker tickets, the admin's odds and bet types, admin-made draws, ALL LOTTO PLACEMENTS,
@@ -149,4 +149,49 @@ test("Lotto: an admin's own draw opens and closes on time, can be paused, and it
   await assert.rejects(previewLottoDraw(w.db, d.id, NOON + 4 * 3600e3), code("still_open"));
   await assert.rejects(buyLottoTicket(w.db, w.kofi, { picks: [5], stake: 1, draw_id: d.id, idempotency_key: key() }, { now: NOON + 5 * 3600e3 }), code("too_late"));
   assert.equal((await previewLottoDraw(w.db, d.id, NOON + 5 * 3600e3)).numbers.length, 5);
+});
+
+test("Lotto: manual numbers are committed before betting opens, hidden until release, and immutable through settlement", async () => {
+  const w = await world();
+  const base = Date.now();
+  const closesAt = base + 4 * 3600e3;
+  const drawAt = closesAt + 10 * 60e3;
+  await assert.rejects(createLottoDraw(w.db, "admin", {
+    name: "Bad manual draw", closes_at: new Date(closesAt).toISOString(), manual_numbers: [1, 1, 3, 4, 5],
+  }, NOON), code("invalid_picks"));
+
+  const selected = [4, 18, 27, 53, 81];
+  const created = await createAdminLotto(w.db, "admin", {
+    name: "Precommitted draw", opens_at: new Date(base + 60_000).toISOString(),
+    closes_at: new Date(closesAt).toISOString(), draw_at: new Date(drawAt).toISOString(), manual_numbers: selected,
+  });
+  const d = (await w.db.query(`SELECT * FROM lotto_draws WHERE id = $1`, [created.id])).rows[0]!;
+  assert.equal(d.number_source, "MANUAL");
+  assert.deepEqual(d.numbers, selected);
+  assert.equal(d.hash, lottoResultHash(d.seed, Number(d.id), selected, "MANUAL"));
+  const audit = (await w.db.query(`SELECT details FROM admin_actions WHERE action = 'lotto.draw_create' AND target = $1`, [`lotto:${d.id}`])).rows[0]!.details;
+  assert.deepEqual(audit.numbers, selected, "the chosen numbers and commitment are audited at creation");
+  assert.equal(audit.commitment, d.hash);
+
+  const publicState = await lottoState(w.db, base + 60_000);
+  const publicDraw = publicState.draws.find((x) => x.id === Number(d.id))!;
+  assert.equal(publicDraw.hash, d.hash);
+  assert.equal(publicDraw.number_source, "MANUAL", "players can see that the result is preselected");
+  assert.equal("numbers" in publicDraw, false, "manual picks remain hidden while betting is open");
+  assert.equal("seed" in publicDraw, false);
+
+  await buyLottoTicket(w.db, w.kofi, { picks: selected, stake: 1, draw_id: d.id, idempotency_key: key() }, { now: base + 60_000 });
+  const preview = await previewLottoDraw(w.db, d.id, closesAt);
+  assert.deepEqual(preview.numbers, selected, "closing preserves the precommitted result");
+  assert.equal(preview.totals.winners, 1);
+  await w.db.query(`UPDATE lotto_draws SET numbers = $2 WHERE id = $1`, [d.id, [1, 2, 3, 4, 5]]);
+  assert.equal((await lottoKey(w.db, "admin")).pending.find((x) => x.id === Number(d.id))!.locked, false);
+  await assert.rejects(releaseLottoDraw(w.db, d.id, "admin", drawAt), code("invalid_result_commitment"));
+  await w.db.query(`UPDATE lotto_draws SET numbers = $2 WHERE id = $1`, [d.id, selected]);
+  const out = await releaseLottoDraw(w.db, d.id, "admin", drawAt);
+  assert.deepEqual(out.numbers, selected, "publication cannot replace the committed result");
+  const publicResult = (await lottoState(w.db, drawAt)).results.find((x) => x.id === Number(d.id))!;
+  assert.deepEqual(publicResult.numbers, selected);
+  assert.equal(publicResult.number_source, "MANUAL");
+  assert.equal(lottoResultHash(publicResult.seed!, Number(d.id), publicResult.numbers!, "MANUAL"), d.hash);
 });

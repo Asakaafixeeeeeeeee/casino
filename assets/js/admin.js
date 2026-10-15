@@ -2760,7 +2760,8 @@
   function renderLotto(d) {
     const panel = panelOf("lotto");
     if (!panel.querySelector("#ltaDraws")) {
-      panel.innerHTML = '<div id="ltaKey"></div><div id="ltaTop"></div><div id="ltaActivePicks"></div><div id="ltaDraws"></div><div id="ltaTickets"></div>' + ltForm(d.settings);
+      panel.innerHTML = '<div id="ltaKey"></div><div id="ltaTop"></div><div id="ltaActivePicks"></div><div id="ltaDraws"></div>' +
+        '<div id="ltaCreateDraw"></div><div id="ltaTickets"></div>' + ltForm(d.settings);
     }
     const s = d.settings;
     $("ltaTop").innerHTML = '<section class="adm-card"><div class="adm-studio-head"><div><strong>Lotto is ' + (d.enabled ? "on" : "paused") + "</strong><small>" +
@@ -2777,7 +2778,8 @@
       let act = '<button class="btn btn-ghost btn-sm" type="button" data-lt-tickets="' + x.id + '">Tickets</button>';
       if (x.status === "OPEN") act += ' <button class="btn btn-danger btn-sm" type="button" data-lt-cancel="' + x.id + '">Cancel &amp; refund</button>';
       if (x.status === "CLOSED") act += ' <button class="btn btn-success btn-sm" type="button" data-lt-release="' + x.id + '">Release results</button>';
-      const result = x.numbers ? ltBalls(x.numbers) : '<span class="adm-note">Hidden until betting closes</span>';
+      const result = x.numbers ? ltBalls(x.numbers) : '<span class="adm-note">' +
+        (x.number_source === "MANUAL" ? "Precommitted; hidden until close" : "Hidden until betting closes") + "</span>";
       const pay = x.status === "CLOSED" && x.projected ? count(x.projected.winners) + " win · " + money(x.projected.payout) + " to pay"
         : x.status === "RELEASED" ? count(x.winners) + " won · " + money(x.paid) + " paid"
         : x.status === "CANCELLED" ? count(x.refunded) + " refunded" : "—";
@@ -2785,10 +2787,22 @@
         count(x.tickets) + "</td><td>" + money(x.staked) + "</td><td>" + pay + '</td><td class="lta-act">' + act + "</td></tr>";
     }).join("");
     $("ltaDraws").innerHTML = '<section class="adm-card"><h3 class="adm-h">Draws</h3>' +
-      '<p class="adm-note">The numbers are drawn by the server when betting closes and are locked to the fingerprint players saw. ' +
-      "Check them here, then press <b>Release results</b> to publish them and pay every winning ticket. A draw nobody releases is released automatically 24 hours after its draw time.</p>" +
+      '<p class="adm-note">Server draws are generated when betting closes. Named draws may optionally use five manual numbers entered at creation, before ticket sales open; these are hash-committed and cannot be changed after creation. ' +
+      "Check the result and its proof after betting closes, then press <b>Release results</b> to publish and pay winners. A draw nobody releases is released automatically 24 hours after its draw time.</p>" +
       (rows ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Draw</th><th>Draw time</th><th>Status</th><th>Numbers</th><th>Tickets</th><th>Staked</th><th>Winners</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div>"
         : empty("No draws yet.", "star")) + "</section>";
+    if (!$("ltaCreateDraw").querySelector('[data-form="lotto-draw"]')) {
+      $("ltaCreateDraw").innerHTML = '<section class="adm-card"><h3 class="adm-h">Schedule a named draw</h3>' +
+        '<p class="adm-note">Manual numbers, if provided, are locked at creation and cannot be edited. They stay hidden from players until the result is published. Leave blank for a server-generated result.</p>' +
+        '<form class="adm-terms" data-form="lotto-draw">' +
+        '<div class="field"><label for="ltaNewName">Draw name</label><input id="ltaNewName" maxlength="60" required></div>' +
+        '<div class="field"><label for="ltaNewOpens">Betting opens (optional)</label><input id="ltaNewOpens" type="datetime-local"></div>' +
+        '<div class="field"><label for="ltaNewCloses">Betting closes</label><input id="ltaNewCloses" type="datetime-local" required></div>' +
+        '<div class="field"><label for="ltaNewDrawAt">Draw time (optional)</label><input id="ltaNewDrawAt" type="datetime-local"></div>' +
+        '<div class="field"><label for="ltaNewNumbers">Manual winning numbers (optional)</label><input id="ltaNewNumbers" inputmode="numeric" placeholder="e.g. 4, 18, 27, 53, 81">' +
+        '<small class="adm-note">Exactly 5 different numbers from 1 to 90. Commit happens before sales open.</small></div>' +
+        '<button class="btn btn-primary btn-sm" type="submit">Create and lock draw</button></form></section>';
+    }
   }
   function renderLottoTickets() {
     const t = lt.tickets;
@@ -2853,6 +2867,36 @@
     lt.tickets = { id, list: r.data.tickets };
     renderLottoTickets();
     $("ltaTickets").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  async function createLottoDraw(form) {
+    const value = (id) => form.querySelector("#" + id).value.trim();
+    const closesAt = value("ltaNewCloses");
+    const opensAt = value("ltaNewOpens");
+    const drawAt = value("ltaNewDrawAt");
+    const rawNumbers = value("ltaNewNumbers");
+    const manualNumbers = rawNumbers ? rawNumbers.split(",").map((n) => Number(n.trim())) : undefined;
+    if (manualNumbers) {
+      const ok = await ask({
+        title: "Commit these winning numbers before sales?",
+        text: "The selected numbers will be committed now, before ticket sales open. They cannot be edited or replaced after this draw is created. Players will see them only after publication.",
+        yes: "Create and lock",
+      });
+      if (ok === null) return;
+    }
+    const btn = form.querySelector("button[type=submit]");
+    btn.disabled = true;
+    const r = await api("/lotto/draws", {
+      name: value("ltaNewName"),
+      opens_at: opensAt ? new Date(opensAt).toISOString() : undefined,
+      closes_at: new Date(closesAt).toISOString(),
+      draw_at: drawAt ? new Date(drawAt).toISOString() : undefined,
+      manual_numbers: manualNumbers,
+    });
+    btn.disabled = false;
+    if (!r.ok) return flash("error", errText(r, "Couldn't create the draw."));
+    flash("ok", manualNumbers ? "Draw created; numbers are committed and locked." : "Server-drawn Lotto event created.");
+    form.reset();
+    loadLotto(false);
   }
   async function lottoToggle() {
     const on = !(lt.last && lt.last.enabled);
@@ -3420,18 +3464,20 @@
       (x.locked ? pill("Numbers locked", "ok") : pill("Check failed — don't publish", "bad")) + "</div>" + big(x.numbers) +
       '<div class="lta-key-meta"><span>' + count(x.tickets) + " ticket(s) · " + money(x.staked) + " staked</span><span>" +
       (x.projected ? count(x.projected.winners) + " winner(s) · " + money(x.projected.payout) + " to pay" : "") + "</span></div>" +
-      '<p class="adm-note">Fingerprint <code>' + esc(x.hash.slice(0, 20)) + "…</code> — shown to players before betting closed; the secret seed behind it gives exactly these numbers.</p>" +
+      '<p class="adm-note">' + (x.number_source === "MANUAL" ? "Numbers were selected and committed before ticket sales opened." :
+        "Numbers were generated by the server when betting closed.") + ' Commitment <code>' + esc(x.hash.slice(0, 20)) +
+        "…</code> — shown to players before betting closed; verify it before publishing.</p>" +
       '<button class="btn btn-success lta-publish" type="button" data-lt-release="' + x.id + '"' + (x.locked ? "" : " disabled") + ">PUBLISH RESULT</button></div>").join("");
     const pub = d.published.map((x) => "<li><b>#" + x.id + " " + esc(x.name || "") + "</b>" + ltBalls(x.numbers || []) +
-      '<small class="adm-note">' + pill(x.verified ? "Proof verified" : "Proof check failed", x.verified ? "ok" : "bad") + " · " +
+      '<small class="adm-note">' + pill(x.verified ? (x.number_source === "MANUAL" ? "Commitment verified" : "Proof verified") : "Proof check failed", x.verified ? "ok" : "bad") + " · " +
+      (x.number_source === "MANUAL" ? "Manual numbers locked before sales · " : "Server drawn · ") +
       when(x.published_at) + " by " + esc(x.published_by || "—") + " · " + count(x.winners) + " won · " + money(x.paid) +
       "</small><small class=\"adm-note\">Seed <code>" + esc(x.seed) + "</code><br>SHA-256 <code>" + esc(x.hash) + "</code></small></li>").join("");
     const LABEL = { "lotto.preview": "Previewed", "lotto.publish": "Published", "lotto.cancel": "Cancelled", "lotto.draw_create": "Created", "lotto.draw_pause": "Paused", "lotto.draw_resume": "Resumed" };
     const audit = d.audit.map((a) => "<li>" + pill(LABEL[a.action] || a.action, a.action === "lotto.publish" ? "ok" : a.action === "lotto.cancel" ? "bad" : "") +
       "<span>Draw #" + a.draw + '</span><small class="adm-note">' + when(a.at) + " · " + esc(a.admin) + "</small></li>").join("");
     box.innerHTML = '<section class="adm-card lta-key"><div class="adm-mines-card-head"><strong>' + U.icon("shield") + "Lotto Key</strong>" + pill("Admin only", "warn") + "</div>" +
-      '<p class="adm-note">When betting closes, the server draws the 5 winning numbers from the draw\'s secret seed — independent of every ticket — and locks them. ' +
-      "Preview them here; players see nothing until you press <b>PUBLISH RESULT</b>. Nobody can type or change the numbers.</p>" +
+      '<p class="adm-note">Server-mode numbers come from the draw\'s secret seed, independent of tickets. For manual named draws, the admin selects numbers before ticket sales open and the server locks their commitment at creation; they cannot be changed. Preview either result here; players see nothing until you press <b>PUBLISH RESULT</b>.</p>' +
       (pend || '<p class="adm-note lta-key-none">No draw is waiting: numbers appear here as soon as a draw\'s betting closes.</p>') +
       (pub ? '<h4 class="lta-key-h">Published results</h4><ul class="lta-key-list">' + pub + "</ul>" : "") +
       (audit ? '<h4 class="lta-key-h">Audit trail</h4><ul class="lta-key-list lta-key-audit">' + audit + "</ul>" : "") + "</section>";
@@ -3685,6 +3731,7 @@
     if (e.target.matches('form[data-form="moneyrules"]')) { e.preventDefault(); saveMoneyRules(e.target); }
     if (e.target.matches('form[data-form="aviator"]')) { e.preventDefault(); saveAviator(e.target); }
     if (e.target.matches('form[data-form="lotto"]')) { e.preventDefault(); saveLotto(e.target); }
+    if (e.target.matches('form[data-form="lotto-draw"]')) { e.preventDefault(); createLottoDraw(e.target); }
     if (e.target.matches('form[data-form="psettings"]')) { e.preventDefault(); savePartnerSettings(e.target); }
     if (e.target.matches('form[data-form="pperms"]')) { e.preventDefault(); savePartnerPermissions(e.target); }
     if (e.target.matches('form[data-form="flupload"]')) { e.preventDefault(); uploadFlyerAsset(e.target); }
