@@ -124,54 +124,72 @@
   /* ---------------- commentary: describes only what has already happened in the race ---------------- */
   const comm = { at: 0, text: "" };
   let voice = null;
+  /* the best voice this device has: the natural/neural voices sound far more human than the basic ones */
   function chooseVoice() {
     if (!window.speechSynthesis) return;
-    const vs = window.speechSynthesis.getVoices();
-    voice = vs.find((v) => /en[-_]GB/i.test(v.lang)) || vs.find((v) => /^en/i.test(v.lang)) || null;
+    const vs = window.speechSynthesis.getVoices().filter((v) => /^en/i.test(v.lang));
+    const score = (v) => (/natural|neural|online/i.test(v.name) ? 50 : 0) + (/google uk english male|daniel|ryan|guy|davis|george|thomas/i.test(v.name) ? 20 : 0) +
+      (/google/i.test(v.name) ? 10 : 0) + (/en[-_](GB|NG|GH)/i.test(v.lang) ? 6 : /en[-_](US|AU)/i.test(v.lang) ? 3 : 0) + (v.localService ? 0 : 2);
+    voice = vs.sort((a, b) => score(b) - score(a))[0] || null;
   }
   if (window.speechSynthesis) { chooseVoice(); window.speechSynthesis.onvoiceschanged = chooseVoice; }
-  function say(text, urgent) {
+  /* heat 0–2: how excited the line is — louder, quicker and higher when it matters */
+  function say(text, urgent, heat) {
     const t = Date.now();
-    if (!urgent && t - comm.at < 3400) return;
+    if (!urgent && t - comm.at < 3200) return;
     if (text === comm.text && t - comm.at < 9000) return;
     comm.at = t; comm.text = text;
     const box = $("bnComm");
     $("bnCommText").textContent = text;
+    box.classList.toggle("hot", (heat || 0) >= 2);
     box.classList.remove("new"); void box.offsetWidth; box.classList.add("new");
     if (soundOn && voiceOn && window.speechSynthesis && !navigator.webdriver) {
       try {
         const ss = window.speechSynthesis;
         if (urgent) ss.cancel(); else if (ss.speaking) return;
-        const u = new SpeechSynthesisUtterance(text.replace(/×/g, " times").replace(/GHS/g, "cedis").replace(/—/g, ","));
+        /* spoken in sentence case (capitals can be read out letter by letter), with natural pauses */
+        const spoken = text.toLowerCase().replace(/(^|[.!?]\s+)([a-z])/g, (m, a, b) => a + b.toUpperCase())
+          .replace(/×/g, " times").replace(/ghs/gi, "cedis").replace(/—/g, ", ").replace(/\.\.\./g, ", ");
+        const h = heat || 0;
+        const u = new SpeechSynthesisUtterance(spoken);
         if (voice) u.voice = voice;
-        u.lang = voice ? voice.lang : "en-GB"; u.rate = 1.1;
+        u.lang = voice ? voice.lang : "en-GB";
+        u.rate = [1.02, 1.1, 1.18][h]; u.pitch = [1, 1.08, 1.18][h]; u.volume = 1;
         ss.speak(u);
       } catch (e) { /* no voice */ }
     }
   }
   const L = (x) => Math.log(Math.max(x, 1e-6));
-  const story = { sign: 0, half: false, final: false, far: false, behind: false };
+  /* green is ahead exactly when the cash-out value is above the stake (stake × rtp × score > stake) */
+  const edge = (x) => L(x * st.rules.rtp);
+  const story = { sign: 0, half: false, final: false, far: false, behind: false, close: 0 };
   function narrate(r, prev) {
     if (!prev || prev.race_id !== r.race_id || !r.xs || r.xs.length < 2 || r.step <= (prev.step || 0)) return;
-    const xs = r.xs, n = xs.length - 1, x = xs[n], lead = L(x);
-    const sign = lead > 0.025 ? 1 : lead < -0.025 ? -1 : story.sign;
+    const xs = r.xs, n = xs.length - 1, x = xs[n], lead = edge(x);
+    const sign = lead > 0.02 ? 1 : lead < -0.02 ? -1 : story.sign;
     const steps = st.rules.steps;
     const trend = n >= 3 ? Math.sign(xs[n] - xs[n - 1]) + Math.sign(xs[n - 1] - xs[n - 2]) + Math.sign(xs[n - 2] - xs[n - 3]) : 0;
+    const late = n >= steps * 0.8;
     if (sign !== story.sign && sign !== 0) {
+      const first = story.sign === 0;
       story.sign = sign;
-      if (sign > 0) { say(pick(["The green runner takes the lead!", "Green moves to the front!", "And green goes past — green leads!"]), true); roar(0.8); }
-      else { say(pick(["The red runner takes the lead!", "Red goes in front — green has work to do!", "Red edges ahead!"]), true); roar(0.5); }
+      if (sign > 0) { say(pick(first ? ["GREEN SETS THE PACE!", "Green is quickest away — green leads!"] : ["GREEN GOES PAST! GREEN TAKES THE LEAD!", "LOOK AT THAT! Green is back in front!", "AND GREEN HITS THE FRONT!"]), true, 2); roar(0.9); }
+      else { say(pick(first ? ["Red is quickest away — red leads!", "RED SETS THE PACE!"] : ["WOW! RED IS TAKING THE LEAD!", "RED GOES PAST! Green has work to do!", "RED IS FIGHTING BACK! WHAT AN AMAZING RACE!"]), true, 2); roar(0.6); }
       return;
     }
-    if (!story.half && n >= steps / 2) { story.half = true; say("Halfway — the race is getting intense!"); return; }
-    if (!story.final && n >= steps * 0.8) { story.final = true; say("Into the final stretch!", true); roar(0.6); return; }
-    if (!story.far && x >= 1.6) { story.far = true; say("Green is well clear — what a run!"); return; }
-    if (!story.behind && x <= 0.62) { story.behind = true; say("Red is well clear — can green respond?"); return; }
-    if (Math.abs(lead) < 0.035 && n > 4) { say(pick(["Neck and neck — what an exciting race!", "Nothing between them!"])); return; }
-    if (trend === 3 && lead > 0) say(pick(["The green runner is pushing forward!", "Green is pulling away!"]));
-    else if (trend === -3 && lead > 0) say(pick(["The red runner is catching up!", "Red is closing the gap!"]));
-    else if (trend === 3 && lead < 0) say(pick(["Green is fighting back!", "Green is reeling her in!"]));
-    else if (trend === -3 && lead < 0) say(pick(["Red is stretching the lead!", "Red pulls further ahead!"]));
+    if (!story.half && n >= steps / 2) { story.half = true; say(pick(["Halfway there, and the race is getting intense!", "We're at halfway... and this is a real contest!"]), false, 1); return; }
+    if (!story.final && late) { story.final = true; say(lead > 0 ? "Into the final stretch... GREEN IS PUSHING HARD!" : "Into the final stretch... can green find something?", true, 2); roar(0.7); return; }
+    if (!story.far && lead >= L(1.55)) { story.far = true; say(pick(["Green is well clear! What a run!", "GREEN IS FLYING! She's opened up a big gap!"]), false, 1); return; }
+    if (!story.behind && lead <= L(0.62)) { story.behind = true; say(pick(["Red is well clear... can green respond?", "Red has opened a big gap here!"]), false, 1); return; }
+    if (Math.abs(lead) < 0.03 && n > 4) {
+      if (late) say(pick(["LET'S GO! LET'S GO! WHAT A FINISH THIS IS!", "IT'S TOO CLOSE TO CALL!"]), true, 2);
+      else say(pick(["OH MY GOODNESS! THEY'RE NECK AND NECK!", "Nothing between them!", "Side by side down the straight!"]), false, 2);
+      return;
+    }
+    if (trend === 3 && lead > 0) say(pick(["GREEN IS PUSHING HARD! She's pulling away!", "Green is stretching her legs now!"]), false, 1);
+    else if (trend === -3 && lead > 0) say(pick(["The red runner is catching up!", "Red is closing the gap!", "Here comes red!"]), false, 1);
+    else if (trend === 3 && lead < 0) say(pick(["LOOK AT THAT! GREEN IS CLOSING THE GAP!", "GREEN IS PUSHING HARD! SHE'S NOT GIVING UP!"]), false, 2);
+    else if (trend === -3 && lead < 0) say(pick(["Red is stretching the lead!", "Red pulls further ahead!"]), false, 1);
   }
 
   /* ---------------- the numbers and the graphics ---------------- */
@@ -192,7 +210,7 @@
     const pl = r ? value - stake : 0;
     $("bnPl").textContent = r ? signed(Math.round(pl * 100) / 100) : ghs(0);
     $("bnPl").className = pl > 0 ? "up" : pl < 0 ? "down" : "";
-    $("bnValue").className = r && st.shownX > 1 ? "up" : r && st.shownX < 1 ? "down" : "";
+    $("bnValue").className = r && value > r.stake ? "up" : r && value < r.stake ? "down" : "";
     $("bnX").textContent = (r && r.status === "BUSTED" ? 0 : st.shownX).toFixed(2) + "×";
   }
   function setStatus(text, lead) {
@@ -210,7 +228,7 @@
     const tx = busted ? Math.min(st.shownX, targetX() || st.shownX) : targetX();
     st.shownX += (tx - st.shownX) * Math.min(1, dt * (reduce ? 20 : 5));
     if (busted) st.shownX = Math.max(0.0001, st.shownX);
-    const lead = r ? Math.max(-1, Math.min(1, L(Math.max(st.shownX, 0.05)) / Math.log(2.6))) : 0;
+    const lead = r ? Math.max(-1, Math.min(1, edge(Math.max(st.shownX, 0.05)) / Math.log(2.4))) : 0;
     const phase = !r ? "idle" : r.status !== "ACTIVE" ? "ended" : t < startsAt() ? "countdown" : "running";
     const prog = !r ? 0 : r.status !== "ACTIVE" ? Math.min(1, (r.ended_step || 0) / st.rules.steps) : Math.max(0, Math.min(1, (t - startsAt()) / (st.rules.steps * st.rules.step_ms)));
     window.BNC_VIEW = { phase, lead: busted ? Math.min(lead, -0.6) : lead, prog, ended: r && r.status !== "ACTIVE" ? r.status : null, raceId: r ? r.race_id : null };
@@ -221,8 +239,8 @@
     $("bnTugR").style.width = (100 - share).toFixed(1) + "%";
     $("bnTugMark").style.left = share.toFixed(1) + "%";
     $("bnProgress").style.width = (prog * 100).toFixed(1) + "%";
-    $("bnDist").textContent = Math.round(prog * 210) + " m";
-    if (phase === "running") setStatus(lead > 0.01 ? "Green leads · value rising" : lead < -0.01 ? "Red leads · value falling" : "Neck and neck", lead > 0.01 ? "green" : lead < -0.01 ? "red" : "");
+    $("bnDist").textContent = Math.round(prog * 160) + " m";
+    if (phase === "running") setStatus(lead > 0.01 ? "Green leads · you're up" : lead < -0.01 ? "Red leads · you're down" : "Neck and neck", lead > 0.01 ? "green" : lead < -0.01 ? "red" : "");
     paintBoard();
     requestAnimationFrame(frame);
   }
@@ -255,7 +273,7 @@
       res.className = "bn-result lose";
       res.innerHTML = "<small>RACE RESULT</small><b>Red broke away</b><span>The stake of " + ghs(r.stake) + " is lost.</span>";
       setStatus("Red won the race", "red");
-      say("Red breaks away! That's the end of the race.", true);
+      say("OH NO! RED BREAKS AWAY! That's the end of the race.", true, 2);
       tone(220, 0.5, "sawtooth", 0.05, 110);
       roar(0.5);
     } else {
@@ -265,7 +283,8 @@
       res.innerHTML = "<small>" + (r.status === "CASHED" ? "CASHED OUT" : "FINISH") + "</small><b>" + ghs(r.payout) + "</b><span>" + (r.status === "CASHED" ? "Cashed out at " + x + "×" : "Finish line at " + x + "×") +
         " · " + signed(profit) + "</span>";
       setStatus(r.status === "CASHED" ? "Cashed out" : "Race finished", r.payout >= r.stake ? "green" : "red");
-      say(r.status === "CASHED" ? "Cashed out at " + x + "× — " + ghs(r.payout) + " banked!" : "They cross the line! Finished at " + x + "×.", true);
+      say(r.status === "CASHED" ? (r.payout >= r.stake ? "CASHED OUT! " + ghs(r.payout) + " banked at " + x + "×!" : "Cashed out at " + x + "× — " + ghs(r.payout) + " back.")
+        : (r.payout >= r.stake ? "GREEN CROSSES THE LINE IN FRONT! WHAT A FINISH!" : "Red takes it at the line! Finished at " + x + "×."), true, 2);
       roar(1);
       [523, 659, 784, 1046].forEach((fq, i) => setTimeout(() => tone(fq, 0.22, "triangle", 0.05), i * 90));
     }
@@ -306,8 +325,9 @@
         void box.offsetWidth;
         box.classList.add("pop");
         tone(label === "GO!" ? 880 : 440, label === "GO!" ? 0.45 : 0.18, "square", 0.05);
-        if (label === "2") say("On your marks…", true);
-        if (label === "GO!") { setStatus("They're off!", ""); say("And they're off!", true); roar(0.9); }
+        if (label === "3") say("On your marks...", true, 0);
+        if (label === "1") say("Get set...", true, 0);
+        if (label === "GO!") { setStatus("They're off!", ""); say(pick(["AND THEY'RE OFF! What an incredible start!", "AND THEY'RE AWAY! Here we go!"]), true, 2); roar(0.9); }
       }
       requestAnimationFrame(tick);
     };
@@ -322,7 +342,7 @@
     if (r.status === "ACTIVE") {
       const started = r.starts_in_ms <= 0;
       setStatus(started ? "Racing" : "On your marks…", "");
-      if (!started) say("The runners are getting ready!", true);
+      if (!started) say("The runners are getting ready... they step up to the line.", true, 0);
       $("bnGo").hidden = true;
       $("bnCash").hidden = false;
       $("bnCash").disabled = false;
@@ -416,7 +436,7 @@
       "<p><b>A virtual race.</b> BNC WIN Racing is a computer-drawn race shown in the style of a TV broadcast, with commentary. It is not a real-world event and the athletes are not real people.</p>" +
       "<ol>" +
       "<li>Enter your stake and press <b>GO</b>. The stake is taken from your balance once, and the race starts after a 3-second countdown.</li>" +
-      "<li>The race lasts " + (R.steps * R.step_ms / 1000) + " seconds, in " + R.steps + " steps of half a second. Your runner is <b style='color:#6ff0a4'>green</b>. While green is ahead, your cash-out value is above where it started and rising; while <b style='color:#ff8a84'>red</b> is ahead it's falling.</li>" +
+      "<li>The race lasts " + (R.steps * R.step_ms / 1000) + " seconds, in " + R.steps + " steps of half a second. Your runner is <b style='color:#6ff0a4'>green</b>. Green is shown ahead exactly while your cash-out value is above your stake, and <b style='color:#ff8a84'>red</b> ahead while it's below; the gap between them is how far above or below.</li>" +
       "<li>Press <b>CASH OUT</b> whenever you like: you're paid the cash-out value at the moment the server receives it, straight to your balance. A race can be cashed out only once.</li>" +
       "<li>If you don't cash out, the race pays the value at the finish line. If red breaks away, the race ends at once and the stake is lost.</li>" +
       "</ol>" +
@@ -459,7 +479,7 @@
   }
 
   setStatus("Ready to race", "");
-  $("bnCommText").textContent = "Welcome to BNC WIN Racing! A virtual race — set your stake and press GO.";
+  $("bnCommText").textContent = "Welcome to BNC WIN Racing! The athletes are warming up — set your stake and press GO.";
   paintRules();
   paintChips();
   loadState(false);

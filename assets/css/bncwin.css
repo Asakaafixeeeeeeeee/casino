@@ -81,6 +81,8 @@
 .bn-comm b { flex: none; padding: 2px 6px; border-radius: 4px; background: #111; color: var(--bn-gold); font-size: .7rem; letter-spacing: .14em; }
 .bn-comm span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bn-comm.new span { animation: bn-type .45s ease-out; }
+.bn-comm.hot { background: linear-gradient(90deg, #ffd34d, #fff6c8); }
+.bn-comm.hot span { font-weight: 900; text-transform: uppercase; letter-spacing: .02em; }
 @keyframes bn-type { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .bn-money { width: min(600px, 100%); display: grid; grid-template-columns: 1fr 1.3fr 1fr; border-radius: 8px; overflow: hidden; background: rgba(8, 8, 10, .8); backdrop-filter: blur(8px); }
 .bn-money > div { display: grid; gap: 0; padding: 5px 10px; text-align: center; line-height: 1.1; }
