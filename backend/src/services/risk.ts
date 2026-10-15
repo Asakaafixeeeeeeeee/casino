@@ -31,6 +31,7 @@ const statusLabel = (s: string) => (s === "CONFIRMED" ? "successful" : s === "PE
  *  `before` for the next page. Each row has the player, the amount, the status, the reference and the paying number. */
 const NETWORK_NAME: Record<string, string> = { MTN: "MTN MoMo", VDF: "Telecel Cash", ATL: "AirtelTigo", TGO: "AirtelTigo" };
 export async function recentDeposits(db: Pool, input: { status?: unknown; q?: unknown; before?: unknown }, now = new Date()) {
+  if (String(input.status) === "rejected") return rejectedDeposits(db, input, now);
   const statuses = STATUS_IN[String(input.status ?? "all")] ?? STATUS_IN.all!;
   const raw = String(input.q ?? "").trim().toLowerCase().replace(/[%_\\]/g, "").slice(0, 60);
   const phone = raw.replace(/\D/g, "");
@@ -56,6 +57,36 @@ export async function recentDeposits(db: Pool, input: { status?: unknown; q?: un
     amount: r2(r.amount), currency: r.currency, status: statusLabel(r.status),
     network: r.network ? (NETWORK_NAME[r.network] ?? r.network) : null,
     reference: r.transaction_id ? "DES" + r.transaction_id : null, note: r.gateway_note ?? null,
+    payer: r.payer_phone ?? null, at: iso(r.created_at),
+  }));
+  return { deposits, today: { total: r2(today.rows[0]?.total), count: num(today.rows[0]?.n) }, next: deposits.length === 60 ? deposits[deposits.length - 1]!.at : null };
+}
+
+/** Deposit requests our own checks refused before anything reached TheTeller (amount, account, limits, conditions,
+ *  number, network, duplicates): who, how much, when, why. Same shape as the deposit list, status "rejected". */
+async function rejectedDeposits(db: Pool, input: { q?: unknown; before?: unknown }, now: Date) {
+  const raw = String(input.q ?? "").trim().toLowerCase().replace(/[%_\\]/g, "").slice(0, 60);
+  const phone = raw.replace(/\D/g, "");
+  const before = input.before ? new Date(String(input.before)) : null;
+  const beforeOk = before && !Number.isNaN(before.getTime());
+  const midnight = new Date(now); midnight.setUTCHours(0, 0, 0, 0);
+  const [list, today] = await Promise.all([
+    db.query(
+      `SELECT r.id, r.method, r.amount, r.amount_raw, r.currency, r.network, r.payer_phone, r.reason_code, r.reason, r.status, r.created_at,
+              u.username, u.full_name, u.phone
+         FROM deposit_rejections r LEFT JOIN users u ON u.id = r.user_id
+        WHERE ($1 = '' OR lower(coalesce(u.username, '')) LIKE '%' || $1 || '%' OR lower(coalesce(u.full_name, '')) LIKE '%' || $1 || '%'
+               OR ($2 <> '' AND (coalesce(u.phone, '') LIKE '%' || $2 || '%' OR coalesce(r.payer_phone, '') LIKE '%' || $2 || '%')))
+          AND ($3::timestamptz IS NULL OR r.created_at < $3)
+        ORDER BY r.created_at DESC, r.id DESC LIMIT 60`,
+      [raw, phone.length >= 3 ? phone : "", beforeOk ? before!.toISOString() : null]),
+    db.query(`SELECT coalesce(sum(amount), 0) AS total, count(*) AS n FROM payment_intents WHERE status = 'CONFIRMED' AND created_at >= $1`, [midnight.toISOString()]),
+  ]);
+  const deposits = list.rows.map((r) => ({
+    id: "rej-" + r.id, name: nameOf(r), username: r.username ?? null, phone: r.phone ?? null,
+    amount: r.amount === null ? null : r2(r.amount), amount_raw: r.amount_raw ?? null, currency: r.currency ?? "GHS", status: "rejected",
+    network: r.network ? (NETWORK_NAME[r.network] ?? r.network) : null, reference: null,
+    note: r.reason, reason_code: r.reason_code, method: r.method === "momo" ? "Mobile money" : "Card / Paybill",
     payer: r.payer_phone ?? null, at: iso(r.created_at),
   }));
   return { deposits, today: { total: r2(today.rows[0]?.total), count: num(today.rows[0]?.n) }, next: deposits.length === 60 ? deposits[deposits.length - 1]!.at : null };

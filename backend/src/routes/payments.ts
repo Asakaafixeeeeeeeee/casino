@@ -47,9 +47,6 @@ function readAmount(raw: unknown, min: number): number | null {
 }
 const ghs = (n: number) => "GHS " + amountText(n);
 
-function badRequest(res: Response, error: string, message: string): void {
-  res.status(400).json({ error, message });
-}
 
 const clientStatus = (dbStatus: string) =>
   dbStatus === "CONFIRMED" ? "approved" : dbStatus === "PENDING" ? "pending" : "declined";
@@ -61,32 +58,53 @@ async function partnerDepositsOff(db: Pool, userId: string): Promise<boolean> {
   return !(await permissionsOf(db, a)).effective.wallet_deposits;
 }
 
+/** One deposit request as it arrived, for the record when our checks refuse it. */
+interface DepositAttempt { userId: string; method: "momo" | "checkout"; amount: unknown; currency: unknown; network?: unknown; phone?: unknown; key: unknown }
+
 export function paymentsRouter(db: Pool): Router {
   const router = Router();
 
+  /* A request our checks refuse never reaches TheTeller: it's recorded (who, how much, when, why) and answered here.
+     Recording never stands in the way of the answer: a failure to write is logged. */
+  async function reject(res: Response, status: number, code: string, message: string, a: DepositAttempt, extra: Record<string, unknown> = {}) {
+    try {
+      const n = Number(a.amount);
+      const numeric = a.amount !== null && a.amount !== "" && typeof a.amount !== "boolean" && Number.isFinite(n) && Math.abs(n) < 1e12;
+      const text = (v: unknown, max: number) => (v === undefined || v === null || v === "" ? null : String(typeof v === "object" ? JSON.stringify(v) : v).slice(0, max));
+      await db.query(
+        `INSERT INTO deposit_rejections (user_id, method, amount, amount_raw, currency, network, payer_phone, idempotency_key, reason_code, reason)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [a.userId, a.method, numeric ? Math.round(n * 100) / 100 : null, numeric ? null : text(a.amount, 40), text(a.currency, 10),
+          text(a.network, 10), text(a.phone, 20), text(a.key, 120), code, message.slice(0, 500)]);
+    } catch (e) {
+      console.error("[deposit] couldn't record a refused request (%s): %s", code, (e as Error).message);
+    }
+    res.status(status).json({ error: code, message, ...extra });
+  }
+
   /* The main admin's TheTeller switch (Admin -> TheTeller Payment Settings): while it's OFF no new payment can start.
      Only the routes that start a payment ask; checking and crediting payments already started never does. */
-  async function refuseWhenOff(res: Response): Promise<boolean> {
+  async function refuseWhenOff(res: Response, a: DepositAttempt): Promise<boolean> {
     if (await paymentsEnabled(db)) return false;
-    res.status(503).json({ error: "payments_off", message: PAYMENTS_OFF_MESSAGE });
+    await reject(res, 503, "payments_off", PAYMENTS_OFF_MESSAGE, a);
     return true;
   }
 
   /* the amount against the live minimum deposit (and the largest single deposit) */
-  async function depositAmount(raw: unknown, res: Response): Promise<number | null> {
+  async function depositAmount(raw: unknown, res: Response, a: DepositAttempt): Promise<number | null> {
     const rules = await getMoneyRules(db);
     const amt = readAmount(raw, rules.min_deposit);
     if (amt === null) {
-      badRequest(res, "invalid_amount", `Amount must be between ${ghs(rules.min_deposit)} and ${ghs(MAX_DEPOSIT)}`);
+      await reject(res, 400, "invalid_amount", `Amount must be between ${ghs(rules.min_deposit)} and ${ghs(MAX_DEPOSIT)}`, a);
       return null;
     }
     return amt;
   }
   /* no deposit until the player has accepted the current deposit, betting and withdrawal rules */
-  async function refuseUntilAccepted(userId: string, res: Response): Promise<boolean> {
+  async function refuseUntilAccepted(userId: string, res: Response, a: DepositAttempt): Promise<boolean> {
     const rules = await getMoneyRules(db);
     if (await hasAcceptedRules(db, userId, rules.rules_version)) return false;
-    res.status(409).json({ error: "rules_not_accepted", message: RULES_NOT_ACCEPTED_MESSAGE, rules_version: rules.rules_version });
+    await reject(res, 409, "rules_not_accepted", RULES_NOT_ACCEPTED_MESSAGE, a, { rules_version: rules.rules_version });
     return true;
   }
 
@@ -95,7 +113,7 @@ export function paymentsRouter(db: Pool): Router {
      a limit only one of them fits (each now sees the others), and no player can have more than MAX_OPEN_PROMPTS
      payments waiting at once (a PIN prompt goes to whatever number is given). A retried key returns its intent. */
   const MAX_OPEN_PROMPTS = 3;
-  async function openIntent(userId: string, amount: number, key: string, redirectUrl: string, res: Response, network: string | null = null) {
+  async function openIntent(userId: string, amount: number, key: string, redirectUrl: string, res: Response, a: DepositAttempt, network: string | null = null) {
     const client = await db.connect();
     try {
       await client.query("BEGIN");
@@ -107,14 +125,14 @@ export function paymentsRouter(db: Pool): Router {
         } catch (e) {
           if (!(e instanceof LimitError)) throw e;
           await client.query("ROLLBACK");
-          res.status(e.status).json({ error: e.code, message: e.message });
+          await reject(res, e.status, e.code, e.message, a);
           return null;
         }
         const open = await client.query<{ n: number }>(
           `SELECT count(*)::int AS n FROM payment_intents WHERE user_id = $1 AND status = 'PENDING' AND created_at > now() - interval '10 minutes'`, [userId]);
         if (open.rows[0]!.n >= MAX_OPEN_PROMPTS) {
           await client.query("ROLLBACK");
-          res.status(429).json({ error: "too_many_pending", message: "You have payments still waiting for approval. Approve or wait for them before starting another." });
+          await reject(res, 429, "too_many_pending", "You have payments still waiting for approval. Approve or wait for them before starting another.", a);
           return null;
         }
       }
@@ -124,7 +142,7 @@ export function paymentsRouter(db: Pool): Router {
     } catch (e) {
       await client.query("ROLLBACK").catch(() => undefined);
       if (e instanceof TellerRequestError) {
-        res.status(409).json({ error: "key_reused", message: e.message });
+        await reject(res, 409, "key_reused", e.message, a);
         return null;
       }
       throw e;
@@ -213,42 +231,42 @@ export function paymentsRouter(db: Pool): Router {
   router.post("/teller/checkout", authenticate, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = requireUser(req);
-      if (await refuseWhenOff(res)) return;
-      if (await partnerDepositsOff(db, user.id)) {
-        res.status(403).json({ error: "feature_off", message: "Deposits are switched off for your partner account. Contact support." });
-        return;
-      }
       const { amount, currency, idempotency_key } = (req.body ?? {}) as Record<string, unknown>;
-      const amt = await depositAmount(amount, res);
-      if (amt === null) return;
-      if (currency !== "GHS") return badRequest(res, "unsupported_currency", "Only GHS deposits are supported");
-      if (typeof idempotency_key !== "string" || !idempotency_key.trim()) {
-        return badRequest(res, "invalid_idempotency_key", "A non-empty idempotency_key is required");
+      const attempt: DepositAttempt = { userId: user.id, method: "checkout", amount, currency, key: idempotency_key };
+      /* every check runs before TheTeller is contacted; a refused request is recorded and never sent */
+      if (await refuseWhenOff(res, attempt)) return;
+      if (await partnerDepositsOff(db, user.id)) {
+        return reject(res, 403, "feature_off", "Deposits are switched off for your partner account. Contact support.", attempt);
       }
-      if (await refuseUntilAccepted(user.id, res)) return;
+      const amt = await depositAmount(amount, res, attempt);
+      if (amt === null) return;
+      if (currency !== "GHS") return reject(res, 400, "unsupported_currency", "Only GHS deposits are supported", attempt);
+      if (typeof idempotency_key !== "string" || !idempotency_key.trim()) {
+        return reject(res, 400, "invalid_idempotency_key", "A non-empty idempotency_key is required", attempt);
+      }
+      if (await refuseUntilAccepted(user.id, res, attempt)) return;
 
       const config = loadTellerConfig(process.env);
       const site = siteUrl();
       // Only ever send the customer back to our own site; a client-supplied redirect is ignored.
       const redirectUrl = `${site}/wallet.html`;
 
-      const intent = await openIntent(user.id, amt, idempotency_key, redirectUrl, res);
+      const intent = await openIntent(user.id, amt, idempotency_key, redirectUrl, res, attempt);
       if (!intent) return;
       if (intent.transactionId && intent.checkoutUrl) {
         res.json({ checkout_url: intent.checkoutUrl, transaction_id: intent.transactionId, reference: depositReference(intent.transactionId),
           status: clientStatus(intent.status) });
         return;
       }
+      /* a duplicate of a request already sent: never a second call to TheTeller */
       if (intent.transactionId || intent.status !== "PENDING") {
-        res.status(409).json({ error: "already_processed", message: "This payment was already started. Please try again." });
-        return;
+        return reject(res, 409, "already_processed", "This payment was already started. Please try again.", attempt);
       }
 
       // Saved before TheTeller is called, so a crash can never lose track of a payment.
       const txId = newTxId();
       if (!(await claimTxId(intent.id, txId, null))) {
-        res.status(409).json({ error: "already_processed", message: "This payment was already started. Please try again." });
-        return;
+        return reject(res, 409, "already_processed", "This payment was already started. Please try again.", attempt);
       }
       console.log("[teller/checkout] user=%s amount=%s tx=%s", user.id, amt, txId);
 
@@ -280,24 +298,25 @@ export function paymentsRouter(db: Pool): Router {
   router.post("/teller/momo", authenticate, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = requireUser(req);
-      if (await refuseWhenOff(res)) return;
-      if (await partnerDepositsOff(db, user.id)) {
-        res.status(403).json({ error: "feature_off", message: "Deposits are switched off for your partner account. Contact support." });
-        return;
-      }
       const { amount, currency, idempotency_key, account_number, network } = (req.body ?? {}) as Record<string, unknown>;
-      const amt = await depositAmount(amount, res);
-      if (amt === null) return;
-      if (currency !== "GHS") return badRequest(res, "unsupported_currency", "Only GHS deposits are supported");
-      if (typeof idempotency_key !== "string" || !idempotency_key.trim()) {
-        return badRequest(res, "invalid_idempotency_key", "A non-empty idempotency_key is required");
+      const attempt: DepositAttempt = { userId: user.id, method: "momo", amount, currency, network, phone: account_number, key: idempotency_key };
+      /* every check runs before TheTeller is contacted; a refused request is recorded and never sent */
+      if (await refuseWhenOff(res, attempt)) return;
+      if (await partnerDepositsOff(db, user.id)) {
+        return reject(res, 403, "feature_off", "Deposits are switched off for your partner account. Contact support.", attempt);
       }
-      if (await refuseUntilAccepted(user.id, res)) return;
+      const amt = await depositAmount(amount, res, attempt);
+      if (amt === null) return;
+      if (currency !== "GHS") return reject(res, 400, "unsupported_currency", "Only GHS deposits are supported", attempt);
+      if (typeof idempotency_key !== "string" || !idempotency_key.trim()) {
+        return reject(res, 400, "invalid_idempotency_key", "A non-empty idempotency_key is required", attempt);
+      }
       const subscriber = String(account_number ?? "").replace(/\D/g, "");
-      if (!/^233[235]\d{8}$/.test(subscriber)) return badRequest(res, "invalid_account", "Enter a valid Ghanaian mobile money number");
-      if (!NETWORKS.includes(network as MomoNetwork)) return badRequest(res, "invalid_network", "Choose MTN, Telecel or AirtelTigo");
+      if (!/^233[235]\d{8}$/.test(subscriber)) return reject(res, 400, "invalid_account", "Enter a valid Ghanaian mobile money number", attempt);
+      if (!NETWORKS.includes(network as MomoNetwork)) return reject(res, 400, "invalid_network", "Choose MTN, Telecel or AirtelTigo", attempt);
+      if (await refuseUntilAccepted(user.id, res, attempt)) return;
       const config = loadTellerConfig(process.env);
-      const intent = await openIntent(user.id, amt, idempotency_key, `${siteUrl()}/wallet.html`, res, network as string);
+      const intent = await openIntent(user.id, amt, idempotency_key, `${siteUrl()}/wallet.html`, res, attempt, network as string);
       if (!intent) return;
       if (intent.transactionId) {
         res.json({ transaction_id: intent.transactionId, reference: depositReference(intent.transactionId), status: clientStatus(intent.status) });

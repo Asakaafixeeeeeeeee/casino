@@ -3388,8 +3388,8 @@
   /* ================= sections, menu, events, badges ================= */
   /* ================= Recent deposits ================= */
   const dep = { status: "all", q: "", timer: 0 };
-  const DEP_STATUS = [["all", "All"], ["successful", "Successful"], ["pending", "Pending"], ["failed", "Failed"]];
-  const DEP_TONE = { successful: "in", pending: "warn", failed: "bad", reversed: "bad" };
+  const DEP_STATUS = [["all", "All"], ["successful", "Successful"], ["pending", "Pending"], ["failed", "Failed at TheTeller"], ["rejected", "Stopped by our checks"]];
+  const DEP_TONE = { successful: "in", pending: "warn", failed: "bad", reversed: "bad", rejected: "bad" };
   function depositsShell() {
     const panel = panelOf("deposits");
     if (panel.querySelector("#dpQ")) return;
@@ -3411,15 +3411,17 @@
     if (!r.ok) { $("dpList").innerHTML = ""; return flash("error", errText(r, "Couldn't load deposits.")); }
     const items = r.data.deposits;
     const today = r.data.today || { total: 0, count: 0 };
-    const banner = '<div class="apt-overview" style="margin-bottom:12px"><div class="apt-ov in"><i class="apt-ov-ico">' + U.icon("stack") +
+    const rejected = dep.status === "rejected";
+    const banner = (rejected ? '<p class="adm-note">Requests refused by our own checks (amount, account, limits, accepted conditions, number, network, duplicates). They were never sent to TheTeller and no money moved.</p>' : "") +
+      '<div class="apt-overview" style="margin-bottom:12px"><div class="apt-ov in"><i class="apt-ov-ico">' + U.icon("stack") +
       '</i><span>Deposits received today</span><strong>' + money(today.total) + "</strong><small>" + count(today.count) + " successful deposit" + (today.count === 1 ? "" : "s") + "</small></div></div>";
     $("dpList").innerHTML = banner + (items.length
       ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Player</th><th>Amount</th><th>Network</th><th>Status</th><th>Paid from</th><th>Reference</th><th>When</th></tr></thead><tbody>' +
         items.map((d) =>
           "<tr>" +
           "<td><b>" + esc(d.name) + "</b>" + (d.phone ? "<small>" + esc(d.phone) + "</small>" : "") + "</td>" +
-          "<td>" + money(d.amount) + "</td>" +
-          "<td>" + (d.network ? esc(d.network) : "—") + "</td>" +
+          "<td>" + (d.amount === null ? (d.amount_raw ? "<small>" + esc(d.amount_raw) + "</small>" : "—") : money(d.amount)) + "</td>" +
+          "<td>" + (d.network ? esc(d.network) : d.method ? "<small>" + esc(d.method) + "</small>" : "—") + "</td>" +
           '<td>' + pill(d.status, DEP_TONE[d.status] || "") + (d.note ? "<small class='adm-wrapcell'>" + esc(d.note) + "</small>" : "") + "</td>" +
           "<td>" + (d.payer ? esc(d.payer) : "—") + "</td>" +
           "<td>" + (d.reference ? esc(d.reference) : "—") + "</td>" +
@@ -3543,7 +3545,7 @@
     overview: { title: "Overview", lead: "How the casino is doing, and anything waiting for you.", actions: ADD_MONEY },
     players: { title: "Players", lead: "Find a player by name, number or id to see their money, bets and account.", actions: ADD_MONEY },
     money: { title: "Money", lead: "Every deposit, withdrawal, bet and adjustment as it happens." },
-    deposits: { title: "Recent deposits", lead: "Every deposit attempt — successful, pending and failed — newest first. Search by player, and filter by status. Separate from withdrawals." },
+    deposits: { title: "Recent deposits", lead: "Every deposit attempt — successful, pending, failed at TheTeller, and stopped by our own checks before reaching it — newest first. Search by player, and filter by status. Separate from withdrawals." },
     blocked: { title: AC.blocked.title, lead: AC.blocked.lead },
     banned: { title: AC.banned.title, lead: AC.banned.lead },
     deleted: { title: AC.deleted.title, lead: AC.deleted.lead },

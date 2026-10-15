@@ -47,6 +47,7 @@ const migrationFiles = [
   "039_bnc_win.sql",
   "040_money_rules.sql",
   "041_betting_sessions.sql",
+  "042_deposit_rejections.sql",
 ];
 
 if (!process.env.DATABASE_URL) {
