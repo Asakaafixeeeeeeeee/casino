@@ -146,20 +146,29 @@
      Confirms who the number belongs to first, then goes through the same audited adjustment as a player's profile
      (capped, logged, posted to the ledger). */
   function openCredit() {
-    const s = sheet("Add money to a player");
+    const s = sheet("Add or take money");
     s.set('<form data-form="credit" class="adm-credit-form" autocomplete="off">' +
+        '<div class="adm-credit-dir" role="radiogroup" aria-label="Add or take money">' +
+          '<label><input type="radio" name="crDir" value="add" checked><span>' + U.icon("plus") + "Add money</span></label>" +
+          '<label class="take"><input type="radio" name="crDir" value="take"><span>− Take money off</span></label></div>' +
         '<div class="field"><label for="crPhone">Player’s mobile number</label>' +
           '<input id="crPhone" type="tel" inputmode="numeric" maxlength="20" placeholder="024 123 4567" required></div>' +
-        '<div class="field"><label for="crAmt">Amount to add (GHS)</label>' +
+        '<div class="field"><label for="crAmt">Amount (GHS)</label>' +
           '<input id="crAmt" type="number" step="0.01" min="0.01" inputmode="decimal" placeholder="e.g. 50" required></div>' +
         '<div class="field adm-credit-why"><label for="crWhy">Reason (goes in the ledger)</label>' +
           '<input id="crWhy" type="text" maxlength="200" minlength="8" placeholder="e.g. Goodwill credit for complaint #1042" required></div>' +
-        '<button class="btn btn-primary" type="submit">Add money</button>' +
+        '<button class="btn btn-primary" type="submit" data-cr-go>Add money</button>' +
       "</form>" +
       '<div class="adm-sheet-msg" aria-live="polite"></div>' +
-      '<p class="adm-credit-note">It finds the player by number and credits their balance as an adjustment — the same as from a player’s profile, recorded with your number and the reason.</p>' +
+      '<p class="adm-credit-note">It finds the player by number and adds to or takes off their balance as an adjustment — the same as from a player’s profile, recorded with your number and the reason.</p>' +
       '<p class="adm-credit-note adm-credit-warn"><b>Not for a deposit that hasn’t arrived.</b> A deposit is credited by itself the moment TheTeller confirms it (the player’s Deposit page and a background check keep asking), so adding it here too would pay it twice. You can’t add money to your own account.</p>');
     const form = s.body.querySelector("form");
+    form.addEventListener("change", () => {
+      const take = form.querySelector("input[name=crDir]:checked").value === "take";
+      const go = form.querySelector("[data-cr-go]");
+      go.textContent = take ? "Take money off" : "Add money";
+      go.classList.toggle("btn-danger", take);
+    });
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       submitCredit(form, s);
@@ -174,25 +183,27 @@
     const phone = form.querySelector("#crPhone").value.trim();
     const amount = Number(form.querySelector("#crAmt").value);
     const reason = form.querySelector("#crWhy").value.trim();
+    const take = form.querySelector("input[name=crDir]:checked").value === "take";
     if (!phone || !(amount > 0) || reason.length < 8) {
-      return say("Enter the player’s number, an amount to add, and a reason of at least 8 characters.");
+      return say("Enter the player’s number, an amount, and a reason of at least 8 characters.");
     }
     const who = await api("/credit/lookup?phone=" + encodeURIComponent(phone));
     if (!who.ok) return say(errText(who, "Couldn’t find that player."));
     const p = who.data;
+    if (take && amount > p.balance) return say("That’s more than the player’s balance (" + money(p.balance) + ").");
     const yes = await ask({
-      title: "Add " + money(amount) + "?",
-      text: "To <b>" + esc(p.full_name || p.username || "player") + "</b> (" + esc(p.phone || phone) + "). Balance " + money(p.balance) +
-        " → " + money(p.balance + amount) + ". This goes in the ledger with your number and the reason.",
-      yes: "Add money" });
+      title: (take ? "Take " + money(amount) + " off?" : "Add " + money(amount) + "?"),
+      text: (take ? "From" : "To") + " <b>" + esc(p.full_name || p.username || "player") + "</b> (" + esc(p.phone || phone) + "). Balance " + money(p.balance) +
+        " → " + money(take ? p.balance - amount : p.balance + amount) + ". This goes in the ledger with your number and the reason.",
+      yes: take ? "Take money off" : "Add money", danger: take });
     if (yes === null) return;
     /* one key per credit: resending the same credit after a lost answer can't pay it twice */
-    const sig = [phone, amount, reason].join("|");
+    const sig = [phone, amount, reason, take].join("|");
     if (form.dataset.sig !== sig || !form.dataset.key) { form.dataset.sig = sig; form.dataset.key = newKey(); }
-    const r = await api("/credit", { phone, amount, reason, idempotency_key: form.dataset.key });
-    if (!r.ok) return say(errText(r, "Couldn’t add the money."));
+    const r = await api("/credit", { phone, amount, reason, direction: take ? "take" : "add", idempotency_key: form.dataset.key });
+    if (!r.ok) return say(errText(r, take ? "Couldn’t take the money off." : "Couldn’t add the money."));
     s.close();
-    flash("ok", "Added " + money(r.data.added) + " to " + esc(r.data.player.full_name || r.data.player.username || "the player") +
+    flash("ok", (take ? "Took " + money(r.data.taken) + " off " : "Added " + money(r.data.added) + " to ") + esc(r.data.player.full_name || r.data.player.username || "the player") +
       " — balance now " + money(r.data.balance) + ".");
   }
 
@@ -3318,7 +3329,7 @@
   }
 
   const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, deposits: loadDeposits, payments: () => loadPaymentSettings(true), blocked: () => loadAccounts("blocked"), banned: () => loadAccounts("banned"), deleted: () => loadAccounts("deleted"), games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), lotto: () => loadLotto(true), partners: loadPartners, withdrawals: loadWithdrawals, risk: loadRisk, reviews: loadReviews, support: () => loadSupport() };
-  const ADD_MONEY = '<button class="btn btn-primary btn-sm" type="button" data-credit>' + U.icon("plus") + "Add money</button>";
+  const ADD_MONEY = '<button class="btn btn-primary btn-sm" type="button" data-credit>' + U.icon("plus") + "Add / take money</button>";
   /* each section's title, a line on what it's for, and its buttons */
   const SECTIONS = {
     overview: { title: "Overview", lead: "How the casino is doing, and anything waiting for you.", actions: ADD_MONEY },

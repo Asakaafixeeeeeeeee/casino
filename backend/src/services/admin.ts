@@ -335,7 +335,7 @@ function adjustKind(raw: unknown, amount: number): string {
 function adjustmentInput(input: { amount?: unknown; reason?: unknown; idempotency_key?: unknown }, addOnly = false) {
   const amount = round2(Number(input.amount));
   if (!Number.isFinite(amount) || amount === 0 || (addOnly && amount < 0)) {
-    throw new AdminError("invalid_amount", addOnly ? "Enter an amount to add" : "Enter an amount (negative to take money off)");
+    throw new AdminError("invalid_amount", addOnly ? "Enter an amount greater than zero" : "Enter an amount (negative to take money off)");
   }
   if (Math.abs(amount) > MAX_ADJUSTMENT) {
     throw new AdminError("too_large", `Adjustments are limited to GHS ${MAX_ADJUSTMENT.toLocaleString("en-GH")} at a time`);
@@ -402,16 +402,20 @@ export async function adjustBalance(
   return postAdjustment(db, admin, uid, amount, reason, key, adjustKind(input.kind, amount));
 }
 
-/** Add money to a player found by mobile number (the dashboard's "Add money" card). Add only — never a debit. */
+/** Add money to, or take money off, a player found by mobile number (the dashboard's "Add / take money" sheet).
+ *  The amount is always positive; direction "take" debits it (as a correction, never below the player's balance). */
 export async function creditByPhone(
-  db: Pool, admin: string, input: { phone?: unknown; amount?: unknown; reason?: unknown; idempotency_key?: unknown; kind?: unknown }
+  db: Pool, admin: string, input: { phone?: unknown; amount?: unknown; reason?: unknown; idempotency_key?: unknown; kind?: unknown; direction?: unknown }
 ) {
   const player = await findUserByPhone(db, input.phone);
-  const { amount, reason, key } = adjustmentInput(input, true);
-  const result = await postAdjustment(db, admin, player.id, amount, reason, key, adjustKind(input.kind, amount));
+  const take = input.direction === "take";
+  const { amount: entered, reason, key } = adjustmentInput(input, true);
+  const amount = take ? -entered : entered;
+  const result = await postAdjustment(db, admin, player.id, amount, reason, key, take ? "CORRECTION" : adjustKind(input.kind, amount));
   return {
     player: { id: player.id, username: player.username, full_name: player.full_name, phone: player.phone },
-    added: amount,
+    added: take ? 0 : entered,
+    taken: take ? entered : 0,
     balance: result.balance,
     replayed: "replayed" in result,
   };

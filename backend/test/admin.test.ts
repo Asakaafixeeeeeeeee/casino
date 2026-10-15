@@ -175,6 +175,17 @@ test("Add money by phone: finds the one player, credits through the audited path
   const again = await creditByPhone(db, ADMIN, { phone: "0241234567", amount: 50, reason: "Manual top-up test", idempotency_key: "admin:fixed-key" });
   assert.equal(replay.balance, again.balance, "a retried key returns the same balance, not a second credit");
 
+  // taking money off: a positive amount with direction "take", logged as a correction, never below the balance
+  const before = again.balance;
+  const took = await creditByPhone(db, ADMIN, { phone: "0241234567", amount: 30, direction: "take", reason: "Correcting a wrong top-up", idempotency_key: key() });
+  assert.equal(took.taken, 30);
+  assert.equal(took.added, 0);
+  assert.equal(took.balance, before - 30);
+  const takeLog = (await auditLog(db, { target: userId })).actions[0]!;
+  assert.equal(takeLog.action, "user.adjust");
+  await assert.rejects(() => creditByPhone(db, ADMIN, { phone: "0241234567", amount: before + 1000, direction: "take", reason: "more than they have", idempotency_key: key() }),
+    (e: unknown) => e instanceof AdminError && e.code === "insufficient_funds");
+
   // refused: unknown number, a debit (add only), a short reason, a malformed number
   await assert.rejects(() => creditByPhone(db, ADMIN, { phone: "0209999999", amount: 10, reason: "no such player here", idempotency_key: key() }),
     (e: unknown) => e instanceof AdminError && e.status === 404);

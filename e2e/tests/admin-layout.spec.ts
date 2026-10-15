@@ -88,6 +88,19 @@ test("Add money opens in a sheet: a wrong number is told there, a right one is c
   await expect(sheet).toHaveCount(0);
   await expect(page.locator("#msg")).toContainText("Added");
   expect(await balance()).toBe(7);
+
+  /* and taking money off: the same sheet, "Take money off", confirmed */
+  await page.locator("#admActions [data-credit]").click();
+  await sheet.locator("#crPhone").fill(number);
+  await sheet.locator(".adm-credit-dir .take").click();
+  await expect(sheet.locator("[data-cr-go]")).toHaveText("Take money off");
+  await sheet.locator("#crAmt").fill("3");
+  await sheet.locator("#crWhy").fill("Layout test correction");
+  await sheet.locator("button[type=submit]").click();
+  await expect(page.locator(".me-dialog")).toContainText("Take");
+  await page.locator(".me-dialog [data-yes]").click();
+  await expect(page.locator("#msg")).toContainText("Took");
+  expect(await balance()).toBe(4);
   expect(errors).toEqual([]);
   await ctx.close();
 });

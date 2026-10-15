@@ -160,6 +160,15 @@
 
 /* "Add money to a player", in its own sheet */
 .adm-sheet .adm-credit-form { margin-top: 4px; }
+.adm-credit-dir { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.adm-credit-dir label { cursor: pointer; }
+.adm-credit-dir input { position: absolute; opacity: 0; pointer-events: none; }
+.adm-credit-dir span { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 8px; border-radius: 12px; font-weight: 800;
+  border: 2px solid var(--line, #2a2f36); color: var(--muted, #aab); }
+.adm-credit-dir span svg { width: 16px; height: 16px; }
+.adm-credit-dir input:checked + span { border-color: #18b257; color: #fff; background: rgba(24, 178, 87, .18); }
+.adm-credit-dir .take input:checked + span { border-color: #e01f2d; background: rgba(224, 31, 45, .18); }
+.adm-credit-dir input:focus-visible + span { outline: 2px solid #fff; outline-offset: 2px; }
 .adm-sheet-msg:not(:empty) { margin-top: 12px; }
 
 /* ---------------- rows that carry buttons ---------------- */
