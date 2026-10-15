@@ -32,6 +32,7 @@ import {
 } from "../services/partnerPlatform.js";
 import { partnerOf } from "../services/affiliates.js";
 import { cancelInvite, createInvite, listInvites, renewInvite } from "../services/partnerInvites.js";
+import { paymentSettingsOverview, pingTeller, setPaymentsEnabled } from "../services/paymentSettings.js";
 
 const STATUSES = ["REQUESTED", "PAYING", "PAID", "DECLINED"];
 
@@ -67,10 +68,11 @@ export function adminRouter(db: Pool): Router {
               (SELECT count(*) FROM affiliates WHERE status = 'PENDING') AS partners,
               (SELECT count(*) FROM affiliate_payouts WHERE status IN ('REQUESTED', 'APPROVED')) AS partner_payouts,
               (SELECT count(*) FROM withdrawal_reviews WHERE status = 'PENDING') AS reviews,
-              (SELECT count(*) FROM lotto_draws WHERE status = 'CLOSED') AS lotto`);
+              (SELECT count(*) FROM lotto_draws WHERE status = 'CLOSED') AS lotto,
+              (SELECT NOT payments_enabled FROM payment_settings WHERE id = 1) AS payments_off`);
     res.setHeader("Cache-Control", "no-store");
     res.json({
-      admin: true, payoutsEnabled: payouts, phone: requireUser(_req).phone,
+      admin: true, payoutsEnabled: payouts, paymentsOn: rows[0].payments_off !== true, phone: requireUser(_req).phone,
       waiting: {
         withdrawals: Number(rows[0].withdrawals), partners: Number(rows[0].partners), partnerPayouts: Number(rows[0].partner_payouts),
         reviews: Number(rows[0].reviews), lotto: Number(rows[0].lotto),
@@ -126,6 +128,12 @@ export function adminRouter(db: Pool): Router {
   r.get("/game-control", send(() => gamesOverview(db)));
   r.get("/game-control/:id", send((req) => gameDetail(db, req.params.id)));
   r.post("/game-control/:id", send((req) => saveGameControls(db, adminOf(req), req.params.id, req.body ?? {})));
+
+  /* TheTeller Payment Settings: the ON/OFF switch for new payments (saved until changed), the merchant id and the
+     connection; secrets show only as set / not set */
+  r.get("/payment-settings", send(() => paymentSettingsOverview(db)));
+  r.post("/payment-settings", send((req) => setPaymentsEnabled(db, adminOf(req), req.body ?? {})));
+  r.post("/payment-settings/test", send(() => pingTeller()));
 
   /* recent deposits: every attempt (successful, pending, failed), searchable; separate from withdrawals */
   r.get("/deposits/recent", send((req) => recentDeposits(db, query(req))));

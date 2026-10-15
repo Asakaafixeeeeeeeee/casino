@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 340" role="img" aria-labelledby="t">
+  <title id="t">A WIN B Lotto ticket with five numbered balls</title>
+  <defs>
+    <radialGradient id="tb0" cx="38%" cy="34%" r="70%" fx="34%" fy="28%">
+      <stop offset="0" stop-color="#ff9a9a"/><stop offset=".45" stop-color="#e01f2d"/><stop offset=".86" stop-color="#5e0309"/><stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <radialGradient id="tb1" cx="38%" cy="34%" r="70%" fx="34%" fy="28%">
+      <stop offset="0" stop-color="#a9cdff"/><stop offset=".45" stop-color="#1f6fe0"/><stop offset=".86" stop-color="#08214f"/><stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <radialGradient id="tb2" cx="38%" cy="34%" r="70%" fx="34%" fy="28%">
+      <stop offset="0" stop-color="#a6f5c1"/><stop offset=".45" stop-color="#18b257"/><stop offset=".86" stop-color="#053d1d"/><stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <radialGradient id="tb3" cx="38%" cy="34%" r="70%" fx="34%" fy="28%">
+      <stop offset="0" stop-color="#fff3b8"/><stop offset=".45" stop-color="#ffc21a"/><stop offset=".86" stop-color="#7a4c00"/><stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <radialGradient id="tb4" cx="38%" cy="34%" r="70%" fx="34%" fy="28%">
+      <stop offset="0" stop-color="#e0c2ff"/><stop offset=".45" stop-color="#8a3ff0"/><stop offset=".86" stop-color="#2c0a5c"/><stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <radialGradient id="tb5" cx="38%" cy="34%" r="70%" fx="34%" fy="28%">
+      <stop offset="0" stop-color="#ffd2a6"/><stop offset=".45" stop-color="#ff7a14"/><stop offset=".86" stop-color="#5e2500"/><stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <radialGradient id="tb6" cx="38%" cy="34%" r="70%" fx="34%" fy="28%">
+      <stop offset="0" stop-color="#b0f5f0"/><stop offset=".45" stop-color="#13b5ac"/><stop offset=".86" stop-color="#033f3b"/><stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <radialGradient id="tb7" cx="38%" cy="34%" r="70%" fx="34%" fy="28%">
+      <stop offset="0" stop-color="#ffc2e3"/><stop offset=".45" stop-color="#f0388f"/><stop offset=".86" stop-color="#5e0732"/><stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <radialGradient id="tb8" cx="38%" cy="34%" r="70%" fx="34%" fy="28%">
+      <stop offset="0" stop-color="#ffffff"/><stop offset=".45" stop-color="#bcc3ce"/><stop offset=".86" stop-color="#3c434d"/><stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <radialGradient id="tdisc" cx="42%" cy="36%" r="70%"><stop offset="0" stop-color="#fff"/><stop offset=".6" stop-color="#f2f2f2"/><stop offset="1" stop-color="#c9c9c9"/></radialGradient>
+    <radialGradient id="tspec" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset=".5" stop-color="#fff" stop-opacity=".35"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <radialGradient id="tshadow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#000" stop-opacity=".6"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffaf0"/><stop offset="1" stop-color="#f1e3c4"/></linearGradient>
+    <linearGradient id="band" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7a0008"/><stop offset=".5" stop-color="#e0101e"/><stop offset="1" stop-color="#7a0008"/></linearGradient>
+    <linearGradient id="goldH" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8a5a00"/><stop offset=".5" stop-color="#ffe08a"/><stop offset="1" stop-color="#8a5a00"/></linearGradient>
+    <filter id="drop" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#000" flood-opacity=".55"/></filter>
+    <mask id="holes"><rect width="520" height="340" fill="#fff"/><circle cx="66" cy="52" r="4" fill="#000"/><circle cx="66" cy="74" r="4" fill="#000"/><circle cx="66" cy="96" r="4" fill="#000"/><circle cx="66" cy="118" r="4" fill="#000"/><circle cx="66" cy="140" r="4" fill="#000"/><circle cx="66" cy="162" r="4" fill="#000"/><circle cx="66" cy="184" r="4" fill="#000"/><circle cx="66" cy="206" r="4" fill="#000"/><circle cx="66" cy="228" r="4" fill="#000"/><circle cx="66" cy="250" r="4" fill="#000"/><circle cx="66" cy="272" r="4" fill="#000"/></mask>
+  </defs>
+  <g transform="rotate(-6 260 170)" filter="url(#drop)">
+    <rect x="40" y="40" width="440" height="250" rx="16" fill="url(#paper)" mask="url(#holes)"/>
+    <rect x="40" y="40" width="440" height="56" rx="16" fill="url(#band)"/>
+    <rect x="40" y="80" width="440" height="16" fill="url(#band)"/>
+    <text x="96" y="78" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="24" letter-spacing="3" fill="#ffd34d">WIN B LOTTO</text>
+    <text x="458" y="76" text-anchor="end" font-family="Arial, sans-serif" font-weight="700" font-size="14" fill="#ffe7a6">DAILY 5/90</text>
+    <line x1="66" y1="40" x2="66" y2="290" stroke="#c9b48a" stroke-dasharray="5 6" stroke-width="2"/>
+    <text x="96" y="128" font-family="Arial, sans-serif" font-weight="700" font-size="13" fill="#7a5a2a" letter-spacing="2">YOUR NUMBERS</text>
+    <g opacity="1"><ellipse cx="132.5" cy="210.6" rx="28.5" ry="8.4" fill="url(#tshadow)"/><circle cx="128" cy="180" r="30" fill="url(#tb0)"/><g transform="rotate(-18 128 180)"><circle cx="128" cy="180" r="16.8" fill="url(#tdisc)" stroke="rgba(0,0,0,.18)" stroke-width="0.8999999999999999"/><text x="128" y="186" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-size="17.4" fill="#141414">7</text></g><ellipse cx="117.2" cy="167.4" rx="10.799999999999999" ry="7.199999999999999" transform="rotate(-30 117.2 167.4)" fill="url(#tspec)"/><path d="M 106.4 192.6 A 25.8 25.8 0 0 0 146.6 196.8" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="2.1" stroke-linecap="round"/></g><g opacity="1"><ellipse cx="206.5" cy="210.6" rx="28.5" ry="8.4" fill="url(#tshadow)"/><circle cx="202" cy="180" r="30" fill="url(#tb1)"/><g transform="rotate(-9 202 180)"><circle cx="202" cy="180" r="16.8" fill="url(#tdisc)" stroke="rgba(0,0,0,.18)" stroke-width="0.8999999999999999"/><text x="202" y="186" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-size="17.4" fill="#141414">19</text></g><ellipse cx="191.2" cy="167.4" rx="10.799999999999999" ry="7.199999999999999" transform="rotate(-30 191.2 167.4)" fill="url(#tspec)"/><path d="M 180.4 192.6 A 25.8 25.8 0 0 0 220.6 196.8" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="2.1" stroke-linecap="round"/></g><g opacity="1"><ellipse cx="280.5" cy="210.6" rx="28.5" ry="8.4" fill="url(#tshadow)"/><circle cx="276" cy="180" r="30" fill="url(#tb3)"/><g transform="rotate(0 276 180)"><circle cx="276" cy="180" r="16.8" fill="url(#tdisc)" stroke="rgba(0,0,0,.18)" stroke-width="0.8999999999999999"/><text x="276" y="186" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-size="17.4" fill="#141414">34</text></g><ellipse cx="265.2" cy="167.4" rx="10.799999999999999" ry="7.199999999999999" transform="rotate(-30 265.2 167.4)" fill="url(#tspec)"/><path d="M 254.4 192.6 A 25.8 25.8 0 0 0 294.6 196.8" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="2.1" stroke-linecap="round"/></g><g opacity="1"><ellipse cx="354.5" cy="210.6" rx="28.5" ry="8.4" fill="url(#tshadow)"/><circle cx="350" cy="180" r="30" fill="url(#tb5)"/><g transform="rotate(9 350 180)"><circle cx="350" cy="180" r="16.8" fill="url(#tdisc)" stroke="rgba(0,0,0,.18)" stroke-width="0.8999999999999999"/><text x="350" y="186" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-size="17.4" fill="#141414">52</text></g><ellipse cx="339.2" cy="167.4" rx="10.799999999999999" ry="7.199999999999999" transform="rotate(-30 339.2 167.4)" fill="url(#tspec)"/><path d="M 328.4 192.6 A 25.8 25.8 0 0 0 368.6 196.8" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="2.1" stroke-linecap="round"/></g><g opacity="1"><ellipse cx="428.5" cy="210.6" rx="28.5" ry="8.4" fill="url(#tshadow)"/><circle cx="424" cy="180" r="30" fill="url(#tb8)"/><g transform="rotate(18 424 180)"><circle cx="424" cy="180" r="16.8" fill="url(#tdisc)" stroke="rgba(0,0,0,.18)" stroke-width="0.8999999999999999"/><text x="424" y="186" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-size="17.4" fill="#141414">88</text></g><ellipse cx="413.2" cy="167.4" rx="10.799999999999999" ry="7.199999999999999" transform="rotate(-30 413.2 167.4)" fill="url(#tspec)"/><path d="M 402.4 192.6 A 25.8 25.8 0 0 0 442.6 196.8" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="2.1" stroke-linecap="round"/></g>
+    <rect x="96" y="232" width="362" height="2" fill="url(#goldH)"/>
+    <text x="96" y="262" font-family="Arial, sans-serif" font-weight="700" font-size="14" fill="#5a3a12">DIRECT-5</text>
+    <text x="458" y="262" text-anchor="end" font-family="Courier New, monospace" font-weight="700" font-size="14" fill="#5a3a12">LT-XXXXXXXXXX</text>
+  </g>
+</svg>

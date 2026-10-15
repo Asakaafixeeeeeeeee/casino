@@ -265,12 +265,14 @@
 
     /* Card and Paybill: hand over to TheTeller's secure page */
     async function startCheckout(amt, errId, btn) {
+      if (paymentsOff) return paymentsUnavailable();
       if (!showError(errId, amountError(amt))) return;
       btn.disabled = true;
       showMsg("info", "Starting secure payment…");
       const result = await U.paymentApi("/api/payments/teller/checkout", {
         body: { amount: amt, currency: "GHS", idempotency_key: newKey() }
       });
+      if (result.data && result.data.error === "payments_off") return paymentsUnavailable(result.data.message);
       if (!result.ok || !result.data.checkout_url) {
         btn.disabled = false;
         showMsg("error", "Payment could not start. " + U.esc(result.data.message || result.data.error || "Try again in a moment."));
@@ -283,10 +285,22 @@
     const depAmount = $("depAmount");
     let waiting = false;
     let paused = false; // on a self-imposed break: deposits are blocked by the server too
+    let paymentsOff = false; // the admin switched TheTeller payments off: the server refuses new payments too
     const sync = () => {
       showError("depAmountErr", "");
-      submit.disabled = waiting || paused || !(Number(depAmount.value) >= DEPOSIT_MIN);
+      submit.disabled = waiting || paused || paymentsOff || !(Number(depAmount.value) >= DEPOSIT_MIN);
     };
+    const OFF_TEXT = "Payments are temporarily unavailable. Please try again later.";
+    function paymentsUnavailable(text) {
+      paymentsOff = true;
+      sync();
+      ["pbSubmit", "cdSubmit"].forEach((id) => { if ($(id)) $(id).disabled = true; });
+      showMsg("error", U.esc(text || OFF_TEXT));
+    }
+    /* the admin's ON/OFF switch (Admin -> TheTeller Payment Settings); payments already made are still checked and credited */
+    U.paymentApi("/api/payments/config").then((r) => {
+      if (r.ok && r.data && r.data.paymentsOn === false) paymentsUnavailable(r.data.message);
+    });
     U.paymentApi("/api/user/limits").then((r) => {
       if (!r.ok || !r.data.excludedUntil) return;
       paused = true;
@@ -299,6 +313,7 @@
     wireIncrements("quick", depAmount, sync);
 
     submit.addEventListener("click", async () => {
+      if (paymentsOff) return paymentsUnavailable();
       const amt = Math.round(Number(depAmount.value) * 100) / 100;
       if (!showError("depAmountErr", amountError(amt))) return;
       const net = provider();
@@ -329,6 +344,11 @@
           idempotency_key: newKey()
         }
       });
+      if (result.data && result.data.error === "payments_off") {
+        waiting = false;
+        PayFX.close();
+        return paymentsUnavailable(result.data.message);
+      }
       if (!result.ok || !result.data.transaction_id) {
         waiting = false;
         sync();

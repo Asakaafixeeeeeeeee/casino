@@ -566,3 +566,23 @@
   color: #1a1000; background: radial-gradient(circle at 35% 30%, #fff3b0, #ffc21a 45%, #a86400 100%); font-variant-numeric: tabular-nums; }
 .lta-act { white-space: nowrap; }
 .lta-ball.lta-bank { color: #fff; background: radial-gradient(circle at 35% 30%, #ff9a9a, #e0101e 45%, #7a0008 100%); }
+
+/* TheTeller Payment Settings: the ON/OFF switch, the account and the connection */
+.adm-tp-hero { border-width: 2px; }
+.adm-tp-hero.is-on { border-color: rgba(52, 215, 122, .45); background: linear-gradient(180deg, rgba(52, 215, 122, .08), var(--surface) 70%); }
+.adm-tp-hero.is-off { border-color: rgba(255, 75, 69, .55); background: linear-gradient(180deg, rgba(255, 75, 69, .1), var(--surface) 70%); }
+.adm-tp-hero .adm-studio-head { margin-top: 0; }
+.adm-tp-hero .adm-studio-head strong { font-size: 1.25rem; }
+.adm-tp-hero.is-on .adm-studio-head strong { color: var(--green); }
+.adm-tp-hero.is-off .adm-studio-head strong { color: #ff8a82; }
+.adm-tp-switch { transform: scale(1.25); transform-origin: right center; }
+.adm-tp-notice { margin: 4px 0 10px; padding: 10px 12px; border-radius: 10px; background: rgba(0, 0, 0, .25); border: 1px dashed rgba(255, 75, 69, .5); }
+.adm-tp-notice span { display: block; color: var(--dim); font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
+.adm-tp-notice p { margin: 2px 0 0; font-weight: 800; }
+.adm-tp-meta b { overflow-wrap: anywhere; }
+.adm-tp-secret { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.adm-tp-secret svg { width: 14px; height: 14px; color: var(--green); }
+.adm-tp-missing { color: #ff8a82; }
+.adm-badge-off { background: #ff4b45 !important; color: #fff !important; }
+@media (min-width: 720px) { .adm-tp-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.adm-panel .adm-mines-meta + .adm-note { margin-top: 10px; }

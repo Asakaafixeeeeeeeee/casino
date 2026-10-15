@@ -7,12 +7,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
 <link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
-<meta name="theme-color" content="#1a0207">
+<meta name="theme-color" content="#14040a">
+<link rel="preload" as="image" href="assets/img/lotto/lotto-machine.svg">
 <title>WIN B Lotto — WIN B WIN</title>
 <meta name="description" content="WIN B Lotto: pick numbers from 1-90 for 5/90 draws — Direct, Perm and Banker tickets, payouts fixed when you buy, numbers drawn at random by the server.">
 <link rel="stylesheet" href="assets/css/styles.css?v=39">
 <link rel="stylesheet" href="assets/css/minigame.css">
-<link rel="stylesheet" href="assets/css/lotto.css?v=3">
+<link rel="stylesheet" href="assets/css/lotto.css?v=4">
 <link rel="icon" href="assets/img/winb-mark.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="assets/img/app/w-apple-touch-icon-180.png">
@@ -39,6 +40,67 @@
 <main class="lt-main" id="ltMain">
   <p class="lt-closed" id="ltSalesClosed" hidden><b>Ticket sales open soon.</b> You can look around and pick your numbers — buying a ticket isn't available yet.</p>
 
+  <!-- welcome slides: they slide by themselves; swipe or use the arrows -->
+  <section class="lt-hero" id="ltHero" aria-roledescription="carousel" aria-label="WIN B Lotto">
+    <div class="lt-hero-track" id="ltHeroTrack" aria-live="off">
+      <article class="lt-slide lt-slide-welcome is-active" aria-roledescription="slide">
+        <div class="lt-slide-copy">
+          <span class="lt-eyebrow">Daily 5/90 draw</span>
+          <h2 class="lt-slide-title">Welcome to <b>WIN B Lotto</b></h2>
+          <p>Pick 1 to 5 numbers from 1 to 90. Five winning numbers are drawn at random by the server for every draw, and winning tickets are paid straight to your balance.</p>
+          <div class="lt-cta"><a class="lt-btn-gold" href="#ltPick">Pick your numbers</a><button type="button" class="lt-btn-glass" data-open-rules>How to play</button></div>
+        </div>
+        <div class="lt-slide-art lt-art-machine"><img src="assets/img/lotto/lotto-machine.svg" alt="A lottery drawing machine: a glass drum full of numbered balls" width="600" height="460" fetchpriority="high"></div>
+      </article>
+
+      <article class="lt-slide lt-slide-pays" aria-roledescription="slide">
+        <div class="lt-slide-copy">
+          <span class="lt-eyebrow">Fixed payouts</span>
+          <h2 class="lt-slide-title">Direct-5 pays <b data-fill="mult5">big</b> your stake</h2>
+          <p>Every payout is fixed the moment you buy, and the payout table shows each line's odds. Top win per ticket: <b data-fill="maxwin">see the rules</b>.</p>
+          <div class="lt-cta"><a class="lt-btn-gold" href="#ltPayTitle">See the payouts</a></div>
+        </div>
+        <div class="lt-slide-art lt-art-arc" aria-hidden="true"><span class="lt-ball lt-c0"><i>7</i></span><span class="lt-ball lt-c1"><i>19</i></span><span class="lt-ball lt-c3"><i>34</i></span><span class="lt-ball lt-c5"><i>52</i></span><span class="lt-ball lt-c8"><i>88</i></span></div>
+      </article>
+
+      <article class="lt-slide lt-slide-ticket" aria-roledescription="slide">
+        <div class="lt-slide-copy">
+          <span class="lt-eyebrow">Three ways to play</span>
+          <h2 class="lt-slide-title"><b>Direct</b>, <b>Perm</b> or <b>Banker</b></h2>
+          <p>One line of up to 5 numbers, every combination of your numbers, or a banker number with partners. Review your ticket before you buy — you get a ticket code for every one.</p>
+          <div class="lt-cta"><button type="button" class="lt-btn-gold" data-open-rules>Read the rules</button></div>
+        </div>
+        <div class="lt-slide-art lt-art-ticket"><img src="assets/img/lotto/lotto-ticket.svg" alt="A WIN B Lotto ticket with five numbered balls" width="520" height="340" loading="lazy"></div>
+      </article>
+
+      <article class="lt-slide lt-slide-fair" aria-roledescription="slide">
+        <div class="lt-slide-copy">
+          <span class="lt-eyebrow">Fair draws</span>
+          <h2 class="lt-slide-title">Numbers <b>nobody chooses</b></h2>
+          <p>Each draw's numbers come from a secret seed made when the draw opens. Its fingerprint is shown while you play, and the seed is published with the results so anyone can check them.</p>
+          <div class="lt-cta"><a class="lt-btn-gold" href="#ltSecTitle">How we protect you</a></div>
+        </div>
+        <div class="lt-slide-art lt-art-shield" aria-hidden="true">
+          <span class="lt-shield"><i data-icon="shield"></i></span>
+          <span class="lt-ball lt-c4"><i>45</i></span><span class="lt-ball lt-c0"><i>9</i></span><span class="lt-ball lt-c7"><i>73</i></span>
+        </div>
+      </article>
+
+      <article class="lt-slide lt-slide-results" aria-roledescription="slide" data-needs-results hidden>
+        <div class="lt-slide-copy">
+          <span class="lt-eyebrow">Latest results</span>
+          <h2 class="lt-slide-title" data-fill="lastname">Latest draw</h2>
+          <p data-fill="lastwhen"></p>
+          <div class="lt-cta"><button type="button" class="lt-btn-gold" data-show-results>All results</button></div>
+        </div>
+        <div class="lt-slide-art lt-art-results" data-fill="lastballs" aria-label="The winning numbers"></div>
+      </article>
+    </div>
+    <button type="button" class="lt-hero-arrow lt-prev" data-hero="-1" aria-label="Previous slide"><i data-icon="chevronLeft"></i></button>
+    <button type="button" class="lt-hero-arrow lt-next" data-hero="1" aria-label="Next slide"><i data-icon="chevronRight"></i></button>
+    <div class="lt-hero-progress" aria-hidden="true"><i id="ltHeroBar"></i></div>
+  </section>
+
   <!-- the draws taking bets -->
   <div class="lt-draw-tabs" id="ltDrawTabs" role="tablist" aria-label="Draws" hidden></div>
   <section class="lt-draw" aria-labelledby="ltDrawTitle">
@@ -56,7 +118,7 @@
 
   <div class="lt-grid-wrap">
     <!-- pick numbers -->
-    <section class="lt-pick" aria-labelledby="ltPickTitle">
+    <section class="lt-pick" id="ltPick" aria-labelledby="ltPickTitle">
       <div class="lt-types" id="ltTypes" role="tablist" aria-label="Bet type"></div>
       <div class="lt-pick-head">
         <h2 id="ltPickTitle">Pick your numbers</h2>
@@ -102,6 +164,39 @@
     </aside>
   </div>
 
+
+  <!-- verified winners: real winning tickets from released draws only -->
+  <section class="lt-winners" aria-labelledby="ltWinTitle">
+    <div class="lt-sec-head">
+      <div><span class="lt-eyebrow">Verified winners</span><h2 id="ltWinTitle">Winning tickets, paid</h2></div>
+      <div class="lt-win-tabs" role="tablist" aria-label="Winners">
+        <button type="button" role="tab" data-wtab="top" aria-selected="true">Biggest</button>
+        <button type="button" role="tab" data-wtab="latest" aria-selected="false">Latest</button>
+      </div>
+    </div>
+    <p class="lt-win-totals" id="ltWinTotals" hidden></p>
+    <div class="lt-win-viewport" id="ltWinViewport">
+      <div class="lt-win-track" id="ltWinTrack"><div class="lt-win-card lt-win-loading" aria-hidden="true"></div></div>
+    </div>
+    <div class="lt-win-nav">
+      <button type="button" class="lt-round-btn" data-wmove="-1" aria-label="Previous winners"><i data-icon="chevronLeft"></i></button>
+      <button type="button" class="lt-round-btn" data-wmove="1" aria-label="More winners"><i data-icon="chevronRight"></i></button>
+    </div>
+    <p class="lt-foot">Every win shown here is a real ticket that the server settled and paid in a draw whose results were published. Winners are shown by a masked mobile number only — never a name or a photo.</p>
+  </section>
+
+  <!-- how it works -->
+  <section class="lt-steps" aria-labelledby="ltStepsTitle">
+    <span class="lt-eyebrow">How it works</span>
+    <h2 id="ltStepsTitle">Four steps to your ticket</h2>
+    <ol class="lt-steps-row">
+      <li><span class="lt-ball lt-c0"><i>1</i></span><b>Pick</b><span>Tap 1 to 5 numbers, or use Quick pick.</span></li>
+      <li><span class="lt-ball lt-c1"><i>12</i></span><b>Stake</b><span>Choose your stake; the slip shows the cost and potential win.</span></li>
+      <li><span class="lt-ball lt-c2"><i>23</i></span><b>Confirm</b><span>Check your ticket, confirm, and get your ticket code.</span></li>
+      <li><span class="lt-ball lt-c3"><i>34</i></span><b>Get paid</b><span>Winning tickets are paid to your balance when results are released.</span></li>
+    </ol>
+  </section>
+
   <!-- payouts -->
   <section class="lt-card" aria-labelledby="ltPayTitle">
     <h2 id="ltPayTitle">Payouts</h2>
@@ -127,6 +222,27 @@
       <div class="lt-list" id="ltMine"></div>
     </div>
     <div class="lt-list" id="ltResults" hidden></div>
+  </section>
+
+
+  <!-- account security: only what the site really does -->
+  <section class="lt-secure" aria-labelledby="ltSecTitle">
+    <span class="lt-eyebrow">Account security</span>
+    <h2 id="ltSecTitle">Your account and your money, protected</h2>
+    <div class="lt-secure-grid">
+      <article><span class="lt-sec-ico"><i data-icon="shield"></i></span><h3>Passwords never stored as text</h3>
+        <p>Your password is kept only as a salted scrypt hash, so it can't be read back by anyone.</p></article>
+      <article><span class="lt-sec-ico"><i data-icon="user"></i></span><h3>Sign-ins that can't be copied</h3>
+        <p>Each log-in gets a random session token. We store only its fingerprint, so a copy of our database can't be used to sign in.</p></article>
+      <article><span class="lt-sec-ico"><i data-icon="bell"></i></span><h3>Password guessing is blocked</h3>
+        <p>Repeated wrong passwords lock the account for a while, and sign-in attempts from each address are limited.</p></article>
+      <article><span class="lt-sec-ico"><i data-icon="phone"></i></span><h3>Winnings go only to you</h3>
+        <p>Withdrawals are paid only to the mobile money number you registered with.</p></article>
+      <article><span class="lt-sec-ico"><i data-icon="wallet"></i></span><h3>Your PIN and card stay with you</h3>
+        <p>You approve mobile money payments with your PIN on your own phone, and card payments on TheTeller's secure page. We never see your PIN or card number.</p></article>
+      <article><span class="lt-sec-ico"><i data-icon="settings"></i></span><h3>You stay in control</h3>
+        <p>Set deposit limits or take a break from your account whenever you want, from <a href="me.html">My account</a>.</p></article>
+    </div>
   </section>
 
   <p class="mg-note">18+ · play responsibly · <button type="button" class="lt-link" id="ltRulesLink">Lotto rules</button></p>
@@ -156,6 +272,6 @@
 </dialog>
 
 <script src="assets/js/site.js?v=51"></script>
-<script src="assets/js/lotto.js?v=3"></script>
+<script src="assets/js/lotto.js?v=4"></script>
 </body>
 </html>

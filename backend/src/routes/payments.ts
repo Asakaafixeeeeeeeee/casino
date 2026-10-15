@@ -22,6 +22,7 @@ import { noteIntent, reopenFailedIntent, settleIntent } from "../services/teller
 import { checkDeposit, LimitError } from "../services/responsibleGaming.js";
 import { partnerOf } from "../services/affiliates.js";
 import { permissionsOf } from "../services/partnerPlatform.js";
+import { PAYMENTS_OFF_MESSAGE, paymentsEnabled } from "../services/paymentSettings.js";
 
 const MIN_DEPOSIT = 5;     // GHS; well under US$ 1 (the page shows the dollar figure)
 const MAX_DEPOSIT = 50000;
@@ -57,6 +58,14 @@ async function partnerDepositsOff(db: Pool, userId: string): Promise<boolean> {
 
 export function paymentsRouter(db: Pool): Router {
   const router = Router();
+
+  /* The main admin's TheTeller switch (Admin -> TheTeller Payment Settings): while it's OFF no new payment can start.
+     Only the routes that start a payment ask; checking and crediting payments already started never does. */
+  async function refuseWhenOff(res: Response): Promise<boolean> {
+    if (await paymentsEnabled(db)) return false;
+    res.status(503).json({ error: "payments_off", message: PAYMENTS_OFF_MESSAGE });
+    return true;
+  }
 
   /* deposit limits and breaks are enforced here, whatever the page shows */
   /* A new deposit's checks and its intent, under one per-player lock: deposits started at once can no longer all pass
@@ -108,11 +117,21 @@ export function paymentsRouter(db: Pool): Router {
     return (rowCount ?? 0) > 0;
   }
 
-  router.get("/config", (_req: Request, res: Response) => {
+  router.get("/config", async (_req: Request, res: Response, next: NextFunction) => {
     res.setHeader("Cache-Control", "no-store");
+    let on: boolean;
+    try {
+      on = await paymentsEnabled(db);
+    } catch (e) {
+      next(e);
+      return;
+    }
+    /* the site's pages read paymentsOn to show the "temporarily unavailable" notice */
+    const sw = { paymentsOn: on, ...(on ? {} : { message: PAYMENTS_OFF_MESSAGE }) };
     try {
       const config = loadTellerConfig(process.env);
       res.json({
+        ...sw,
         enabled: true,
         provider: "teller",
         baseUrl: config.apiBaseUrl,
@@ -122,7 +141,7 @@ export function paymentsRouter(db: Pool): Router {
       });
     } catch (error) {
       if (error instanceof TellerConfigurationError) {
-        res.json({ enabled: false, provider: "teller", reason: error.message });
+        res.json({ ...sw, enabled: false, provider: "teller", reason: error.message });
         return;
       }
       throw error;
@@ -133,6 +152,7 @@ export function paymentsRouter(db: Pool): Router {
   router.post("/teller/checkout", authenticate, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = requireUser(req);
+      if (await refuseWhenOff(res)) return;
       if (await partnerDepositsOff(db, user.id)) {
         res.status(403).json({ error: "feature_off", message: "Deposits are switched off for your partner account. Contact support." });
         return;
@@ -198,6 +218,7 @@ export function paymentsRouter(db: Pool): Router {
   router.post("/teller/momo", authenticate, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = requireUser(req);
+      if (await refuseWhenOff(res)) return;
       if (await partnerDepositsOff(db, user.id)) {
         res.status(403).json({ error: "feature_off", message: "Deposits are switched off for your partner account. Contact support." });
         return;

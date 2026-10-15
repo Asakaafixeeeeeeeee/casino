@@ -2868,6 +2868,84 @@
     loadLotto(true);
   }
 
+  /* ================= TheTeller Payment Settings ================= */
+  /* the main admin's ON/OFF switch for new payments, the merchant id and the connection; API keys and passwords never
+     reach this page (the server sends only whether each one is set) */
+  const tp = { loading: false, last: null, test: null };
+  const TP_CONN = { connected: ["Connected", "ok"], unreachable: ["Not reachable", "bad"], not_configured: ["Not configured", "bad"] };
+  function renderPaymentSettings(d) {
+    const on = d.payments_enabled;
+    const t = d.teller;
+    const c = tp.test ? Object.assign({}, d.connection, tp.test, { status: tp.test.reachable ? "connected" : (t.configured ? "unreachable" : "not_configured") }) : d.connection;
+    const conn = TP_CONN[c.status] || [c.status, ""];
+    const secret = (set) => set ? '<span class="adm-tp-secret">' + U.icon("shield") + "Set · hidden</span>" : '<span class="adm-tp-missing">Not set</span>';
+    const h = d.last_24h;
+    panelOf("payments").innerHTML =
+      '<section class="adm-card adm-tp-hero ' + (on ? "is-on" : "is-off") + '">' +
+        '<div class="adm-studio-head"><div><strong>Payments are ' + (on ? "ON" : "OFF") + "</strong><small>" +
+          (on ? "All TheTeller payments work normally: players can deposit by mobile money, Paybill and card."
+            : "No one can start a new payment anywhere on the website. Payments already started are still checked with TheTeller and credited.") + "</small></div>" +
+        '<label class="adm-switch adm-tp-switch"><input type="checkbox" data-pay-switch' + (on ? " checked" : "") + ' aria-label="TheTeller payments on or off"><span aria-hidden="true"></span></label></div>' +
+        (on ? "" : '<div class="adm-tp-notice"><span>Players see</span><p>' + esc(d.off_message) + "</p></div>") +
+        '<p class="adm-note">' + (d.updated_by ? "Last changed " + when(d.updated_at) + " by " + esc(d.updated_by) : "Never changed (on by default)") +
+          ". The switch stays as you set it until an admin changes it.</p></section>" +
+      '<section class="adm-card"><div class="adm-mines-card-head"><strong>TheTeller account</strong>' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-tp-test>' + U.icon("refresh") + "Test connection</button></div>" +
+        '<div class="adm-mines-meta adm-tp-meta">' +
+          avStat("Merchant ID", t.merchant_id ? esc(t.merchant_id) + (t.merchant_id_looks_valid ? "" : ' <small class="adm-tp-missing">check format</small>') : '<span class="adm-tp-missing">Not set</span>') +
+          avStat("Payment status", on ? "ON — accepting payments" : "OFF — paused by admin", on ? "in" : "bad") +
+          avStat("Connection", pill(conn[0], conn[1]) + (c.http ? ' <small class="adm-note">HTTP ' + c.http + " · " + c.ms + " ms</small>" : c.error ? ' <small class="adm-note">' + esc(c.error) + "</small>" : "")) +
+          avStat("Mode", t.mode === "test" ? "Sandbox (test)" : "Live") +
+          avStat("API username", secret(t.secrets.api_username)) +
+          avStat("API key", secret(t.secrets.api_key)) +
+          avStat("Payout passcode", secret(t.secrets.payout_passcode)) +
+          avStat("Last confirmed payment", c.last_confirmed_at ? ago(c.last_confirmed_at) : "none yet") +
+        "</div>" +
+        (t.configured ? "" : '<p class="adm-note adm-tp-missing">Missing on the asakaa-balance service in Render: <b>' + esc(t.missing.join(", ")) + "</b>.</p>") +
+        '<p class="adm-note">API keys and passwords are kept on the server (Render environment variables) and are never shown here. ' +
+          "“Connected” means TheTeller's server answered; the last confirmed payment shows the keys are being accepted.</p></section>" +
+      '<section class="adm-card"><h3 class="adm-h">Last 24 hours</h3><div class="adm-mines-meta">' +
+        avStat("Confirmed", count(h.confirmed), "in") + avStat("Amount confirmed", money(h.confirmed_amount)) +
+        avStat("Pending", count(h.pending)) + avStat("Failed", count(h.failed), h.failed ? "bad" : "") + "</div>" +
+        '<p class="adm-note">' + count(d.waiting_to_settle) + " payment(s) waiting for TheTeller's answer. Turning payments OFF never stops these: " +
+        "they keep being verified every minute and are credited once TheTeller confirms them. See <b>Recent deposits</b> for each one.</p></section>";
+  }
+  async function loadPaymentSettings(fresh) {
+    if (tp.loading || state.tab !== "payments") return;
+    if (fresh) { panelOf("payments").innerHTML = loading; tp.test = null; }
+    tp.loading = true;
+    const r = await api("/payment-settings");
+    tp.loading = false;
+    if (state.tab !== "payments") return;
+    if (!r.ok) return flash("error", errText(r, "Couldn't load the payment settings."));
+    tp.last = r.data;
+    renderPaymentSettings(r.data);
+  }
+  async function paymentSwitch(input) {
+    const on = input.checked;
+    const ok = on
+      ? await ask({ title: "Turn payments ON?", text: "Players can deposit again with TheTeller (mobile money, Paybill and card).", yes: "Turn ON" })
+      : await ask({ title: "Turn payments OFF?", text: "No one can start a new payment anywhere on the website. Players see: “" + esc(tp.last ? tp.last.off_message : "Payments are temporarily unavailable. Please try again later.") +
+          "” Payments already started are still verified and credited.", yes: "Turn OFF", danger: true });
+    if (ok === null) { input.checked = !on; return; }
+    input.disabled = true;
+    const r = await api("/payment-settings", { enabled: on });
+    input.disabled = false;
+    if (!r.ok) { input.checked = !on; return flash("error", errText(r, "Couldn't change it.")); }
+    flash("ok", "TheTeller payments are now <b>" + (on ? "ON" : "OFF") + "</b>.");
+    refreshBadges();
+    loadPaymentSettings(false);
+  }
+  async function paymentTest(btn) {
+    btn.disabled = true;
+    const r = await api("/payment-settings/test", {});
+    btn.disabled = false;
+    if (!r.ok) return flash("error", errText(r, "Couldn't test the connection."));
+    tp.test = r.data;
+    flash(r.data.reachable ? "ok" : "error", r.data.reachable ? "TheTeller answered in " + r.data.ms + " ms." : "TheTeller didn't answer: " + esc(r.data.error || "unknown error") + ".");
+    if (tp.last) renderPaymentSettings(tp.last);
+  }
+
   /* ================= sections, menu, events, badges ================= */
   /* ================= Recent deposits ================= */
   const dep = { status: "all", q: "", timer: 0 };
@@ -3019,7 +3097,7 @@
     if (r.ok) loadRisk(true);
   }
 
-  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, deposits: loadDeposits, games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), lotto: () => loadLotto(true), partners: loadPartners, withdrawals: loadWithdrawals, risk: loadRisk, reviews: loadReviews, support: () => loadSupport() };
+  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, deposits: loadDeposits, payments: () => loadPaymentSettings(true), games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), lotto: () => loadLotto(true), partners: loadPartners, withdrawals: loadWithdrawals, risk: loadRisk, reviews: loadReviews, support: () => loadSupport() };
   const ADD_MONEY = '<button class="btn btn-primary btn-sm" type="button" data-credit>' + U.icon("plus") + "Add money</button>";
   /* each section's title, a line on what it's for, and its buttons */
   const SECTIONS = {
@@ -3027,6 +3105,7 @@
     players: { title: "Players", lead: "Find a player by name, number or id to see their money, bets and account.", actions: ADD_MONEY },
     money: { title: "Money", lead: "Every deposit, withdrawal, bet and adjustment as it happens." },
     deposits: { title: "Recent deposits", lead: "Every deposit attempt — successful, pending and failed — newest first. Search by player, and filter by status. Separate from withdrawals." },
+    payments: { title: "TheTeller Payment Settings", lead: "Switch TheTeller payments ON or OFF for the whole website, and check the merchant ID and the connection. OFF stops new payments only; payments already started are still verified and credited. API keys and passwords stay hidden." },
     withdrawals: { title: "Withdrawals", lead: "Players' requests to cash out. Send the money by hand, then Approve marks it paid; Reject returns it to the player's balance." },
     games: { title: "Games", lead: "Manage every game: switch it on or off, choose whether it offers free play (same odds as real money) and a strip of real big wins, pause and resume it, set bet limits and round timing, and watch live play, statistics and players' wins and losses. Results are drawn by the server and can't be seen or changed before a round ends." },
     risk: { title: "Risk management", lead: "Each player's deposits, winnings, withdrawals and net; per-player deposit tiers and bet limits (set from a player's profile); and alerts for big payouts, big winners and failed-deposit bursts. Limits are told to the player and never touch a balance, a win or a result." },
@@ -3065,6 +3144,10 @@
     set("reviews", w.reviews || 0);
     set("lotto", w.lotto || 0);
     set("support", w.support || 0);
+    /* payments switched off: the menu says so */
+    const pb = document.querySelector('[data-badge="payments"]');
+    pb.hidden = r.data.paymentsOn !== false;
+    pb.textContent = "OFF";
     /* on a phone the menu button carries a dot while anything is waiting */
     $("admMenuDot").hidden = !((w.withdrawals || 0) + (w.partners || 0) + (w.partnerPayouts || 0) + (w.support || 0));
     /* the overview's "needs your attention" cards follow the same counts */
@@ -3114,6 +3197,8 @@
 
   document.querySelector(".adm-wrap").addEventListener("click", (e) => {
     if (e.target.closest("[data-av-toggle]")) return aviatorToggle();
+    const tpt = e.target.closest("[data-tp-test]");
+    if (tpt) return paymentTest(tpt);
     if (e.target.closest("[data-lt-toggle]")) return lottoToggle();
     if (e.target.closest("[data-lt-sales]")) return lottoSales();
     const ltRel = e.target.closest("[data-lt-release]");
@@ -3199,6 +3284,8 @@
     if (flsw) return flyerToggle(flsw);
     const gf = e.target.closest("input[data-gflag]");
     if (gf) return gameFlag(gf);
+    const psw = e.target.closest("input[data-pay-switch]");
+    if (psw) return paymentSwitch(psw);
     const sw = e.target.closest(".adm-switch input[data-kind]");
     if (!sw) return;
     const on = sw.checked;

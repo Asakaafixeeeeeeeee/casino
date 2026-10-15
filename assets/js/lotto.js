@@ -1,6 +1,7 @@
 /* WIN B Lotto (lotto.html). The server (backend games/lotto.ts) holds the draws, sells the tickets, draws the winning
    numbers from each draw's seed and pays the winners; this page shows the draws taking bets, lets the player build a
-   Direct, Perm or Banker ticket, confirm it and buy it, and lists their tickets and the published results. */
+   Direct, Perm or Banker ticket, confirm it and buy it, and lists their tickets and the published results. Above it, the
+   welcome slides and below, the verified winners (real winning tickets of released draws only, by masked number). */
 (function () {
   "use strict";
   const U = window.VBUtil;
@@ -15,6 +16,9 @@
   }) + " GMT" : "—";
   const choose = (n, k) => { if (k < 0 || k > n) return 0; let r = 1; for (let i = 0; i < k; i++) r = (r * (n - i)) / (i + 1); return Math.round(r); };
   const chance = (k) => choose(5, k) / choose(90, k);
+  /* the 9 colour bands of real lotto balls: 1-10, 11-20, … 81-90 */
+  const band = (n) => "lt-c" + Math.min(8, Math.floor((Number(n) - 1) / 10));
+  const ballHtml = (n, extra, attrs) => `<span class="lt-ball ${band(n)}${extra || ""}"${attrs || ""}><i>${n}</i></span>`;
 
   const state = {
     st: null, offset: 0, drawId: null, type: "DIRECT", permSize: 2, picks: [], banker: null, againstAll: false,
@@ -25,7 +29,7 @@
   /* ---------------- bet types and the board ---------------- */
   const board = $("ltBoard");
   board.innerHTML = Array.from({ length: 90 }, (_, i) =>
-    `<button type="button" class="lt-num" data-n="${i + 1}" aria-pressed="false">${i + 1}</button>`).join("");
+    `<button type="button" class="lt-num ${band(i + 1)}" data-n="${i + 1}" aria-pressed="false"><i>${i + 1}</i></button>`).join("");
 
   function offered() {
     const bt = (state.st && state.st.bet_types) || { direct: [1, 2, 3, 4, 5], perm: [2, 3], banker: true };
@@ -95,9 +99,9 @@
     });
     const s = shape();
     const balls = [];
-    if (state.type === "BANKER" && state.banker) balls.push(`<span class="lt-ball is-banker" title="Banker">${state.banker}</span>`);
+    if (state.type === "BANKER" && state.banker) balls.push(ballHtml(state.banker, " is-banker", ' title="Banker"'));
     if (state.type === "BANKER" && state.againstAll) balls.push('<span class="lt-all-tag">+ all 89 numbers</span>');
-    else s.picks.forEach((n) => balls.push(`<span class="lt-ball">${n}</span>`));
+    else s.picks.forEach((n) => balls.push(ballHtml(n)));
     $("ltPicked").innerHTML = balls.length ? balls.join("") : '<span class="lt-empty">Tap numbers on the board</span>';
     paintSlip();
   }
@@ -237,6 +241,7 @@
     const first = !state.st;
     state.st = r.data;
     state.offset = new Date(r.data.now).getTime() - Date.now();
+    hero.refresh(r.data);
     if (!state.st.draws.some((d) => d.id === state.drawId)) state.drawId = state.st.draws[0] ? state.st.draws[0].id : null;
     paintDraw();
   }
@@ -261,7 +266,7 @@
 
   /* ---------------- results and my tickets ---------------- */
   function ballsHtml(ns, cls, animate) {
-    return ns.map((n, i) => `<span class="lt-ball ${cls}${animate ? " lt-pop" : ""}" style="${animate ? `animation-delay:${i * 0.28}s` : ""}">${n}</span>`).join("");
+    return ns.map((n, i) => ballHtml(n, " " + cls + (animate ? " lt-pop" : ""), animate ? ` style="animation-delay:${i * 0.32}s"` : "")).join("");
   }
   function paintResults() {
     const list = (state.st && state.st.results) || [];
@@ -280,7 +285,7 @@
   const ST_LABEL = { ACTIVE: "Waiting for results", WON: "Won", LOST: "Lost", REFUNDED: "Refunded" };
   function ticketHtml(t) {
     const drawn = t.numbers || null;
-    const ball = (n, extra) => `<span class="lt-ball sm${extra || ""}${drawn ? (drawn.includes(n) ? " is-drawn" : " is-miss") : ""}">${n}</span>`;
+    const ball = (n, extra) => ballHtml(n, " sm" + (extra || "") + (drawn ? (drawn.includes(n) ? " is-drawn" : " is-miss") : ""));
     const balls = (t.banker ? ball(t.banker, " is-banker") : "") +
       (t.bet_type === "BANKER" && t.picks.length >= 89 ? '<span class="lt-all-tag">+ all 89</span>' : t.picks.map((n) => ball(n)).join(""));
     const cls = t.status.toLowerCase();
@@ -333,8 +338,8 @@
     const d = draw();
     const unit = Number(stakeIn.value) || 0;
     const mult = state.st.multipliers[s.size];
-    const balls = (state.banker && state.type === "BANKER" ? `<span class="lt-ball is-banker">${state.banker}</span>` : "") +
-      (state.type === "BANKER" && state.againstAll ? '<span class="lt-all-tag">+ all 89</span>' : s.picks.map((n) => `<span class="lt-ball">${n}</span>`).join(""));
+    const balls = (state.banker && state.type === "BANKER" ? ballHtml(state.banker, " is-banker") : "") +
+      (state.type === "BANKER" && state.againstAll ? '<span class="lt-all-tag">+ all 89</span>' : s.picks.map((n) => ballHtml(n)).join(""));
     return `<div class="lt-ticket lt-ticket-big">
       <div class="lt-ticket-head"><span class="lt-ticket-brand">WIN B LOTTO</span><span>${esc(s.label)}</span></div>
       <div class="lt-ticket-draw">${esc(d.name)} · ${esc(when(d.draw_at))}</div>
@@ -390,10 +395,170 @@
     }
   });
 
+
+  /* ---------------- the welcome slides ---------------- */
+  /* they slide by themselves (paused while hovered, focused or off screen); swipe or use the arrows */
+  const hero = (function () {
+    const root = $("ltHero");
+    if (!root) return { refresh() {} };
+    const track = $("ltHeroTrack");
+    const bar = $("ltHeroBar");
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const DUR = 6500;
+    let idx = 0, timer = 0, paused = false, visible = true;
+    const slides = () => Array.from(track.querySelectorAll(".lt-slide")).filter((s) => !s.hidden);
+    function restartBar() {
+      bar.classList.remove("run");
+      void bar.offsetWidth; /* restarts the progress animation */
+      bar.style.setProperty("--dur", DUR + "ms");
+      if (!reduce) bar.classList.add("run");
+    }
+    function go(to, dir) {
+      const list = slides();
+      if (!list.length) return;
+      const next = ((to % list.length) + list.length) % list.length;
+      const cur = list[idx] || list[0];
+      if (next === idx && cur.classList.contains("is-active")) { schedule(); return; }
+      list.forEach((s) => s.classList.toggle("from-left", dir < 0));
+      cur.classList.remove("is-active");
+      cur.classList.add("is-leaving");
+      setTimeout(() => cur.classList.remove("is-leaving"), 850);
+      idx = next;
+      list[idx].classList.add("is-active");
+      list.forEach((s, i) => s.setAttribute("aria-label", (i + 1) + " of " + list.length));
+      schedule();
+    }
+    function schedule() {
+      clearTimeout(timer);
+      restartBar();
+      if (reduce) return;
+      timer = setTimeout(function tickSlide() {
+        if (paused || !visible || document.hidden) { timer = setTimeout(tickSlide, 800); return; }
+        go(idx + 1, 1);
+      }, DUR);
+    }
+    const pause = (on) => { paused = on; root.classList.toggle("is-paused", on); };
+    root.addEventListener("mouseenter", () => pause(true));
+    root.addEventListener("mouseleave", () => pause(false));
+    root.addEventListener("focusin", () => pause(true));
+    root.addEventListener("focusout", () => pause(false));
+    root.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-hero]");
+      if (b) go(idx + Number(b.dataset.hero), Number(b.dataset.hero));
+    });
+    root.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight") go(idx + 1, 1);
+      if (e.key === "ArrowLeft") go(idx - 1, -1);
+    });
+    /* swipe */
+    let sx = null, sy = 0;
+    root.addEventListener("pointerdown", (e) => { if (e.pointerType !== "mouse") { sx = e.clientX; sy = e.clientY; } });
+    root.addEventListener("pointerup", (e) => {
+      if (sx === null) return;
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      sx = null;
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) go(idx + (dx < 0 ? 1 : -1), dx < 0 ? 1 : -1);
+    });
+    root.addEventListener("pointercancel", () => { sx = null; });
+    if ("IntersectionObserver" in window) new IntersectionObserver((es) => { visible = es[0].isIntersecting; }).observe(root);
+    schedule();
+
+    /* the slides' real figures, from the server's state */
+    function refresh(st) {
+      const fill = (k, html) => root.querySelectorAll('[data-fill="' + k + '"]').forEach((el) => (el.innerHTML = html));
+      if (st.multipliers && st.multipliers[5]) fill("mult5", Number(st.multipliers[5]).toLocaleString("en-GH") + "×");
+      if (st.max_win) fill("maxwin", ghs(st.max_win));
+      const last = (st.results || []).find((d) => d.numbers && d.numbers.length);
+      const slide = root.querySelector("[data-needs-results]");
+      if (slide && last) {
+        fill("lastname", esc(last.name || "Latest draw") + " <b>results</b>");
+        fill("lastwhen", "Draw #" + last.id + " · " + esc(when(last.draw_at)) + ". Winning tickets from this draw have been paid.");
+        fill("lastballs", last.numbers.map((n) => ballHtml(n)).join(""));
+        slide.hidden = false;
+      }
+    }
+    return { refresh };
+  })();
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-open-rules]")) openRules();
+    if (e.target.closest("[data-show-results]")) {
+      document.querySelector('[data-lt-tab="results"]').click();
+      $("ltResults").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+
+  /* ---------------- verified winners ---------------- */
+  /* only real winning tickets the server settled in released draws, by masked number; nothing here is made up */
+  const win = { data: null, tab: "top", timer: 0, paused: false };
+  const dateOnly = (iso) => new Date(iso).toLocaleDateString("en-GB", { timeZone: "Africa/Accra", day: "numeric", month: "short", year: "numeric" });
+  function winCard(w) {
+    return '<article class="lt-win-card">' +
+      '<div class="lt-win-top"><span class="lt-verified">' + U.icon("shield") + "Verified win</span>" +
+      '<span class="lt-win-draw">Draw #' + w.draw_id + "</span></div>" +
+      '<div class="lt-win-who"><span class="lt-win-avatar">' + U.icon("crown") + "</span>" +
+      '<div><div class="lt-win-player">' + esc(w.player) + '</div><div class="lt-win-meta">' + esc(dateOnly(w.draw_at)) + "</div></div></div>" +
+      '<div class="lt-win-amount">' + ghs(w.payout) + "</div>" +
+      '<div class="lt-row-balls" aria-label="Matched numbers">' + w.matched.map((n) => ballHtml(n, " is-drawn")).join("") + "</div>" +
+      '<div class="lt-win-meta">' + esc(w.bet) + " · " + xFmt(w.x) + " · stake " + ghs(w.stake) +
+      (w.winning_lines > 1 ? " · " + w.winning_lines + " winning lines" : "") + (w.draw_name ? " · " + esc(w.draw_name) : "") + "</div></article>";
+  }
+  /* a promotion card: clearly labelled, never presented as a winner */
+  const PROMO = '<article class="lt-win-card is-promo"><span class="lt-promo-tag">Promotion</span><h3>Your numbers could be next</h3>' +
+    "<p>Pick 1 to 5 numbers, confirm your ticket and watch the draw. Winning tickets are paid straight to your balance.</p>" +
+    '<a class="lt-btn-gold" href="#ltPick">Pick your numbers</a></article>';
+  function paintWinners() {
+    const d = win.data;
+    const list = d ? (win.tab === "top" ? d.top : d.latest) : [];
+    const totals = $("ltWinTotals");
+    totals.hidden = !d || !d.totals.winners;
+    if (d && d.totals.winners) {
+      totals.innerHTML = "<b>" + d.totals.winners.toLocaleString("en-GH") + "</b> winning ticket" + (d.totals.winners === 1 ? "" : "s") +
+        " paid <b>" + ghs(d.totals.paid) + "</b> across " + d.totals.draws + " draw" + (d.totals.draws === 1 ? "" : "s") + " so far.";
+    }
+    $("ltWinTrack").innerHTML = (list.length ? list.map(winCard).join("")
+      : '<article class="lt-win-card is-empty"><span class="lt-verified">' + U.icon("shield") + "Verified only</span><h3>No winners yet</h3>" +
+        "<p>Winning tickets appear here as soon as a draw's results are released and the winners are paid. We never show made-up winners.</p></article>") + PROMO;
+    $("ltWinViewport").scrollLeft = 0;
+  }
+  async function loadWinners() {
+    const r = await U.paymentApi(GAME + "/winners");
+    if (r.ok && r.data && Array.isArray(r.data.top)) win.data = r.data;
+    else if (!win.data) win.data = { top: [], latest: [], totals: { winners: 0, paid: 0, draws: 0 } };
+    paintWinners();
+  }
+  function moveWinners(dir) {
+    const vp = $("ltWinViewport");
+    const card = vp.querySelector(".lt-win-card");
+    if (!card) return;
+    const step = card.getBoundingClientRect().width + 12;
+    const end = vp.scrollWidth - vp.clientWidth - 4;
+    if (dir > 0 && vp.scrollLeft >= end) vp.scrollTo({ left: 0, behavior: "smooth" });
+    else vp.scrollBy({ left: dir * step, behavior: "smooth" });
+  }
+  document.querySelector(".lt-win-tabs").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-wtab]");
+    if (!b) return;
+    win.tab = b.dataset.wtab;
+    document.querySelectorAll("[data-wtab]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+    paintWinners();
+  });
+  document.querySelector(".lt-win-nav").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-wmove]");
+    if (b) moveWinners(Number(b.dataset.wmove));
+  });
+  const winBox = document.querySelector(".lt-winners");
+  ["mouseenter", "focusin", "touchstart"].forEach((ev) => winBox.addEventListener(ev, () => { win.paused = true; }, { passive: true }));
+  ["mouseleave", "focusout"].forEach((ev) => winBox.addEventListener(ev, () => { win.paused = false; }));
+  if (!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) {
+    setInterval(() => { if (!win.paused && !document.hidden && !document.querySelector("dialog[open]")) moveWinners(1); }, 4500);
+  }
+
   /* ---------------- start ---------------- */
   load();
   loadMine();
+  loadWinners();
   U.refreshBalance();
   setInterval(tick, 1000);
   setInterval(() => { if (!document.hidden && !document.querySelector("dialog[open]")) { load(); loadMine(); } }, 30000);
+  setInterval(() => { if (!document.hidden) loadWinners(); }, 120000);
 })();

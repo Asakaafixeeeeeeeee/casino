@@ -3,6 +3,7 @@
      number, declined for a number ending 0000, and for a number ending 9999 the gateway never answers (the
      deposit stays pending and only a status check decides it). The approved amount is the amount requested.
    - GET  /v1.1/users/transactions/:id/status: the last verdict for that transaction, or pending.
+   - POST /approve/:id: approves a hosted checkout later, as if the customer paid on the checkout page.
    - GET  /fx: USD→GHS for conversions.  GET /health: liveness.
    - GET  /requests: every request seen, so a test can assert what the balance service sent. */
 import http from "node:http";
@@ -29,7 +30,7 @@ http.createServer(async (req, res) => {
   if (url.pathname === "/fx") return send(res, 200, { result: "success", rates: { GHS: 11.62 } });
   /* hosted checkout: hands back a checkout page on the stub (never the real gateway) */
   if (req.method === "POST" && url.pathname === "/initiate") {
-    verdicts.set(String(body.transaction_id), { status: "pending", code: "111", reason: "Waiting for the customer" });
+    verdicts.set(String(body.transaction_id), { status: "pending", code: "111", reason: "Waiting for the customer", amount: body.amount });
     return send(res, 200, { status: "success", code: "200", token: "stub-" + body.transaction_id, checkout_url: `http://127.0.0.1:${PORT}/pay/${body.transaction_id}` });
   }
 
@@ -43,6 +44,13 @@ http.createServer(async (req, res) => {
     verdicts.set(String(body.transaction_id), verdict);
     setTimeout(() => send(res, 200, verdict), 800);
     return;
+  }
+  /* test hook: the customer finishes paying on the hosted checkout page later (the status check then says approved) */
+  const approve = /^\/approve\/(\d+)$/.exec(url.pathname);
+  if (req.method === "POST" && approve) {
+    const v = verdicts.get(approve[1]) || {};
+    verdicts.set(approve[1], { status: "approved", code: "000", reason: "Transaction successful", transaction_id: approve[1], amount: v.amount });
+    return send(res, 200, { ok: true });
   }
   const status = /^\/v1\.1\/users\/transactions\/([^/]+)\/status$/.exec(url.pathname);
   if (status) return send(res, 200, verdicts.get(decodeURIComponent(status[1])) || { status: "pending", code: "111", reason: "Pending" });
