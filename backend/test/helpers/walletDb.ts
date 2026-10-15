@@ -50,6 +50,7 @@ const MIGRATIONS = [
   "041_betting_sessions.sql",
   "042_deposit_rejections.sql",
   "043_withdrawal_deposit_requirement.sql",
+  "044_existing_withdrawal_rule_notice.sql",
 ];
 
 // The production code takes a pg Pool; PGlite is one in-process Postgres connection.

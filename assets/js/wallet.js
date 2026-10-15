@@ -542,9 +542,17 @@
       const deposits = d.deposit_requirement || {};
       const depositBox = $("wdDepositRequirement");
       if (depositBox) {
-        depositBox.hidden = !deposits.enabled || !deposits.triggered || deposits.eligible;
+        depositBox.hidden = !deposits.enabled || !deposits.show_notice;
         if (!depositBox.hidden) {
-          depositBox.innerHTML = "<strong>Withdrawal deposit requirement</strong><p>" + U.esc(deposits.message || "") + "</p>";
+          const explanation = deposits.triggered
+            ? (deposits.eligible
+              ? "You have completed the required qualifying deposits. Withdrawal deposit eligibility is unlocked."
+              : (deposits.message || "Complete the required qualifying deposits before withdrawing."))
+            : (deposits.policy_message || "The requirement activates after a qualifying deposit, casino bet and win.");
+          depositBox.innerHTML = "<strong>Withdrawal deposit requirement</strong><p>" + U.esc(explanation) + "</p>" +
+            "<p>Qualifying deposits completed: " + U.esc(String(deposits.completed)) + " of " +
+            U.esc(String(deposits.required)) + " (minimum GHS " + U.money(deposits.min_deposit) + " each).</p>" +
+            (!deposits.triggered ? "<p>This restriction applies after your first qualifying deposit, casino bet and win.</p>" : "");
         }
       }
       if (deposits.enabled && deposits.triggered && !deposits.eligible) {

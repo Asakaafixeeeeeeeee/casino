@@ -49,6 +49,7 @@ const migrationFiles = [
   "041_betting_sessions.sql",
   "042_deposit_rejections.sql",
   "043_withdrawal_deposit_requirement.sql",
+  "044_existing_withdrawal_rule_notice.sql",
 ];
 
 if (!process.env.DATABASE_URL) {

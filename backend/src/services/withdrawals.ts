@@ -2,7 +2,7 @@ import { logAction } from "./admin.js";
 import { notifyPendingWithdrawal } from "./notify.js";
 import type { Pool, PoolClient } from "pg";
 import { completeWithdrawal, refundWithdrawal, withdraw } from "./balanceService.js";
-import { getMoneyRules, playthroughMessage, playthroughOf, withdrawalDepositProgress } from "./moneyRules.js";
+import { fillMessage, getMoneyRules, playthroughMessage, playthroughOf, withdrawalDepositProgress } from "./moneyRules.js";
 import {
   checkTellerStatus,
   networkForPhone,
@@ -63,11 +63,16 @@ export async function withdrawalView(db: Pool, userId: string) {
     deposit_requirement: {
       enabled: rules.withdrawal_deposit_rule_enabled,
       triggered: depositProgress.triggered,
+      show_notice: depositProgress.show_notice,
       eligible: depositProgress.eligible,
       required: depositProgress.required,
       completed: depositProgress.completed,
       remaining: depositProgress.remaining,
+      min_deposit: rules.min_deposit,
       message: depositProgress.message,
+      policy_message: fillMessage(rules.policy_deposit_withdrawal, {
+        min: rules.min_deposit, required: rules.withdrawal_required_deposits,
+      }),
     },
     withdraw_info: rules.withdraw_info,
   };

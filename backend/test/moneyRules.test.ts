@@ -15,6 +15,7 @@ import { paymentsRouter, RULES_NOT_ACCEPTED_MESSAGE } from "../src/routes/paymen
 import { adminRouter } from "../src/routes/admin.js";
 import { TellerConfigurationError } from "../src/services/teller.js";
 import { setupWalletDb } from "./helpers/walletDb.js";
+import { ensureWalletAccount } from "../src/services/accountLink.js";
 
 const ADMIN = "0209999001";
 const PHONE = "0241234194";
@@ -345,6 +346,20 @@ test("Withdrawal deposit rule activates after a qualifying deposit, stake and wi
   progress = await withdrawalDepositProgress(env.db, env.userId);
   assert.deepEqual([progress.completed, progress.remaining, progress.eligible], [3, 0, true]);
   await requestWithdrawal(env.db, { id: env.userId, phone: PHONE }, 20, "wd:" + key());
+});
+
+test("Existing accounts are recorded at migration and shown the withdrawal rule before activation", async () => {
+  const env = await setupWalletDb({ stopBefore: "044_existing_withdrawal_rule_notice.sql" });
+  await env.runMigration("044_existing_withdrawal_rule_notice.sql");
+  const existing = await withdrawalDepositProgress(env.db, env.userId);
+  assert.equal(existing.show_notice, true);
+  assert.equal(existing.triggered, false);
+  assert.equal(existing.eligible, true);
+  assert.equal(existing.completed, 0);
+
+  const newUserId = await ensureWalletAccount(env.db, "new-account-after-rule", "new tester");
+  const newUser = await withdrawalDepositProgress(env.db, newUserId);
+  assert.equal(newUser.show_notice, false, "new users see no restriction notice before the rule activates");
 });
 
 test("Turning off the withdrawal deposit rule permits withdrawal even after its trigger", async () => {
