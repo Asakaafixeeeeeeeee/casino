@@ -18,7 +18,7 @@
   let MAX_CRASH = 10000;
   let MIN_BET = 1;
   let MAX_BET = 1000;
-  const FUN_CREDITS = 3000;
+  const FUN_CREDITS = [1000, 2000, 3000][Math.floor(Math.random() * 3)];
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* any crash title (listed under Live Casino) can be played here; unknown ids fall back to Rendo Crash */

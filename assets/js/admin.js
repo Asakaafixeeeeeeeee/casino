@@ -2738,7 +2738,7 @@
   /* the daily 5/90 draw: schedule, payouts and limits; every draw with its tickets; a draw's numbers once betting has
      closed; Release results pays the winners, Cancel (only while betting is open) refunds every ticket. The settings
      form is drawn once per visit so the refresh never wipes what's being typed. */
-  const lt = { loading: false, last: null, tickets: null };
+  const lt = { loading: false, last: null, tickets: null, active: null, activeLoading: false, activePage: 1 };
   const LT_STATUS = { OPEN: ["Betting open", "live"], CLOSED: ["Drawn — waiting for release", "warn"], RELEASED: ["Results released", "ok"], CANCELLED: ["Cancelled — refunded", "bad"] };
   const ltBalls = (ns) => '<span class="lta-balls">' + ns.map((n) => '<span class="lta-ball">' + n + "</span>").join("") + "</span>";
   function ltForm(s) {
@@ -2760,7 +2760,7 @@
   function renderLotto(d) {
     const panel = panelOf("lotto");
     if (!panel.querySelector("#ltaDraws")) {
-      panel.innerHTML = '<div id="ltaKey"></div><div id="ltaTop"></div><div id="ltaDraws"></div><div id="ltaTickets"></div>' + ltForm(d.settings);
+      panel.innerHTML = '<div id="ltaKey"></div><div id="ltaTop"></div><div id="ltaActivePicks"></div><div id="ltaDraws"></div><div id="ltaTickets"></div>' + ltForm(d.settings);
     }
     const s = d.settings;
     $("ltaTop").innerHTML = '<section class="adm-card"><div class="adm-studio-head"><div><strong>Lotto is ' + (d.enabled ? "on" : "paused") + "</strong><small>" +
@@ -2804,6 +2804,34 @@
           "</td><td>" + (x.payout ? money(x.payout) : "—") + "</td><td>" + when(x.created_at) + "</td></tr>").join("") + "</tbody></table></div>"
         : '<p class="adm-note">No tickets in this draw.</p>') + "</section>";
   }
+  function renderLottoActivePicks() {
+    const host = $("ltaActivePicks");
+    const d = lt.active;
+    if (!host || !d) return;
+    const rows = d.tickets.map((x) => "<tr><td>" + esc(x.name) + "</td><td>" + esc(x.phone || "—") + "</td><td>#" +
+      count(x.draw_id) + " " + esc(x.draw_name || "") + "</td><td>" +
+      (x.banker ? '<span class="lta-balls"><span class="lta-ball lta-bank" title="Banker">' + x.banker + "</span></span> + " : "") +
+      (x.picks.length >= 89 ? "all 89" : ltBalls(x.picks)) + "</td><td>" + esc(x.bet || "Direct-" + x.picks.length) +
+      "</td><td>" + money(x.stake) + "</td><td>" + money(x.potential) + "</td><td>" + when(x.created_at) + "</td></tr>").join("");
+    host.innerHTML = '<section class="adm-card"><div class="adm-mines-card-head"><strong>Active user picks</strong><span class="adm-note">' +
+      count(d.totals.pending) + " active ticket(s) · page " + d.page + " of " + d.pages + "</span></div>" +
+      (rows ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Player</th><th>Phone</th><th>Draw</th><th>Selected numbers</th><th>Type</th><th>Stake</th><th>Potential</th><th>Bought</th></tr></thead><tbody>' +
+        rows + "</tbody></table></div>" : '<p class="adm-note">No active picks.</p>') +
+      (d.pages > 1 ? '<div class="adm-mines-card-head"><button class="btn btn-ghost btn-sm" type="button" data-lt-active-page="' + (d.page - 1) +
+        '"' + (d.page <= 1 ? " disabled" : "") + '>Previous</button><button class="btn btn-ghost btn-sm" type="button" data-lt-active-page="' +
+        (d.page + 1) + '"' + (d.page >= d.pages ? " disabled" : "") + '>Next</button></div>' : "") + "</section>";
+  }
+  async function loadLottoActive(page) {
+    if (lt.activeLoading || state.tab !== "lotto") return;
+    lt.activeLoading = true;
+    const r = await api("/lotto/tickets?" + new URLSearchParams({ status: "ACTIVE", page: String(page), page_size: "100" }));
+    lt.activeLoading = false;
+    if (!r.ok) return flash("error", errText(r, "Couldn't load active Lotto picks."));
+    if (state.tab !== "lotto" || !$("ltaActivePicks")) return;
+    lt.activePage = r.data.page;
+    lt.active = r.data;
+    renderLottoActivePicks();
+  }
   async function loadLotto(fresh) {
     if (lt.loading || state.tab !== "lotto") return;
     if (fresh) { panelOf("lotto").innerHTML = loading; lt.tickets = null; }
@@ -2815,6 +2843,7 @@
     lt.last = r.data;
     renderLotto(r.data);
     renderLottoTickets();
+    loadLottoActive(lt.activePage);
     loadLottoKey();
   }
   async function lottoTickets(id) {
@@ -3678,6 +3707,8 @@
     if (ltCan) return lottoCancel(ltCan.dataset.ltCancel);
     const ltTix = e.target.closest("[data-lt-tickets]");
     if (ltTix) return lottoTickets(ltTix.dataset.ltTickets);
+    const ltActivePage = e.target.closest("[data-lt-active-page]");
+    if (ltActivePage && !ltActivePage.disabled) return loadLottoActive(Number(ltActivePage.dataset.ltActivePage));
     if (e.target.closest("[data-lt-tickets-close]")) { lt.tickets = null; return renderLottoTickets(); }
     const copy = e.target.closest("[data-copy]");
     if (copy) return copyText(copy.dataset.copy);

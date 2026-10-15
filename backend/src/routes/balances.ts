@@ -19,7 +19,7 @@ import { Router } from "express";
 import type { Request, Response, NextFunction } from "express";
 import type { Pool } from "pg";
 import { getUserBalances } from "../services/balanceService.js";
-import { requireUser } from "../middleware/authenticate.js";
+import { isAdmin, requireUser } from "../middleware/authenticate.js";
 import { FeedbackError, listTransactions, saveFeedback } from "../services/accountActivity.js";
 import { requestWithdrawal, withdrawalView, WithdrawalError } from "../services/withdrawals.js";
 import { getLimits, LimitError, selfExclude, setLimits } from "../services/responsibleGaming.js";
@@ -72,7 +72,7 @@ export function balancesRouter(db: Pool): Router {
     try {
       const user = requireUser(req);
       res.setHeader("Cache-Control", "no-store");
-      res.json(await withdrawalView(db, user.id));
+      res.json(await withdrawalView(db, user.id, isAdmin(user)));
     } catch (e) {
       next(e);
     }
@@ -87,7 +87,7 @@ export function balancesRouter(db: Pool): Router {
         res.status(400).json({ error: "invalid_amount", message: "Enter an amount" });
         return;
       }
-      const w = await requestWithdrawal(db, user, amt, String(idempotency_key));
+      const w = await requestWithdrawal(db, user, amt, String(idempotency_key), isAdmin(user));
       res.status(201).json({ status: "requested", id: w.id, amount: amt, phone: user.phone });
     } catch (e) {
       if (e instanceof WithdrawalError) {

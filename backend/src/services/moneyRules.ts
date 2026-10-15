@@ -230,7 +230,7 @@ export async function withdrawalDepositProgress(
   rules?: MoneyRules
 ): Promise<WithdrawalDepositProgress> {
   const r = rules ?? await getMoneyRules(db);
-  const { rows } = await db.query<{ completed: string; triggered: boolean; legacy_user: boolean }>(
+  const { rows } = await db.query<{ completed: string; triggered: boolean }>(
     `WITH qualifying_deposits AS (
        SELECT j.id, j.created_at, min(e.id) AS entry_id, e.user_id
          FROM ledger_journal j
@@ -255,21 +255,16 @@ export async function withdrawalDepositProgress(
           WHERE (bj.created_at, bet.id) > (d.created_at, d.entry_id)
             AND (wj.created_at, win.id) > (bj.created_at, bet.id)
        ) AS triggered
-     ),
-     legacy AS (
-       SELECT EXISTS (SELECT 1 FROM withdrawal_deposit_notice_users WHERE user_id = $1) AS legacy_user
      )
-     SELECT progress.completed, activation.triggered, legacy.legacy_user
-       FROM progress CROSS JOIN activation CROSS JOIN legacy`,
+     SELECT progress.completed, activation.triggered FROM progress CROSS JOIN activation`,
     [userId, r.min_deposit]
   );
   const completed = Number(rows[0]?.completed ?? 0);
   const triggered = rows[0]?.triggered === true;
-  const showNotice = rows[0]?.legacy_user === true || triggered;
   const remaining = Math.max(0, r.withdrawal_required_deposits - completed);
   const eligible = !r.withdrawal_deposit_rule_enabled || !triggered || remaining === 0;
   return {
-    triggered, show_notice: showNotice, eligible, required: r.withdrawal_required_deposits, completed, remaining,
+    triggered, show_notice: r.withdrawal_deposit_rule_enabled && triggered, eligible, required: r.withdrawal_required_deposits, completed, remaining,
     message: r.withdrawal_deposit_rule_enabled && triggered && remaining > 0
       ? fillMessage(r.withdrawal_deposit_message, {
         min: r.min_deposit, required: r.withdrawal_required_deposits, completed, remaining,

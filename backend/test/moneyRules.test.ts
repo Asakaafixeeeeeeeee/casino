@@ -348,11 +348,11 @@ test("Withdrawal deposit rule activates after a qualifying deposit, stake and wi
   await requestWithdrawal(env.db, { id: env.userId, phone: PHONE }, 20, "wd:" + key());
 });
 
-test("Existing accounts are recorded at migration and shown the withdrawal rule before activation", async () => {
+test("The withdrawal rule notice appears only after the deposit-bet-win trigger", async () => {
   const env = await setupWalletDb({ stopBefore: "044_existing_withdrawal_rule_notice.sql" });
   await env.runMigration("044_existing_withdrawal_rule_notice.sql");
   const existing = await withdrawalDepositProgress(env.db, env.userId);
-  assert.equal(existing.show_notice, true);
+  assert.equal(existing.show_notice, false);
   assert.equal(existing.triggered, false);
   assert.equal(existing.eligible, true);
   assert.equal(existing.completed, 0);
@@ -360,6 +360,19 @@ test("Existing accounts are recorded at migration and shown the withdrawal rule 
   const newUserId = await ensureWalletAccount(env.db, "new-account-after-rule", "new tester");
   const newUser = await withdrawalDepositProgress(env.db, newUserId);
   assert.equal(newUser.show_notice, false, "new users see no restriction notice before the rule activates");
+});
+
+test("Admin withdrawal view and requests bypass only the deposit-count restriction", async () => {
+  const env = await fresh();
+  await saveMoneyRules(env.db, ADMIN, { withdrawal_deposit_rule_enabled: true });
+  await pay(env, 135);
+  await move(env, "BET_PLACED", 10);
+  await move(env, "BET_SETTLED", 30);
+  const view = await withdrawalView(env.db, env.userId, true);
+  assert.equal(view.deposit_requirement.show_notice, false);
+  assert.equal(view.deposit_requirement.eligible, true);
+  assert.equal(view.withdrawable, 30);
+  await requestWithdrawal(env.db, { id: env.userId, phone: PHONE }, 20, "wd-admin:" + key(), true);
 });
 
 test("Turning off the withdrawal deposit rule permits withdrawal even after its trigger", async () => {

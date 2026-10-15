@@ -136,6 +136,12 @@ test("Lotto: an admin's own draw opens and closes on time, can be paused, and it
   assert.deepEqual(all.totals, { tickets: 1, stakes: 4, potential: 4 * 360, won: 0, lost: 0, pending: 1, paid: 0 });
   assert.equal((await lottoPlacements(w.db, { q: "kofi" }, later)).tickets.length, 1, "search by player");
   assert.equal((await lottoPlacements(w.db, { q: t.ticket.code.toLowerCase() }, later)).tickets.length, 1, "search by ticket code");
+  const activeFirst = await lottoPlacements(w.db, { status: "ACTIVE", page: 1, page_size: 1 }, later);
+  const activeSecond = await lottoPlacements(w.db, { status: "ACTIVE", page: 2, page_size: 1 }, later);
+  assert.equal(activeFirst.totals.pending, 2);
+  assert.equal(activeFirst.tickets.length, 1);
+  assert.equal(activeSecond.tickets.length, 1);
+  assert.notEqual(activeFirst.tickets[0]!.code, activeSecond.tickets[0]!.code);
   assert.equal((await lottoPlacements(w.db, { period: "today" })).totals.tickets, 2, "tickets are stamped with the real time");
   assert.equal((await lottoPlacements(w.db, { period: "yesterday" })).totals.tickets, 0);
   await assert.rejects(previewLottoDraw(w.db, d.id, NOON + 4 * 3600e3), code("still_open"));

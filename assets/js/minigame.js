@@ -20,14 +20,14 @@
     });
   }
 
-  /* opts: prefix, gameId, minBet, tableMax, chips, funCredits,
+  /* opts: prefix, gameId, minBet, tableMax, chips,
      busy() — true while a round is being settled (no switching modes then), busyText,
      onChange() — repaint the game after the balance or mode changes from the menu or another tab,
      confettiFrom() — the element the confetti bursts from */
   function create(opts) {
     const $ = (name) => document.getElementById(opts.prefix + name);
     const params = new URLSearchParams(location.search);
-    const FUN_CREDITS = opts.funCredits || 3000;
+    const FUN_CREDITS = [1000, 2000, 3000][Math.floor(Math.random() * 3)];
     const MIN_BET = opts.minBet;
     const menu = $("Menu");
     const menuBtn = $("MenuBtn");

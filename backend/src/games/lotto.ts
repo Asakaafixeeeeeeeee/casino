@@ -761,10 +761,15 @@ export async function lottoPlacements(db: Pool, q: Record<string, unknown>, now 
     where.push(`(lower(coalesce(u.username, '')) LIKE ${p} OR lower(coalesce(u.full_name, '')) LIKE ${p} OR coalesce(u.phone, '') LIKE ${p} OR lower(coalesce(t.code, '')) LIKE ${p})`);
   }
   const w = where.length ? "WHERE " + where.join(" AND ") : "";
+  const pageSizeRaw = Number(q.page_size ?? 100);
+  const pageSize = Number.isInteger(pageSizeRaw) ? Math.max(1, Math.min(100, pageSizeRaw)) : 100;
+  const pageRaw = Number(q.page ?? 1);
+  const page = Number.isInteger(pageRaw) ? Math.max(1, Math.min(1_000_000, pageRaw)) : 1;
+  const offset = (page - 1) * pageSize;
   const from = `FROM lotto_tickets t JOIN users u ON u.id = t.user_id JOIN lotto_draws d ON d.id = t.draw_id ${w}`;
   const rows = (await db.query<TicketRow & { username: string | null; full_name: string | null; phone: string | null; draw_name: string; draw_at: Date; draw_status: string }>(
     `SELECT t.*, u.username, u.full_name, u.phone, d.name AS draw_name, d.draw_at, d.status AS draw_status ${from}
-      ORDER BY t.created_at DESC LIMIT 300`, args)).rows;
+      ORDER BY t.created_at DESC LIMIT $${args.length + 1} OFFSET $${args.length + 2}`, [...args, pageSize, offset])).rows;
   const all = (await db.query<TicketRow>(`SELECT t.* ${from}`, args)).rows;
   const views = all.map(ticketView);
   return {
@@ -782,5 +787,8 @@ export async function lottoPlacements(db: Pool, q: Record<string, unknown>, now 
       paid: round2(views.reduce((a, t) => a + t.payout, 0)),
     },
     shown: rows.length,
+    page,
+    page_size: pageSize,
+    pages: Math.max(1, Math.ceil(views.length / pageSize)),
   };
 }

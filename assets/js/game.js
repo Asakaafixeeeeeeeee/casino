@@ -136,7 +136,8 @@
   }
 
   /* ---- demo modal ---- */
-  const DEMO_CREDITS = 5000;
+  const DEMO_CREDIT_OPTIONS = [1000, 2000, 3000];
+  const randomDemoCredits = () => DEMO_CREDIT_OPTIONS[Math.floor(Math.random() * DEMO_CREDIT_OPTIONS.length)];
   const modal = document.getElementById("demo");
   const spinBtn = document.getElementById("spin");
   const stageIcon = document.getElementById("stageIcon");
@@ -147,7 +148,7 @@
   const page = Array.from(document.querySelectorAll(".site-header, main, .site-footer, .bottom-nav, .chat-fab, .chat-sheet"));
 
   let mode = "demo"; /* production game pages expose only the in-game demo play */
-  let credits = DEMO_CREDITS;
+  let credits = 1000;
   let spinning = false;
   let returnFocus = null;
 
@@ -186,7 +187,7 @@
       return;
     }
     mode = real ? "real" : "demo";
-    if (!real) credits = DEMO_CREDITS;
+    if (!real) credits = randomDemoCredits();
 
     document.getElementById("demoTitle").textContent = game.name + (real ? " — real play" : " — free play");
     document.getElementById("demoNote").textContent = real

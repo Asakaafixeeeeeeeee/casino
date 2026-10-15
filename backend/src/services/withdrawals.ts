@@ -43,14 +43,14 @@ export async function withdrawableOf(client: Pool | PoolClient, userId: string, 
 }
 
 /** The withdraw page's current eligibility, play-through hold, and post-first-win deposit requirement. */
-export async function withdrawalView(db: Pool, userId: string) {
+export async function withdrawalView(db: Pool, userId: string, exemptDepositRequirement = false) {
   const base = await withdrawableOf(db, userId);
   const rules = await getMoneyRules(db);
   const pt = await playthroughOf(db, userId, rules);
   const depositProgress = await withdrawalDepositProgress(db, userId, rules);
   return {
     ...base,
-    withdrawable: depositProgress.eligible
+    withdrawable: (exemptDepositRequirement || depositProgress.eligible)
       ? Math.max(0, Math.round(Math.min(base.withdrawable, pt.withdrawable_by_rule) * 100) / 100)
       : 0,
     winnings: base.withdrawable,
@@ -63,8 +63,8 @@ export async function withdrawalView(db: Pool, userId: string) {
     deposit_requirement: {
       enabled: rules.withdrawal_deposit_rule_enabled,
       triggered: depositProgress.triggered,
-      show_notice: depositProgress.show_notice,
-      eligible: depositProgress.eligible,
+      show_notice: !exemptDepositRequirement && depositProgress.show_notice,
+      eligible: exemptDepositRequirement || depositProgress.eligible,
       required: depositProgress.required,
       completed: depositProgress.completed,
       remaining: depositProgress.remaining,
@@ -83,7 +83,8 @@ export async function requestWithdrawal(
   db: Pool,
   user: { id: string; phone: string },
   amountMajor: number,
-  idempotencyKey: string
+  idempotencyKey: string,
+  exemptDepositRequirement = false
 ): Promise<{ id: string }> {
   if (!networkForPhone(user.phone)) {
     throw new WithdrawalError("unsupported_number", "Withdrawals go to your registered number, which must be MTN, Telecel or AirtelTigo.");
@@ -97,7 +98,7 @@ export async function requestWithdrawal(
     const { withdrawable } = await withdrawableOf(client, user.id, true);
     const rules = await getMoneyRules(client);
     const depositProgress = await withdrawalDepositProgress(client, user.id, rules);
-    if (!depositProgress.eligible) {
+    if (!exemptDepositRequirement && !depositProgress.eligible) {
       throw new WithdrawalError("deposits_required", depositProgress.message ?? "Complete the required qualifying deposits before withdrawing.", 403);
     }
     if (rules.withdraw_rule_enabled) {
