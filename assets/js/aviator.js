@@ -1189,13 +1189,19 @@
   let master = null;
   let engine = null;
   function unlockAudio() {
-    if (actx) return;
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    actx = new AC();
-    master = actx.createGain();
-    master.gain.value = soundOn ? 0.8 : 0;
-    master.connect(actx.destination);
+    if (!actx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      actx = new AC();
+      master = actx.createGain();
+      master.gain.value = soundOn ? 0.8 : 0;
+      master.connect(actx.destination);
+    }
+    if (actx.state === "suspended") {
+      actx.resume().then(() => {
+        if (soundOn && phase === "flying") sfx.engineStart();
+      }).catch((e) => console.warn("Aviator audio could not resume:", e));
+    } else if (soundOn && phase === "flying" && !engine) sfx.engineStart();
   }
   document.addEventListener("pointerdown", unlockAudio, { once: true });
   function noise(dur) {
@@ -1221,11 +1227,61 @@
   function stopEngine() {
     if (!engine) return;
     const t = actx.currentTime;
-    engine.gain.gain.cancelScheduledValues(t);
-    engine.gain.gain.setTargetAtTime(0, t, 0.08);
-    engine.osc.stop(t + 0.5);
-    engine.hum.stop(t + 0.5);
+    engine.bus.gain.cancelScheduledValues(t);
+    engine.bus.gain.setTargetAtTime(0, t, 0.12);
+    for (const source of engine.sources) source.stop(t + 0.65);
     engine = null;
+  }
+  function startEngine() {
+    if (!actx || !soundOn || engine) return;
+    const t = actx.currentTime;
+    const bus = actx.createGain();
+    bus.gain.setValueAtTime(0, t);
+    bus.gain.linearRampToValueAtTime(0.22, t + 0.9);
+    bus.connect(master);
+
+    const sources = [];
+    const base = 46;
+    for (const [multiple, type, level] of [[1, "sine", 0.42], [2, "triangle", 0.16], [3, "sine", 0.08], [4, "triangle", 0.035]]) {
+      const osc = actx.createOscillator();
+      const gain = actx.createGain();
+      osc.type = type;
+      osc.frequency.value = base * multiple;
+      gain.gain.value = level;
+      osc.connect(gain).connect(bus);
+      osc.start(t);
+      sources.push(osc);
+    }
+
+    const rumble = noise(2);
+    rumble.loop = true;
+    const low = actx.createBiquadFilter();
+    low.type = "lowpass";
+    low.frequency.value = 620;
+    const rumbleGain = actx.createGain();
+    rumbleGain.gain.value = 0.18;
+    rumble.connect(low).connect(rumbleGain).connect(bus);
+    rumble.start(t);
+    sources.push(rumble);
+
+    const whine = actx.createOscillator();
+    const whineGain = actx.createGain();
+    whine.type = "sawtooth";
+    whine.frequency.value = 94;
+    whineGain.gain.value = 0.018;
+    whine.connect(whineGain).connect(bus);
+    whine.start(t);
+    sources.push(whine);
+
+    const pulse = actx.createOscillator();
+    const pulseGain = actx.createGain();
+    pulse.type = "sine";
+    pulse.frequency.value = 18;
+    pulseGain.gain.value = 0.012;
+    pulse.connect(pulseGain).connect(bus.gain);
+    pulse.start(t);
+    sources.push(pulse);
+    engine = { bus, sources, base };
   }
   const sfx = {
     bet() {
@@ -1247,30 +1303,17 @@
       n.connect(f).connect(g).connect(master);
       n.start(t);
       stopEngine();
-      const osc = actx.createOscillator();
-      osc.type = "sawtooth";
-      osc.frequency.value = 58;
-      const hum = actx.createOscillator();
-      hum.type = "sine";
-      hum.frequency.value = 116;
-      const lp = actx.createBiquadFilter();
-      lp.type = "lowpass";
-      lp.frequency.value = 380;
-      const eg = actx.createGain();
-      eg.gain.setValueAtTime(0, t);
-      eg.gain.linearRampToValueAtTime(0.05, t + 0.6);
-      osc.connect(lp);
-      hum.connect(lp);
-      lp.connect(eg).connect(master);
-      osc.start(t);
-      hum.start(t);
-      engine = { osc, hum, gain: eg };
+      startEngine();
+    },
+    engineStart() {
+      startEngine();
     },
     climb(m) {
       if (!engine) return;
-      const f = 58 + Math.min(1, Math.log10(m) / 2) * 70;
-      engine.osc.frequency.setTargetAtTime(f, actx.currentTime, 0.3);
-      engine.hum.frequency.setTargetAtTime(f * 2, actx.currentTime, 0.3);
+      const f = engine.base + Math.min(1, Math.log10(m) / 2) * 38;
+      engine.sources.slice(0, 4).forEach((osc, i) => osc.frequency.setTargetAtTime(f * (i + 1), actx.currentTime, 0.35));
+      const whine = engine.sources[5];
+      if (whine) whine.frequency.setTargetAtTime(94 + Math.min(1, Math.log10(m) / 2) * 65, actx.currentTime, 0.35);
     },
     cashout() {
       if (!actx || !soundOn) return;
@@ -1343,6 +1386,7 @@
     unlockAudio();
     if (master) master.gain.value = soundOn ? 0.8 : 0;
     if (!soundOn && actx) stopEngine();
+    else if (soundOn && phase === "flying" && actx) sfx.engineStart();
   });
   $("srAnim").checked = animate;
   $("srAnim").addEventListener("change", (e) => {
