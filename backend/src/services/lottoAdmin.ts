@@ -115,13 +115,24 @@ export async function lottoKey(db: Pool, admin: string) {
     pending.push({ id: d.id, name: d.name, draw_at: d.draw_at, closed_at: new Date(row.closes_at).toISOString(), numbers: stored, hash: row.hash,
       locked, tickets: d.tickets, staked: d.staked, projected: d.projected });
   }
+  const published = [];
+  for (const d of draws.filter((x) => x.status === "RELEASED").slice(0, 10)) {
+    const row = (await db.query<{ seed: string; hash: string; numbers: number[] | null }>(
+      `SELECT seed, hash, numbers FROM lotto_draws WHERE id = $1`, [d.id])).rows[0]!;
+    const numbers = (row.numbers ?? []).map(Number);
+    const expected = lottoNumbersFromSeed(row.seed, Number(d.id));
+    const verified = crypto.createHash("sha256").update(row.seed).digest("hex") === row.hash
+      && numbers.length === expected.length && numbers.every((n, i) => n === expected[i]);
+    published.push({
+      id: d.id, name: d.name, draw_at: d.draw_at, numbers, seed: row.seed, hash: row.hash, verified,
+      winners: d.winners, paid: d.paid, published_by: d.decided_by, published_at: d.released_at,
+    });
+  }
   const audit = (await db.query<{ admin: string; action: string; target: string; details: unknown; created_at: Date }>(
     `SELECT admin, action, target, details, created_at FROM admin_actions WHERE target LIKE 'lotto:%' ORDER BY created_at DESC LIMIT 40`)).rows;
   return {
     pending,
-    published: draws.filter((d) => d.status === "RELEASED").slice(0, 10).map((d) => ({
-      id: d.id, name: d.name, draw_at: d.draw_at, numbers: d.numbers, winners: d.winners, paid: d.paid, published_by: d.decided_by, published_at: d.released_at,
-    })),
+    published,
     audit: audit.map((a) => ({ admin: a.admin, action: a.action, draw: Number(a.target.slice(6)), at: new Date(a.created_at).toISOString(), details: a.details })),
   };
 }

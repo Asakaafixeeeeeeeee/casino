@@ -139,6 +139,8 @@ test("Lotto: an admin's own draw opens and closes on time, can be paused, and it
   const activeFirst = await lottoPlacements(w.db, { status: "ACTIVE", page: 1, page_size: 1 }, later);
   const activeSecond = await lottoPlacements(w.db, { status: "ACTIVE", page: 2, page_size: 1 }, later);
   assert.equal(activeFirst.totals.pending, 2);
+  assert.equal(activeFirst.totals.stakes, 6);
+  assert.equal(activeFirst.totals.potential, 4 * 360 + 2 * 16.2);
   assert.equal(activeFirst.tickets.length, 1);
   assert.equal(activeSecond.tickets.length, 1);
   assert.notEqual(activeFirst.tickets[0]!.code, activeSecond.tickets[0]!.code);

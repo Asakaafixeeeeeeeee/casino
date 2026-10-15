@@ -2814,7 +2814,8 @@
       (x.picks.length >= 89 ? "all 89" : ltBalls(x.picks)) + "</td><td>" + esc(x.bet || "Direct-" + x.picks.length) +
       "</td><td>" + money(x.stake) + "</td><td>" + money(x.potential) + "</td><td>" + when(x.created_at) + "</td></tr>").join("");
     host.innerHTML = '<section class="adm-card"><div class="adm-mines-card-head"><strong>Active user picks</strong><span class="adm-note">' +
-      count(d.totals.pending) + " active ticket(s) · page " + d.page + " of " + d.pages + "</span></div>" +
+      count(d.totals.pending) + " active ticket(s) · " + money(d.totals.stakes) + " staked · " + money(d.totals.potential) +
+      " potential · page " + d.page + " of " + d.pages + "</span></div>" +
       (rows ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Player</th><th>Phone</th><th>Draw</th><th>Selected numbers</th><th>Type</th><th>Stake</th><th>Potential</th><th>Bought</th></tr></thead><tbody>' +
         rows + "</tbody></table></div>" : '<p class="adm-note">No active picks.</p>') +
       (d.pages > 1 ? '<div class="adm-mines-card-head"><button class="btn btn-ghost btn-sm" type="button" data-lt-active-page="' + (d.page - 1) +
@@ -3422,7 +3423,9 @@
       '<p class="adm-note">Fingerprint <code>' + esc(x.hash.slice(0, 20)) + "…</code> — shown to players before betting closed; the secret seed behind it gives exactly these numbers.</p>" +
       '<button class="btn btn-success lta-publish" type="button" data-lt-release="' + x.id + '"' + (x.locked ? "" : " disabled") + ">PUBLISH RESULT</button></div>").join("");
     const pub = d.published.map((x) => "<li><b>#" + x.id + " " + esc(x.name || "") + "</b>" + ltBalls(x.numbers || []) +
-      '<small class="adm-note">' + when(x.published_at) + " by " + esc(x.published_by || "—") + " · " + count(x.winners) + " won · " + money(x.paid) + "</small></li>").join("");
+      '<small class="adm-note">' + pill(x.verified ? "Proof verified" : "Proof check failed", x.verified ? "ok" : "bad") + " · " +
+      when(x.published_at) + " by " + esc(x.published_by || "—") + " · " + count(x.winners) + " won · " + money(x.paid) +
+      "</small><small class=\"adm-note\">Seed <code>" + esc(x.seed) + "</code><br>SHA-256 <code>" + esc(x.hash) + "</code></small></li>").join("");
     const LABEL = { "lotto.preview": "Previewed", "lotto.publish": "Published", "lotto.cancel": "Cancelled", "lotto.draw_create": "Created", "lotto.draw_pause": "Paused", "lotto.draw_resume": "Resumed" };
     const audit = d.audit.map((a) => "<li>" + pill(LABEL[a.action] || a.action, a.action === "lotto.publish" ? "ok" : a.action === "lotto.cancel" ? "bad" : "") +
       "<span>Draw #" + a.draw + '</span><small class="adm-note">' + when(a.at) + " · " + esc(a.admin) + "</small></li>").join("");

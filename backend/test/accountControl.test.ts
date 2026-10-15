@@ -108,4 +108,9 @@ test("Lotto Key: closed draws show the locked numbers the seed gives, and openin
   const pub = (await latestLottoResult(env.db)).result!;
   assert.equal(pub.id, Number(draw.id));
   assert.deepEqual(pub.numbers, k.numbers);
+  const publishedKey = await lottoKey(env.db, ADMIN);
+  const verified = publishedKey.published.find((d) => d.id === Number(draw.id))!;
+  assert.equal(verified.verified, true);
+  assert.equal(verified.seed, draw.seed);
+  assert.deepEqual(verified.numbers, k.numbers);
 });
