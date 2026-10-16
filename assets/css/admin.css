@@ -575,6 +575,20 @@
   color: #1a1000; background: radial-gradient(circle at 35% 30%, #fff3b0, #ffc21a 45%, #a86400 100%); font-variant-numeric: tabular-nums; }
 .lta-act { white-space: nowrap; }
 .lta-ball.lta-bank { color: #fff; background: radial-gradient(circle at 35% 30%, #ff9a9a, #e0101e 45%, #7a0008 100%); }
+.lta-mode { min-width: 0; margin: 0 0 14px; padding: 12px; display: grid; gap: 10px; border: 1px solid var(--line-soft); border-radius: 12px; }
+.lta-mode legend { padding: 0 5px; color: var(--muted); font-size: .82rem; font-weight: 800; }
+.lta-mode label { display: flex; align-items: flex-start; gap: 9px; min-width: 0; margin: 0; cursor: pointer; }
+.lta-mode input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--yellow); }
+.lta-mode label span { display: grid; gap: 2px; min-width: 0; }
+.lta-mode label strong { font-size: .9rem; }
+.lta-mode label small { color: var(--dim); font-size: .78rem; line-height: 1.45; }
+.lta-manual-field[hidden] { display: none; }
+.lta-published-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; width: 100%; min-width: 0; }
+.lta-published-head > b { min-width: 0; overflow-wrap: anywhere; }
+.lta-published-head .lta-balls { max-width: 100%; }
+.lta-published-meta { width: 100%; overflow-wrap: anywhere; }
+.lta-proof { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: start; gap: 4px 8px; width: 100%; margin: 0; }
+.lta-proof code { display: block; min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; word-break: break-word; font-size: .76rem; }
 
 /* TheTeller Payment Settings: the ON/OFF switch, the account and the connection */
 .adm-tp-hero { border-width: 2px; }
@@ -648,9 +662,26 @@
 .lta-publish { justify-self: start; font-weight: 900; letter-spacing: .06em; min-width: 200px; }
 .lta-key-h { margin: 16px 0 6px; font-size: .9rem; color: var(--muted); }
 .lta-key-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.lta-key-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: var(--bg-raised); font-size: .86rem; }
+.lta-key-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; padding: 8px 10px; border-radius: 10px; background: var(--bg-raised); font-size: .86rem; }
+.lta-key, .lta-key-draw, .lta-key-list li, .lta-key-list li > * { min-width: 0; max-width: 100%; }
+.lta-key code { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
 .lta-key-none { padding: 10px 0; }
-@media (max-width: 480px) { .lta-key-ball { --s: 46px; } .lta-publish { width: 100%; } }
+@media (max-width: 480px) {
+  .lta-key { padding: 12px; }
+  .lta-key-draw { padding: 11px; gap: 9px; }
+  .lta-key-top { gap: 7px; }
+  .lta-key-top > div { min-width: 0; flex: 1 1 100%; }
+  .lta-key-top strong { display: block; overflow-wrap: anywhere; font-size: .9rem; }
+  .lta-key-meta { justify-content: flex-start; gap: 5px 12px; font-size: .78rem; }
+  .lta-key-balls { gap: 7px; }
+  .lta-key-ball { --s: 42px; }
+  .lta-key-ball i { font-size: .95rem; }
+  .lta-key-list li { align-items: stretch; gap: 7px; padding: 9px; }
+  .lta-published-head { align-items: flex-start; }
+  .lta-proof { font-size: .76rem; }
+  .lta-proof code { font-size: .7rem; }
+  .lta-publish { width: 100%; min-width: 0; }
+}
 
 /* Betting & withdrawal settings */
 .mr-form { display: grid; gap: 14px; }
