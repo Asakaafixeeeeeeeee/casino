@@ -123,3 +123,44 @@ test("A valid request goes on to TheTeller; a duplicate of one already sent is r
     }
   }
 });
+
+test("Gateway not set up: a valid Mobile Money deposit gets a plain 'unavailable' answer and nothing is started", async () => {
+  clearMoneyRulesCache();
+  const { db, userId } = await setupWalletDb();
+  await acceptRules(db, userId);
+  await db.query(`UPDATE users SET phone = $2, deposit_phone = $2, deposit_phone_confirmed_at = now() WHERE id = $1`, [userId, PHONE]);
+  const r = await call(paymentsRouter(db), "/teller/momo", userId,
+    { amount: 150, currency: "GHS", network: "MTN", account_number: "233241234195", idempotency_key: key() });
+  assert.ok(r.failed instanceof TellerConfigurationError, "TheTeller credentials are missing in tests");
+
+  /* the app's error handler turns it into the notice the deposit page shows, without naming any server settings */
+  const { createApp } = await import("../src/app.js");
+  const app = createApp(db) as unknown as { _router: { stack: { handle: Function }[] } };
+  const layers = app._router.stack;
+  const handler = layers[layers.length - 1]!.handle;
+  const out: { status: number; body?: Record<string, unknown> } = { status: 200 };
+  const res = { status(s: number) { out.status = s; return res; }, json(b: Record<string, unknown>) { out.body = b; return res; } };
+  const logged = console.error;
+  console.error = () => {};
+  try { handler(r.failed, {}, res, () => {}); } finally { console.error = logged; }
+  assert.equal(out.status, 503);
+  assert.equal(out.body!.error, "payments_unavailable");
+  assert.match(String(out.body!.message), /currently being configured/);
+  assert.doesNotMatch(String(out.body!.message), /TELLER_/);
+
+  /* no payment, no money moved */
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM payment_intents`)).rows[0].n, 0);
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM ledger_entries WHERE user_id = $1`, [userId])).rows[0].n, 0);
+});
+
+test("The registered number stays enforced: a deposit from any other number is refused", async () => {
+  clearMoneyRulesCache();
+  const { db, userId } = await setupWalletDb();
+  await acceptRules(db, userId);
+  await db.query(`UPDATE users SET phone = $2 WHERE id = $1`, [userId, PHONE]);
+  const r = await call(paymentsRouter(db), "/teller/momo", userId,
+    { amount: 150, currency: "GHS", network: "MTN", account_number: "233249999999", idempotency_key: key() });
+  assert.equal(r.status, 403);
+  assert.equal(r.body!.error, "phone_not_registered");
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM payment_intents`)).rows[0].n, 0);
+});

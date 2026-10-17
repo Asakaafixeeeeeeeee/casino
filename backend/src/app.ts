@@ -105,6 +105,17 @@ export function createApp(db: Pool): express.Express {
         ? 503
         : status;
 
+    // The gateway isn't set up (missing TheTeller credentials): nothing was started; the player gets a plain notice,
+    // the server log keeps the real reason.
+    if (err.name === "TellerConfigurationError") {
+      console.error("[payments] %s", err.message);
+      res.status(503).json({
+        error: "payments_unavailable",
+        message: "Mobile Money deposits are currently being configured. Please try again when our payment service becomes available.",
+      });
+      return;
+    }
+
     // Never leak internal details past the error name/message boundary.
     res.status(code).json({
       error: err.name ?? "Error",

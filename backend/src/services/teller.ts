@@ -106,15 +106,25 @@ export function tellerAmountMajor(amountMajor: number): string {
     throw new Error("Deposit amount must be positive");
   }
   const minor = Math.round(amountMajor * 100);
-  if (!Number.isSafeInteger(minor) || minor <= 0) {
+  if (!Number.isSafeInteger(minor) || minor <= 0 || minor > 999_999_999_999) {
     throw new Error("Deposit amount is outside Teller's supported range");
+  }
+  if (Math.abs(amountMajor - minor / 100) > Number.EPSILON * Math.max(1, Math.abs(amountMajor)) * 4) {
+    throw new Error("Deposit amount must have at most two decimal places");
   }
   return String(minor).padStart(12, "0");
 }
 
-/** TheTeller transaction ids are 12 digits and unique per transaction. */
+/** TheTeller transaction ids are 12 digits and unique per transaction. Never a leading zero: anything reading the id
+ *  as a number would drop it and see 11 digits. */
 export function newTxId(): string {
-  return String(crypto.randomInt(0, 1e12)).padStart(12, "0");
+  return String(crypto.randomInt(1e11, 1e12));
+}
+
+/** A valid address for TheTeller's required email field, built from the account id and our own host. */
+export function checkoutEmail(accountId: string, host: string): string {
+  const local = accountId.replace(/[^A-Za-z0-9._-]/g, "").replace(/^[.]+|[.]+$/g, "").slice(0, 64) || "player";
+  return `${local}@${host.includes(".") ? host : "example.com"}`;
 }
 
 /** "approved", "declined", or null while TheTeller has not decided. */
@@ -147,11 +157,15 @@ const basicAuth = (config: TellerConfig) =>
 async function tellerFetch(url: string, init: RequestInit, timeoutMs: number): Promise<{ status: number; body: Record<string, unknown> }> {
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   const text = await response.text();
-  console.log("[teller] %s %s -> %s %s", init.method ?? "GET", new URL(url).pathname, response.status, text.slice(0, 300));
+  console.log("[teller] %s %s -> %s", init.method ?? "GET", new URL(url).pathname, response.status);
   let body: Record<string, unknown> = {};
   if (text) {
     try {
-      body = JSON.parse(text) as Record<string, unknown>;
+      const parsed: unknown = JSON.parse(text);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Teller response was not an object");
+      }
+      body = parsed as Record<string, unknown>;
     } catch {
       throw new TellerRequestError(`Teller returned an invalid response (${response.status})`, false);
     }
@@ -170,6 +184,7 @@ export async function initiateTellerCheckout(
   config: TellerConfig,
   args: { transactionId: string; amountMajor: number; redirectUrl: string; email: string; desc: string }
 ): Promise<{ checkoutUrl: string }> {
+  requireTransactionId(args.transactionId);
   const payload = JSON.stringify({
     merchant_id: config.merchantId,
     transaction_id: args.transactionId,
@@ -180,7 +195,7 @@ export async function initiateTellerCheckout(
   });
   const { status, body } = await tellerFetch(
     `${config.checkoutBaseUrl}/initiate`, { method: "POST", headers: jsonHeaders(config), body: payload }, 15000);
-  if (status >= 400 || body.status !== "success" || typeof body.checkout_url !== "string") {
+  if (status < 200 || status >= 300 || body.status !== "success" || typeof body.checkout_url !== "string") {
     throw new TellerRequestError(reasonText(body.reason) || `TheTeller checkout failed (${status})`, true);
   }
   return { checkoutUrl: body.checkout_url };
@@ -193,6 +208,13 @@ export async function requestMomoPayment(
   config: TellerConfig,
   args: { transactionId: string; amountMajor: number; subscriberNumber: string; network: MomoNetwork; desc: string }
 ): Promise<TellerStatusResponse> {
+  requireTransactionId(args.transactionId);
+  if (canonicalTellerSubscriberNumber(args.subscriberNumber) !== args.subscriberNumber) {
+    throw new TellerRequestError("Enter a valid Ghanaian mobile money number", true);
+  }
+  if (!["MTN", "VDF", "ATL", "TGO"].includes(args.network)) {
+    throw new TellerRequestError("Choose a supported TheTeller mobile money network", true);
+  }
   let result: { status: number; body: Record<string, unknown> };
   try {
     const payload = JSON.stringify({
@@ -209,6 +231,10 @@ export async function requestMomoPayment(
   } catch (err) {
     if (err instanceof TellerRequestError) throw err;
     throw new TellerRequestError((err as Error).message || "TheTeller did not answer", false); // timeout: may still be paid
+  }
+  if (result.status < 200 || result.status >= 300) {
+    const message = reasonText(result.body.reason ?? result.body.description) || `TheTeller payment failed (${result.status})`;
+    throw new TellerRequestError(message, result.status >= 400 && result.status < 500);
   }
   const v = verdict(result.body);
   if (v === "approved") return result.body as TellerStatusResponse;
@@ -233,8 +259,30 @@ export async function checkTellerStatus(config: TellerConfig, transactionId: str
  *  reference is sent as the payment's description, so TheTeller's page, the prompt and its dashboard show it too. */
 export const depositReference = (transactionId: string) => "DES" + transactionId;
 
+const GHANA_MOMO_PREFIXES = ["020", "024", "025", "026", "027", "050", "053", "054", "055", "056", "057", "059"];
+
+/** Normalize a supported Ghanaian mobile number into the digits-only value TheTeller expects. */
+export function canonicalTellerSubscriberNumber(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const formatted = raw.trim();
+  if (!/^\+?[\d\s().-]+$/.test(formatted)) return null;
+  let digits = formatted.replace(/[\s().-]/g, "");
+  if (digits.startsWith("+")) digits = digits.slice(1);
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  const national = digits.startsWith("233") ? digits.slice(3) : digits.startsWith("0") ? digits.slice(1) : "";
+  if (!/^(?:20|24|25|26|27|50|53|54|55|56|57|59)\d{7}$/.test(national)) return null;
+  return "233" + national;
+}
+
+function requireTransactionId(transactionId: string): void {
+  if (!/^\d{12}$/.test(transactionId)) {
+    throw new TellerRequestError("TheTeller transaction ID must contain exactly 12 digits", true);
+  }
+}
+
 /** TheTeller's network code for a Ghanaian mobile number (0XXXXXXXXX), or null if it isn't a mobile money network. */
 export function networkForPhone(phone: string): MomoNetwork | null {
+  if (!/^0\d{9}$/.test(phone) || !GHANA_MOMO_PREFIXES.includes(phone.slice(0, 3))) return null;
   const prefix = phone.slice(0, 3);
   if (["024", "025", "053", "054", "055", "059"].includes(prefix)) return "MTN";
   if (["020", "050"].includes(prefix)) return "VDF";
@@ -247,6 +295,10 @@ export async function initiatePayout(
   config: TellerConfig,
   args: { transactionId: string; amountMajor: number; phone: string; network: MomoNetwork; desc: string }
 ): Promise<TellerStatusResponse> {
+  requireTransactionId(args.transactionId);
+  if (networkForPhone(args.phone) !== args.network) {
+    throw new TellerRequestError("Enter a valid mobile money number and matching network", true);
+  }
   /* the float passcode is optional (guide: sent only when set) */
   const payload = JSON.stringify({
     account_number: "+233" + args.phone.replace(/^0/, ""),
@@ -266,6 +318,11 @@ export async function initiatePayout(
   } catch (err) {
     if (err instanceof TellerRequestError) throw err;
     throw new TellerRequestError((err as Error).message || "TheTeller did not answer", false); // may have paid
+  }
+  if (result.status < 200 || result.status >= 300) {
+    const message = reasonText(result.body.reason ?? result.body.description) || `TheTeller payout failed (${result.status})`;
+    const refused = (result.status >= 400 && result.status < 500) || /access denied/i.test(message);
+    throw new TellerRequestError(message, refused);
   }
   const v = verdict(result.body);
   if (v === "approved") return result.body as TellerStatusResponse;

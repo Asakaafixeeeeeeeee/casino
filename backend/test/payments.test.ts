@@ -1,26 +1,138 @@
 import assert from "node:assert/strict";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import test from "node:test";
 import {
   checkoutBaseFor,
+  checkoutEmail,
+  canonicalTellerSubscriberNumber,
   credentialHints,
   depositReference,
+  initiatePayout,
   loadTellerConfig,
   newTxId,
+  networkForPhone,
   paidPesewas,
   reasonText,
+  requestMomoPayment,
   tellerAmountMajor,
+  TellerRequestError,
+  type MomoNetwork,
   verdict,
 } from "../src/services/teller.js";
+
+async function mockGateway(status: number, body: Record<string, unknown>) {
+  const requests: { method: string; url: string; body: Record<string, unknown> }[] = [];
+  const server = http.createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => {
+      requests.push({
+        method: req.method ?? "",
+        url: req.url ?? "",
+        body: JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>,
+      });
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const config = loadTellerConfig({
+    TELLER_BASE_URL: base,
+    TELLER_CHECKOUT_URL: base,
+    TELLER_MERCHANT_ID: "TTM-00000001",
+    TELLER_API_USERNAME: "user",
+    TELLER_API_KEY: "key",
+  } as NodeJS.ProcessEnv);
+  return { config, requests, close: () => new Promise<void>((resolve, reject) =>
+    server.close((error) => error ? reject(error) : resolve())) };
+}
 
 test("Teller amount conversion uses provider minor units", () => {
   assert.equal(tellerAmountMajor(10), "000000001000");
   assert.equal(tellerAmountMajor(0.01), "000000000001");
+  assert.equal(tellerAmountMajor(2), "000000000200");
   assert.equal(tellerAmountMajor(25.5), "000000002550");
+});
+
+test("Mobile-money payload sends exact network identifiers and 12-digit pesewas", async () => {
+  const gateway = await mockGateway(200, { code: "000", status: "approved" });
+  const networks: MomoNetwork[] = ["MTN", "VDF", "ATL", "TGO"];
+  try {
+    for (const [i, network] of networks.entries()) {
+      await requestMomoPayment(gateway.config, {
+        transactionId: String(i + 1).padStart(12, "0"),
+        amountMajor: 2,
+        subscriberNumber: "233241234195",
+        network,
+        desc: "DES" + String(i + 1).padStart(12, "0"),
+      });
+    }
+    assert.deepEqual(gateway.requests.map((request) => request.url), Array(4).fill("/v1.1/transaction/process"));
+    assert.deepEqual(gateway.requests.map((request) => request.body["r-switch"]), networks);
+    assert.deepEqual(gateway.requests.map((request) => request.body.amount), Array(4).fill("000000000200"));
+    assert.deepEqual(gateway.requests.map((request) => request.body.transaction_id), networks.map((_, i) => String(i + 1).padStart(12, "0")));
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("A non-2xx response cannot approve a mobile-money payment", async () => {
+  const gateway = await mockGateway(503, { code: "000", status: "approved" });
+  try {
+    await assert.rejects(
+      requestMomoPayment(gateway.config, {
+        transactionId: "000000000001",
+        amountMajor: 2,
+        subscriberNumber: "233241234195",
+        network: "MTN",
+        desc: "DES000000000001",
+      }),
+      (error: unknown) => error instanceof TellerRequestError && !error.declined,
+    );
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("A non-2xx response cannot approve a payout", async () => {
+  const gateway = await mockGateway(503, { code: "000", status: "approved" });
+  try {
+    await assert.rejects(
+      initiatePayout(gateway.config, {
+        transactionId: "000000000001",
+        amountMajor: 2,
+        phone: "0241234195",
+        network: "MTN",
+        desc: "withdrawal",
+      }),
+      (error: unknown) => error instanceof TellerRequestError && !error.declined,
+    );
+  } finally {
+    await gateway.close();
+  }
 });
 
 test("Teller amount conversion rejects invalid values", () => {
   assert.throws(() => tellerAmountMajor(0), /positive/);
   assert.throws(() => tellerAmountMajor(Number.NaN), /positive/);
+  assert.throws(() => tellerAmountMajor(10.005), /two decimal places/);
+  assert.throws(() => tellerAmountMajor(10_000_000_000), /supported range/);
+});
+
+test("Ghanaian mobile-money numbers are normalized strictly and mapped to supported networks", () => {
+  assert.equal(canonicalTellerSubscriberNumber("0241234195"), "233241234195");
+  assert.equal(canonicalTellerSubscriberNumber("+233 24 123 4195"), "233241234195");
+  assert.equal(canonicalTellerSubscriberNumber("00233241234195"), "233241234195");
+  assert.equal(canonicalTellerSubscriberNumber("abc233241234195"), null);
+  assert.equal(canonicalTellerSubscriberNumber("233291234567"), null);
+  assert.equal(canonicalTellerSubscriberNumber(true), null);
+  assert.equal(networkForPhone("0591234567"), "MTN");
+  assert.equal(networkForPhone("0501234567"), "VDF");
+  assert.equal(networkForPhone("0571234567"), "ATL");
+  assert.equal(networkForPhone("024123"), null);
+  assert.equal(networkForPhone("abc0241234567"), null);
 });
 
 test("Teller config reports only missing variable names", () => {
@@ -66,7 +178,7 @@ test("The integration guide's setting names work too", () => {
 });
 
 test("Transaction ids are 12 digits", () => {
-  for (let i = 0; i < 50; i++) assert.match(newTxId(), /^\d{12}$/);
+  for (let i = 0; i < 500; i++) assert.match(newTxId(), /^[1-9]\d{11}$/);
 });
 
 test("A deposit's reference is DES + its 12-digit TheTeller number", () => {
@@ -112,4 +224,10 @@ test("Chat markup around pasted credentials is stripped and reported", () => {
     { merchantIdLooksValid: true, credentialsHadStrayChars: false },
   );
   assert.equal(credentialHints({ TELLER_MERCHANT_ID: "TTM-12020" }).merchantIdLooksValid, false);
+});
+
+test("The checkout email is always a valid address", () => {
+  assert.equal(checkoutEmail("42", "asakaa-casino.onrender.com"), "42@asakaa-casino.onrender.com");
+  assert.equal(checkoutEmail("a b:c/d", "asakaa-casino.onrender.com"), "abcd@asakaa-casino.onrender.com");
+  assert.equal(checkoutEmail("::", "localhost"), "player@example.com");
 });
