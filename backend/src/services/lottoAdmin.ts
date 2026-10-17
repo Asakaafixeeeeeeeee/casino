@@ -10,7 +10,7 @@ import type { Pool } from "pg";
 import { hiddenCatalog } from "../games/availability.js";
 import { GameError } from "../games/catalog.js";
 import {
-  cancelLottoDraw, createLottoDraw, getLottoSettings, lottoAdminDraws, lottoChance, lottoPlacements, pauseLottoDraw,
+  cancelLottoDraw, createLottoDraw, getLottoSettings, lottoAdminDraws, lottoChance, lottoDrawCode, lottoPlacements, pauseLottoDraw,
   lottoResultCommitmentValid, previewLottoDraw, updateLottoDrawTimes, releaseLottoDraw, saveLottoSettings,
 } from "../games/lotto.js";
 import { AdminError, logAction } from "./admin.js";
@@ -71,7 +71,10 @@ export const createLotto = (db: Pool, admin: string, input: Record<string, unkno
     name: d.name, opens_at: d.opens_at, closes_at: d.closes_at, draw_at: d.draw_at,
     number_source: d.number_source, commitment: d.hash, ...(d.number_source === "MANUAL" ? { numbers: d.numbers } : {}),
   });
-  return { id: Number(d.id), name: d.name };
+  return {
+    id: Number(d.id), draw_code: lottoDrawCode(d), name: d.name, number_source: d.number_source,
+    opens_at: d.opens_at, closes_at: d.closes_at, draw_at: d.draw_at,
+  };
 });
 
 export const updateLottoTimes = (db: Pool, admin: string, id: unknown, input: Record<string, unknown>) => asAdmin(async () => {

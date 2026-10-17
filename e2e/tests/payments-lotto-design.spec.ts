@@ -60,14 +60,22 @@ test("payments switch: OFF stops new payments everywhere, a started payment is s
     await expect(a.locator('[data-badge="payments"]')).toBeVisible();
     if (SHOTS) await a.screenshot({ path: `${SHOTS}/admin-payments-off.png`, fullPage: true });
 
-    /* the wallet shows the notice and can't start a payment; the server refuses one anyway */
+    /* the wallet: a valid amount still makes Top Up Now tappable, and tapping explains that payments are unavailable
+       instead of starting one; the server refuses one anyway */
     await p.goto("/wallet.html");
     await settle(p);
-    await expect(p.locator("#msg")).toContainText(OFF);
     await p.locator("#depAmount").fill("50");
-    await expect(p.locator("#depSubmit")).toBeDisabled();
-    await expect(p.locator("#cdSubmit")).toBeDisabled();
-    await expect(p.locator("#pbSubmit")).toBeDisabled();
+    await expect(p.locator("#depSubmit")).toBeEnabled();
+    await p.locator("#depSubmit").click();
+    await expect(p.locator(".dep-modal")).toContainText("PAYMENT SERVICE UNAVAILABLE");
+    await p.locator(".dep-modal button", { hasText: "OK" }).click();
+    await expect(p.locator(".dep-modal")).toHaveCount(0);
+    await p.locator('[data-paytab="card"]').click();
+    await p.locator("#cdAmount").fill("50");
+    await p.locator("#cdSubmit").click();
+    await expect(p.locator(".dep-modal")).toContainText("PAYMENT SERVICE UNAVAILABLE");
+    await p.locator(".dep-modal button", { hasText: "OK" }).click();
+    await p.locator('[data-paytab="momo"]').click();
     if (SHOTS) await p.screenshot({ path: `${SHOTS}/wallet-payments-off.png` });
     for (const [path, extra] of [["momo", { account_number: "233241234567", network: "MTN" }], ["checkout", {}]] as const) {
       const r = await request.post(`${API}/api/payments/teller/${path}`, {

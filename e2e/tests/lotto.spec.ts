@@ -4,7 +4,7 @@
    closes, releases the results, and the player's tickets show Won or Lost with the drawn numbers. The draw schedule
    and ticket sales are put back at the end. */
 import { expect, test } from "@playwright/test";
-import { adminSession, adminTab, API, fundedPlayer, serverBalance, settle, trackErrors } from "./helpers";
+import { adminSession, adminTab, API, register, serverBalance, settle, trackErrors } from "./helpers";
 
 const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 const hhmm = (ms: number) => new Date(ms).toISOString().slice(11, 16);
@@ -17,7 +17,10 @@ test("lotto: sales closed by default; buy Direct and Perm tickets, betting close
   const pCtx = await browser.newContext();
   const p = await pCtx.newPage();
   const errors = trackErrors(p);
-  const player = await fundedPlayer(p, 100);
+  /* funded with the admin's "Add money" (this spec is about Lotto, not the deposit flow) */
+  const player = await register(p);
+  expect((await request.post(`${API}/api/admin/credit`, { headers: auth(adminToken),
+    data: { phone: player.phone, amount: 100, reason: "E2E lotto test funds", kind: "CORRECTION", idempotency_key: "e2e-fund-" + player.phone } })).status()).toBe(200);
 
   try {
     /* sales are closed until the admin opens them (confirming the licence) */

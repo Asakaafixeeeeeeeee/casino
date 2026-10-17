@@ -5,7 +5,7 @@ import { ensureWalletAccount } from "../src/services/accountLink.js";
 import { GameError } from "../src/games/catalog.js";
 import {
   buyLottoTicket, choose, createLottoDraw, currentLottoDraw, linesOf, lottoNumbersFromSeed, lottoPlacements, lottoState,
-  lottoResultHash, myLottoTickets, pauseLottoDraw, previewLottoDraw, releaseLottoDraw, saveLottoSettings, shapeTicket, winningLines,
+  lottoDrawCode, lottoResultHash, lottoSweep, myLottoTickets, pauseLottoDraw, previewLottoDraw, releaseLottoDraw, saveLottoSettings, shapeTicket, winningLines,
 } from "../src/games/lotto.js";
 import { createLotto as createAdminLotto, lottoKey, lottoOverview, releaseLotto } from "../src/services/lottoAdmin.js";
 import { setupWalletDb } from "./helpers/walletDb.js";
@@ -194,4 +194,73 @@ test("Lotto: manual numbers are committed before betting opens, hidden until rel
   assert.deepEqual(publicResult.numbers, selected);
   assert.equal(publicResult.number_source, "MANUAL");
   assert.equal(lottoResultHash(publicResult.seed!, Number(d.id), publicResult.numbers!, "MANUAL"), d.hash);
+});
+
+test("Lotto: a manual named draw end to end — scheduled, opens, takes tickets, closes, publishes itself at its draw time", async () => {
+  const w = await world();
+  const opens = NOON + 3600e3, closes = NOON + 5 * 3600e3, drawAt = NOON + 5.5 * 3600e3;
+  const row0 = await createLottoDraw(w.db, "admin", {
+    name: "Saturday Special Lotto", opens_at: new Date(opens).toISOString(), closes_at: new Date(closes).toISOString(),
+    draw_at: new Date(drawAt).toISOString(), manual_numbers: [81, 4, 53, 18, 27],
+  }, NOON);
+  const created = { id: Number(row0.id), number_source: row0.number_source, draw_code: lottoDrawCode(row0) };
+  assert.equal(created.draw_code, "WBL-20270110-" + created.id);
+  assert.equal(created.number_source, "MANUAL");
+
+  /* before betting opens: listed as upcoming with its own times, numbers hidden */
+  const before = await lottoState(w.db, NOON);
+  const up = before.upcoming.find((x) => x.id === created.id)!;
+  assert.ok(up, "the scheduled draw is on the live page before it opens");
+  assert.equal(up.name, "Saturday Special Lotto");
+  assert.equal(up.opens_at, new Date(opens).toISOString());
+  assert.equal(up.closes_at, new Date(closes).toISOString());
+  assert.equal(up.draw_at, new Date(drawAt).toISOString());
+  assert.equal(up.auto, false);
+  assert.equal("numbers" in up, false, "players never see the numbers before the draw");
+  assert.equal("seed" in up, false);
+
+  /* betting open: a winning ticket on two of the numbers */
+  const open = await lottoState(w.db, opens + 60e3);
+  const live = open.draws.find((x) => x.id === created.id)!;
+  assert.equal(live.status, "OPEN");
+  assert.equal("numbers" in live, false);
+  await buyLottoTicket(w.db, w.kofi, { picks: [4, 18], stake: 2, draw_id: created.id, idempotency_key: key() }, { now: opens + 60e3 });
+  await assert.rejects(buyLottoTicket(w.db, w.kofi, { picks: [5], stake: 1, draw_id: created.id, idempotency_key: key() }, { now: closes }), code("too_late"));
+
+  /* closed, before the draw time: drawing, still unpublished */
+  await lottoSweep(w.db, closes + 60e3);
+  let row = (await w.db.query(`SELECT status, numbers FROM lotto_draws WHERE id = $1`, [created.id])).rows[0];
+  assert.equal(row.status, "CLOSED");
+  assert.deepEqual(row.numbers, [4, 18, 27, 53, 81], "the locked numbers are kept as entered");
+  assert.equal((await lottoState(w.db, closes + 60e3)).results.find((x) => x.id === created.id)!.status, "DRAWING");
+
+  /* the draw time: published automatically and the winner paid */
+  await lottoSweep(w.db, drawAt);
+  row = (await w.db.query(`SELECT status, numbers, decided_by FROM lotto_draws WHERE id = $1`, [created.id])).rows[0];
+  assert.equal(row.status, "RELEASED");
+  assert.equal(row.decided_by, "auto-release");
+  const result = (await lottoState(w.db, drawAt)).results.find((x) => x.id === created.id)!;
+  assert.deepEqual(result.numbers, [4, 18, 27, 53, 81]);
+  assert.equal(result.draw_code, created.draw_code);
+  const mine = await myLottoTickets(w.db, w.kofi);
+  assert.equal(mine.tickets[0]!.status, "WON");
+  assert.equal(mine.tickets[0]!.draw_code, created.draw_code);
+  assert.equal(await w.balanceOf(w.kofi), 1000 - 2 + mine.tickets[0]!.payout);
+  assert.equal(await w.drift(), 0);
+});
+
+test("Lotto: every draw's Draw ID is its Ghana draw date and draw number", () => {
+  assert.equal(lottoDrawCode({ id: 5278, draw_at: "2026-10-15T19:00:00.000Z" }), "WBL-20261015-5278");
+  assert.equal(lottoDrawCode({ id: "1", draw_at: new Date(Date.UTC(2026, 9, 13, 19)) }), "WBL-20261013-1");
+  assert.equal(lottoDrawCode({ id: 7, draw_at: "2026-01-05T23:59:00.000Z" }), "WBL-20260105-7", "Ghana time is GMT all year");
+});
+
+test("Lotto: creating a draw from the admin panel answers with its Draw ID and times, for the confirmation", async () => {
+  const w = await world();
+  const closes = Date.now() + 3 * 3600e3;
+  const out = await createAdminLotto(w.db, "admin", { name: "Evening Special", closes_at: new Date(closes).toISOString(), manual_numbers: "4,18,27,53,81" });
+  assert.match(out.draw_code, /^WBL-\d{8}-\d+$/);
+  assert.equal(out.number_source, "MANUAL");
+  assert.ok((await lottoOverview(w.db)).draws.some((d) => d.id === out.id && d.draw_code === out.draw_code && d.numbers === null),
+    "listed in the admin's draws, numbers hidden while betting is open");
 });

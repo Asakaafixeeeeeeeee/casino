@@ -22,9 +22,14 @@
 
   const state = {
     st: null, offset: 0, drawId: null, type: "DIRECT", permSize: 2, picks: [], banker: null, againstAll: false,
-    mine: [], summary: null, filter: "all", buying: false, revealed: {},
+    mine: [], summary: null, filter: "all", buying: false, revealed: {}, closedSeen: {},
   };
-  const draw = () => (state.st && state.st.draws.find((d) => d.id === state.drawId)) || (state.st && state.st.draws[0]) || null;
+  /* the draws on the page: those taking bets, then those scheduled to open later */
+  const allDraws = () => (state.st ? state.st.draws.concat(state.st.upcoming || []) : []);
+  const draw = () => allDraws().find((d) => d.id === state.drawId) || allDraws()[0] || null;
+  const serverNow = () => Date.now() + state.offset;
+  const notOpenYet = (d) => !!(d && d.opens_at && new Date(d.opens_at).getTime() > serverNow());
+  const closedNow = (d) => !!(d && new Date(d.closes_at).getTime() <= serverNow());
 
   /* ---------------- bet types and the board ---------------- */
   const board = $("ltBoard");
@@ -121,11 +126,11 @@
     $("ltCost").textContent = ghs(cost);
     $("ltPotential").textContent = ghs(pot);
     const d = draw();
-    const open = d && d.status === "OPEN" && !d.paused;
+    const open = d && d.status === "OPEN" && !d.paused && !notOpenYet(d) && !closedNow(d);
     const blocked = !st.real_money || !open;
     const tooMuch = cost > st.max_bet || s.lines > st.max_lines;
     $("ltBuy").disabled = !s.ok || blocked || unit <= 0 || tooMuch || state.buying;
-    $("ltBuy").textContent = !st.real_money ? "Ticket sales open soon" : !open ? (d && d.paused ? "Draw paused" : "Betting closed")
+    $("ltBuy").textContent = !st.real_money ? "Ticket sales open soon" : !open ? (d && d.paused ? "Draw paused" : notOpenYet(d) ? "Betting opens soon" : "Betting closed")
       : tooMuch ? (s.lines > st.max_lines ? `Max ${st.max_lines} lines` : `Max ${ghs(st.max_bet)} per ticket`)
       : state.buying ? "Buying…" : s.ok ? `Review ticket · ${ghs(cost)}` : "Review ticket";
   }
@@ -173,10 +178,10 @@
 
   /* ---------------- the draws ---------------- */
   function paintDrawTabs() {
-    const ds = state.st.draws;
+    const ds = allDraws();
     $("ltDrawTabs").hidden = ds.length < 2;
     $("ltDrawTabs").innerHTML = ds.map((d) =>
-      `<button type="button" role="tab" data-draw="${d.id}" aria-selected="${d.id === (draw() && draw().id)}"><b>${esc(d.name)}</b><small>${esc(when(d.draw_at))}</small></button>`).join("");
+      `<button type="button" role="tab" data-draw="${d.id}" aria-selected="${d.id === (draw() && draw().id)}"><b>${esc(d.name)}</b><small>${notOpenYet(d) ? "Opens " + esc(when(d.opens_at)) : "Draw " + esc(when(d.draw_at))}</small></button>`).join("");
   }
   $("ltDrawTabs").addEventListener("click", (e) => {
     const b = e.target.closest("[data-draw]");
@@ -200,10 +205,13 @@
       $("ltCount").textContent = "—";
       $("ltHashRow").hidden = true;
     } else {
-      badge.className = "lt-badge" + (d.paused ? " is-drawing" : "");
-      badge.textContent = d.paused ? "Paused" : "Betting open";
+      const soon = notOpenYet(d);
+      badge.className = "lt-badge" + (d.paused || soon ? " is-drawing" : "");
+      badge.textContent = d.paused ? "Paused" : soon ? "Opens soon" : "Betting open";
       $("ltDrawTitle").textContent = d.name;
-      $("ltDrawWhen").textContent = "Betting closes " + when(d.closes_at) + " GMT · Draw " + when(d.draw_at) + (d.number_source === "MANUAL" ? " · admin-selected before sales" : " · server-generated");
+      /* when() already ends in GMT (Ghana time) */
+      $("ltDrawWhen").textContent = (soon ? "Betting opens " + when(d.opens_at) + " · " : "") + "Betting closes " + when(d.closes_at) + " · Draw " + when(d.draw_at) +
+        (d.number_source === "MANUAL" ? " · admin-selected before sales" : " · server-generated");
       $("ltHashRow").hidden = !d.hash;
       if (d.hash) { $("ltHash").textContent = d.hash.slice(0, 16) + "…" + d.hash.slice(-8); $("ltHash").title = d.hash; }
     }
@@ -226,13 +234,22 @@
     const st = state.st;
     const d = draw();
     if (!st || !d) return;
-    const now = Date.now() + state.offset;
-    const ms = Math.max(0, new Date(d.closes_at).getTime() - now);
+    const soon = notOpenYet(d);
+    const ms = Math.max(0, new Date(soon ? d.opens_at : d.closes_at).getTime() - serverNow());
     const h = Math.floor(ms / 3600e3), m = Math.floor((ms % 3600e3) / 60e3), s = Math.floor((ms % 60e3) / 1000);
-    $("ltCountLabel").textContent = "Betting closes in";
+    $("ltCountLabel").textContent = soon ? "Betting opens in" : "Betting closes in";
     $("ltCount").textContent = (h >= 24 ? Math.floor(h / 24) + "d " : "") + [h % 24, m, s].map((v) => String(v).padStart(2, "0")).join(":");
-    if (ms === 0 && !state.reloading) {
+    /* opening or closing time reached: ask the server for the draw's new state (no page refresh needed) */
+    if (ms <= 1000 && soon && !state.opening) { state.opening = true; setTimeout(() => { state.opening = false; paintDraw(); }, 1100); }
+    if (ms === 0 && !soon && !state.reloading) {
       state.reloading = true;
+      /* betting on this draw has closed: no more tickets from this page, and the player is told where it stands */
+      paintSlip();
+      $("ltCountLabel").textContent = "Betting closed";
+      if (!state.closedSeen[d.id]) {
+        state.closedSeen[d.id] = true;
+        U.toast("Betting on " + d.name + " has closed. Results at " + when(d.draw_at) + ".");
+      }
       setTimeout(() => load().finally(() => { state.reloading = false; }), 1500);
     }
   }
@@ -244,7 +261,11 @@
     state.st = r.data;
     state.offset = new Date(r.data.now).getTime() - Date.now();
     hero.refresh(r.data);
-    if (!state.st.draws.some((d) => d.id === state.drawId)) state.drawId = state.st.draws[0] ? state.st.draws[0].id : null;
+    /* a named draw the admin scheduled is shown first; the daily draw is one tap away */
+    if (!allDraws().some((d) => d.id === state.drawId)) {
+      const pick = state.st.draws.find((d) => d.auto === false) || state.st.draws[0] || (state.st.upcoming || [])[0];
+      state.drawId = pick ? pick.id : null;
+    }
     paintDraw();
   }
 
@@ -270,6 +291,10 @@
   function ballsHtml(ns, cls, animate) {
     return ns.map((n, i) => ballHtml(n, " " + cls + (animate ? " lt-pop" : ""), animate ? ` style="animation-delay:${i * 0.32}s"` : "")).join("");
   }
+  /* a draw's ID (WBL-<Ghana draw date>-<draw number>); the server sends it, this is the same rule for an older reply */
+  const drawCode = (d) => d.draw_code || ("WBL-" + new Date(d.draw_at).toISOString().slice(0, 10).replace(/-/g, "") + "-" + d.id);
+  const dayLong = (iso) => new Date(iso).toLocaleDateString("en-GB", { timeZone: "Africa/Accra", day: "numeric", month: "long", year: "numeric" });
+  const timeOnly = (iso) => new Date(iso).toLocaleTimeString("en-US", { timeZone: "Africa/Accra", hour: "numeric", minute: "2-digit" }) + " GMT";
   function paintResults() {
     const list = (state.st && state.st.results) || [];
     $("ltResults").innerHTML = list.length ? list.map((d, i) => {
@@ -278,10 +303,19 @@
       if (animate) state.revealed[d.id] = true;
       const balls = d.numbers ? ballsHtml(d.numbers, "is-drawn", animate)
         : `<span class="lt-empty">${d.status === "CANCELLED" ? "Cancelled — every ticket refunded" : "Results coming soon"}</span>`;
+      /* the proof stays one tap away for anyone who wants to check it */
       const source = d.number_source === "MANUAL" ? "Numbers committed before ticket sales opened." : "Numbers generated by the server.";
-      const proof = d.seed ? `<div class="lt-hash">${source}<br>Seed <code>${esc(d.seed)}</code>${d.hash ? `<br>Fingerprint <code>${esc(d.hash)}</code>` : ""}</div>` : "";
-      return `<div class="lt-row${first ? " lt-row-latest" : ""}"><div class="lt-row-top"><span><b>${esc(d.name)}</b> · ${esc(when(d.draw_at))}</span><span>Draw #${d.id}</span></div>
-        <div class="lt-row-balls">${balls}</div>${proof}</div>`;
+      const proof = d.seed ? `<details class="lt-verify"><summary>Verify this draw</summary><div class="lt-hash">${source}` +
+        `<span>Seed</span><code>${esc(d.seed)}</code>${d.hash ? `<span>Fingerprint</span><code>${esc(d.hash)}</code>` : ""}</div></details>` : "";
+      return `<article class="lt-row lt-result${first ? " lt-row-latest" : ""}">
+        <header class="lt-result-head"><b>WIN B Lotto — ${esc(d.name)}</b><span>Draw #${d.id}</span></header>
+        <dl class="lt-result-meta">
+          <div><dt>Date</dt><dd>${esc(dayLong(d.draw_at))}</dd></div>
+          <div><dt>Draw time</dt><dd>${esc(timeOnly(d.draw_at))}</dd></div>
+        </dl>
+        <div class="lt-row-balls" aria-label="Winning numbers${d.numbers ? ": " + d.numbers.join(", ") : ""}">${balls}</div>
+        <div class="lt-result-foot"><span class="lt-draw-id">Draw ID <b>${esc(drawCode(d))}</b></span>${proof}</div>
+      </article>`;
     }).join("") : '<p class="lt-none">No results yet — the first draw is coming up.</p>';
   }
 

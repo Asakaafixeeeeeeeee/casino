@@ -36,7 +36,7 @@
 
   /* ---------------- dialogs and sheets ---------------- */
   /* a confirmation, optionally asking for some text; resolves with the text ("" when none asked), or null on cancel */
-  function ask({ title, text, yes, danger, input, placeholder, required }) {
+  function ask({ title, text, yes, danger, input, placeholder, required, noCancel }) {
     return new Promise((resolve) => {
       const dlg = document.createElement("div");
       dlg.className = "me-dialog";
@@ -45,7 +45,7 @@
       dlg.innerHTML = '<div class="me-dialog-card"><h2>' + title + "</h2><p>" + text + "</p>" +
         (input ? '<label class="sr-only" for="admAsk">' + esc(placeholder || "Details") + '</label><textarea id="admAsk" class="me-textarea adm-reason" rows="2" maxlength="200" placeholder="' + esc(placeholder || "") + '"></textarea>' : "") +
         '<p class="adm-ask-err" hidden></p>' +
-        '<div class="me-dialog-actions"><button class="btn btn-ghost btn-lg" type="button" data-no>Cancel</button>' +
+        '<div class="me-dialog-actions">' + (noCancel ? "" : '<button class="btn btn-ghost btn-lg" type="button" data-no>Cancel</button>') +
         '<button class="btn ' + (danger ? "btn-danger" : "btn-primary") + ' btn-lg" type="button" data-yes>' + yes + "</button></div></div>";
       document.body.appendChild(dlg);
       const done = (v) => {
@@ -2763,14 +2763,20 @@
     if (d.getUTCFullYear() !== year || d.getUTCMonth() !== mon - 1 || d.getUTCDate() !== day) return null;
     return d.toISOString();
   }
+  /* three date + time pairs (betting opens, betting closes, the draw), typed as Ghana time */
   function ltTimeFields(p, v, opts) {
-    const box = (id, label, value, ph, req) => '<div class="field"><label for="' + id + '">' + label + '</label><input id="' + id + '" type="text" inputmode="text" autocomplete="off" placeholder="' + ph + '" value="' + esc(value) + '"' + (req ? " required" : "") + "></div>";
-    return box(p + "StartDate", "Start Date (Ghana time)" + (opts.startOptional ? " <span class=\"opt\">(optional)</span>" : ""), ltDate(v.opens_at), "Example: 17/10/2026", false) +
-      box(p + "StartTime", "Start Time (Ghana time)" + (opts.startOptional ? " <span class=\"opt\">(optional)</span>" : ""), ltTime(v.opens_at), "Example: 10:00 AM", false) +
-      box(p + "EndDate", "Draw Date / End Date (Ghana time)", ltDate(v.closes_at), "Example: 17/10/2026", true) +
-      box(p + "EndTime", "End Time (Ghana time)", ltTime(v.closes_at), "Example: 2:30 PM", true) +
-      '<small class="adm-note">All Lotto times are Ghana time (GMT). Betting closes automatically at the End Time and players can no longer buy tickets. The draw happens at the End Time unless you set a later Draw Date.</small>' +
-      box(p + "DrawDate", "Draw Date <span class=\"opt\">(optional)</span>", v.draw_at && v.draw_at !== v.closes_at ? ltDate(v.draw_at) : "", "Example: 17/10/2026", false);
+    const opt = ' <span class="opt">(optional)</span>';
+    const box = (id, label, value, ph, req) => '<div class="field"><label for="' + id + '">' + label + '</label><input id="' + id + '" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="' + ph + '" value="' + esc(value) + '"' + (req ? " required" : "") + "></div>";
+    const later = v.draw_at && v.draw_at !== v.closes_at;
+    const row = (title, a, b) => '<div class="lta-when"><span class="lta-when-title">' + title + "</span>" + a + b + "</div>";
+    return '<div class="lta-times">' +
+      row("Betting opens" + (opts.startOptional ? opt : ""),
+        box(p + "StartDate", "Date", ltDate(v.opens_at), "17/10/2026", false), box(p + "StartTime", "Time", ltTime(v.opens_at), "10:00 AM", false)) +
+      row("Betting closes",
+        box(p + "EndDate", "Date", ltDate(v.closes_at), "17/10/2026", true), box(p + "EndTime", "Time", ltTime(v.closes_at), "6:30 PM", true)) +
+      row("Draw time" + opt,
+        box(p + "DrawDate", "Date", later ? ltDate(v.draw_at) : "", "Same as closing", false), box(p + "DrawTime", "Time", later ? ltTime(v.draw_at) : "", "Same as closing", false)) +
+      '<small class="adm-note">All Lotto times are Ghana time (GMT). Leave "Betting opens" empty to open betting straight away. Betting closes automatically at the closing time; the draw takes place at the draw time (the closing time if left empty) and its results are published then.</small></div>';
   }
   /* the times typed in a form, as ISO strings (undefined when left empty), or an error message */
   function ltReadTimes(root, p) {
@@ -2783,12 +2789,17 @@
     }
     out.closes_at = ltParse(get("EndDate"), get("EndTime"));
     if (!out.closes_at) return { error: "Enter the End Date like 17/10/2026 and the End Time like 2:30 PM." };
-    const drawD = get("DrawDate");
-    if (drawD) {
-      const t = new Date(out.closes_at);
-      out.draw_at = ltParse(drawD, ltTime(t.toISOString()));
-      if (!out.draw_at) return { error: "Enter the Draw Date like 17/10/2026." };
+    const drawD = get("DrawDate"), drawT = get("DrawTime");
+    if (drawD || drawT) {
+      out.draw_at = ltParse(drawD || ltDate(out.closes_at), drawT || ltTime(out.closes_at));
+      if (!out.draw_at) return { error: "Enter the Draw Date like 17/10/2026 and the Draw Time like 7:00 PM." };
     }
+    const now = Date.now();
+    const opens = out.opens_at ? Date.parse(out.opens_at) : now;
+    const closes = Date.parse(out.closes_at);
+    if (closes <= now) return { error: "Betting must close in the future. Check the closing date and time (Ghana time)." };
+    if (opens >= closes) return { error: "Betting must open before it closes." };
+    if (out.draw_at && Date.parse(out.draw_at) < closes) return { error: "The draw time can't be before betting closes." };
     return out;
   }
   function ltForm(s) {
@@ -2833,7 +2844,7 @@
       const pay = x.status === "CLOSED" && x.projected ? count(x.projected.winners) + " win · " + money(x.projected.payout) + " to pay"
         : x.status === "RELEASED" ? count(x.winners) + " won · " + money(x.paid) + " paid"
         : x.status === "CANCELLED" ? count(x.refunded) + " refunded" : "—";
-      return "<tr><td>#" + x.id + " " + esc(x.name || "") + "</td><td>" + (x.status === "OPEN" ? "Closes " + ltWhen(x.closes_at) + "<br><small>Draw " + ltWhen(x.draw_at) + "</small>" : ltWhen(x.draw_at)) + "</td><td>" + pill(st[0], st[1]) + "</td><td>" + result + "</td><td>" +
+      return '<tr data-lt-row="' + x.id + '"><td>#' + x.id + " " + esc(x.name || "") + (x.draw_code ? '<br><small class="adm-note">' + esc(x.draw_code) + "</small>" : "") + "</td><td>" + (x.status === "OPEN" ? "Closes " + ltWhen(x.closes_at) + "<br><small>Draw " + ltWhen(x.draw_at) + "</small>" : ltWhen(x.draw_at)) + "</td><td>" + pill(st[0], st[1]) + "</td><td>" + result + "</td><td>" +
         count(x.tickets) + "</td><td>" + money(x.staked) + "</td><td>" + pay + '</td><td class="lta-act">' + act + "</td></tr>";
     }).join("");
     $("ltaDraws").innerHTML = '<section class="adm-card"><h3 class="adm-h">Draws</h3>' +
@@ -2842,30 +2853,111 @@
       (rows ? '<div class="adm-table-wrap"><table class="adm-table"><thead><tr><th>Draw</th><th>Draw time</th><th>Status</th><th>Numbers</th><th>Tickets</th><th>Staked</th><th>Winners</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div>"
         : empty("No draws yet.", "star")) + "</section>";
     if (!$("ltaCreateDraw").querySelector('[data-form="lotto-draw"]')) {
-      $("ltaCreateDraw").innerHTML = '<section class="adm-card"><h3 class="adm-h">Schedule a named draw</h3>' +
+      $("ltaCreateDraw").innerHTML = '<section class="adm-card lta-create"><h3 class="adm-h">Schedule a named draw</h3>' +
         '<p class="adm-note">Choose how the result will be set. Automatic draws use numbers generated by the server when betting closes. Manual draws lock the numbers you enter now, before betting opens; they cannot be changed afterward.</p>' +
-        '<form class="adm-terms" data-form="lotto-draw">' +
-        '<div class="field"><label for="ltaNewName">Draw name</label><input id="ltaNewName" maxlength="60" required></div>' +
+        '<div class="lta-example"><button class="btn btn-ghost btn-sm lta-fill" type="button" data-lt-example><span class="lta-dot" aria-hidden="true"></span>Fill Example</button>' +
+        '<label class="lta-switch"><input type="checkbox" id="ltaExampleMode"' + (ltExampleMode() ? " checked" : "") + '><span class="lta-switch-track" aria-hidden="true"></span>' +
+        '<span>Example Mode: <b id="ltaExampleState">' + (ltExampleMode() ? "ON" : "OFF") + "</b></span></label>" +
+        '<small class="adm-note">Examples only fill this form. Nothing is created until you press the button below and confirm.</small></div>' +
+        '<form class="adm-terms lta-create-form" data-form="lotto-draw" novalidate>' +
+        '<div class="field adm-wide"><label for="ltaNewName">Draw name</label><input id="ltaNewName" maxlength="60" autocomplete="off" placeholder="e.g. Saturday Special Lotto" required></div>' +
         ltTimeFields("ltaNew", {}, { startOptional: true }) +
         '<fieldset class="lta-mode"><legend>Winning number method</legend>' +
         '<label><input type="radio" name="ltaDrawMode" value="SERVER" checked> <span><strong>Automatic draw</strong><small>The server generates the winning numbers when betting closes.</small></span></label>' +
         '<label><input type="radio" name="ltaDrawMode" value="MANUAL"> <span><strong>Manual draw</strong><small>Enter five numbers now; they are securely locked before ticket sales open.</small></span></label>' +
         '</fieldset>' +
-        '<div class="field lta-manual-field" id="ltaManualNumbersField" hidden><label for="ltaNewNumbers">Manual winning numbers</label><input id="ltaNewNumbers" inputmode="numeric" placeholder="e.g. 4, 18, 27, 53, 81" disabled>' +
-        '<small class="adm-note">Exactly 5 different numbers from 1 to 90. They cannot be changed after the draw is created.</small></div>' +
-        '<button class="btn btn-primary btn-sm" type="submit">Create and lock draw</button></form></section>';
-      setLottoDrawMode($("ltaCreateDraw").querySelector('[data-form="lotto-draw"]'));
+        '<fieldset class="lta-manual-field adm-wide" id="ltaManualNumbersField" hidden><legend>Manual winning numbers</legend>' +
+        '<div class="lta-nums">' + [1, 2, 3, 4, 5].map((i) => '<label class="lta-num-box"><span>Number ' + i + "</span>" +
+          '<input class="lta-num" id="ltaNum' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" enterkeyhint="next" aria-label="Winning number ' + i + ' of 5" disabled></label>').join("") + "</div>" +
+        '<p class="lta-num-err" id="ltaNumErr" role="alert" hidden></p>' +
+        '<small class="adm-note">One number in each box, 1 to 90, all different. They are locked when the draw is created and can never be changed; players see them only when the results are published.</small></fieldset>' +
+        '<div class="lta-form-msg adm-wide" id="ltaCreateMsg" role="status" aria-live="polite" hidden></div>' +
+        '<button class="btn btn-primary btn-lg lta-submit" type="submit">Create automatic draw</button></form></section>';
+      const form = $("ltaCreateDraw").querySelector('[data-form="lotto-draw"]');
+      setLottoDrawMode(form);
+      if (ltExampleMode()) fillLottoExample(form);
     }
+    if (lt.highlight) {
+      const row = $("ltaDraws").querySelector('[data-lt-row="' + lt.highlight + '"]');
+      lt.highlight = null;
+      if (row) { row.classList.add("lta-new"); row.scrollIntoView({ behavior: "smooth", block: "center" }); }
+    }
+  }
+
+  /* ---- the named-draw form: Example Mode, the five number boxes, inline messages ---- */
+  const LT_EXAMPLE_KEY = "vb.admin.lottoExampleMode";
+  function ltExampleMode() { try { return localStorage.getItem(LT_EXAMPLE_KEY) === "on"; } catch (e) { return false; } }
+  function setLtExampleMode(on) { try { localStorage.setItem(LT_EXAMPLE_KEY, on ? "on" : "off"); } catch (e) { /* storage unavailable */ } }
+  /* valid future times in Ghana time: betting opens in about 15 minutes, closes next Saturday 6:30 PM, draw at 7:00 PM */
+  function lottoExample(now) {
+    const opens = Math.ceil((now + 15 * 60e3) / (5 * 60e3)) * 5 * 60e3;
+    const d = new Date(now);
+    let closes = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + ((6 - d.getUTCDay() + 7) % 7), 18, 30);
+    while (closes < opens + 3600e3) closes += 7 * 86400e3;
+    const iso = (t) => new Date(t).toISOString();
+    return { name: "Saturday Special Lotto", opens_at: iso(opens), closes_at: iso(closes), draw_at: iso(closes + 30 * 60e3) };
+  }
+  function lottoExampleValues(ex) {
+    return { ltaNewName: ex.name, ltaNewStartDate: ltDate(ex.opens_at), ltaNewStartTime: ltTime(ex.opens_at),
+      ltaNewEndDate: ltDate(ex.closes_at), ltaNewEndTime: ltTime(ex.closes_at), ltaNewDrawDate: ltDate(ex.draw_at), ltaNewDrawTime: ltTime(ex.draw_at),
+      ltaNum1: "4", ltaNum2: "18", ltaNum3: "27", ltaNum4: "53", ltaNum5: "81" };
+  }
+  /* fills the form only; the admin can change anything, and still has to press Create and confirm */
+  function fillLottoExample(form) {
+    if (!form) return;
+    const vals = lottoExampleValues(lottoExample(Date.now()));
+    form.querySelector('input[name="ltaDrawMode"][value="MANUAL"]').checked = true;
+    setLottoDrawMode(form);
+    Object.keys(vals).forEach((id) => { const el = form.querySelector("#" + id); if (el) el.value = vals[id]; });
+    lt.example = vals;
+    checkLottoNumbers(form, false);
+    ltFormMsg(form, "info", "Example filled in. Change anything you like, then press <b>Create and lock manual draw</b>. Nothing is saved until you confirm.");
+  }
+  /* Example Mode off: empties only the boxes still holding the example, so anything the admin typed stays */
+  function clearLottoExample(form) {
+    const vals = lt.example;
+    lt.example = null;
+    if (!form || !vals) return;
+    Object.keys(vals).forEach((id) => { const el = form.querySelector("#" + id); if (el && el.value === vals[id]) el.value = ""; });
+    checkLottoNumbers(form, false);
+    ltFormMsg(form, "", "");
+  }
+  function ltFormMsg(form, kind, html) {
+    const box = form.querySelector(".lta-form-msg");
+    if (!box) return;
+    box.hidden = !html;
+    box.className = "lta-form-msg adm-wide" + (kind ? " is-" + kind : "");
+    box.innerHTML = html || "";
+    if (html && kind === "error") box.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+  /* the five boxes: { numbers } when all are valid, or { error, at } naming the first problem; marks the bad boxes */
+  function checkLottoNumbers(form, strict) {
+    const boxes = Array.from(form.querySelectorAll(".lta-num"));
+    if (!boxes.length) return { numbers: [] };
+    const vals = boxes.map((b) => b.value.trim());
+    const nums = vals.map((v) => (/^\d{1,2}$/.test(v) ? Number(v) : NaN));
+    const bad = boxes.map((b, i) => {
+      if (!vals[i]) return strict ? "empty" : "";
+      if (!(nums[i] >= 1 && nums[i] <= 90)) return "range";
+      if (nums.indexOf(nums[i]) !== i) return "dupe";
+      return "";
+    });
+    boxes.forEach((b, i) => { b.classList.toggle("is-bad", !!bad[i]); b.setAttribute("aria-invalid", bad[i] ? "true" : "false"); });
+    const at = bad.findIndex(Boolean);
+    const err = form.querySelector("#ltaNumErr");
+    const text = at < 0 ? "" : bad[at] === "empty" ? "Enter a number in box " + (at + 1) + "." :
+      bad[at] === "range" ? "Number " + (at + 1) + " must be a whole number from 1 to 90." :
+      "Number " + (at + 1) + " (" + nums[at] + ") is already used. All five numbers must be different.";
+    if (err) { err.textContent = text; err.hidden = !text; }
+    return at < 0 ? { numbers: nums } : { error: text, at };
   }
   function setLottoDrawMode(form) {
     if (!form) return;
     const manual = form.querySelector('input[name="ltaDrawMode"]:checked')?.value === "MANUAL";
     const field = form.querySelector("#ltaManualNumbersField");
-    const input = form.querySelector("#ltaNewNumbers");
     const submit = form.querySelector('button[type="submit"]');
     field.hidden = !manual;
-    input.disabled = !manual;
-    input.required = manual;
+    form.querySelectorAll(".lta-num").forEach((b) => { b.disabled = !manual; });
     submit.textContent = manual ? "Create and lock manual draw" : "Create automatic draw";
   }
   function renderLottoTickets() {
@@ -2938,52 +3030,93 @@
     $("ltaEditTimes").innerHTML = '<section class="adm-card"><div class="adm-mines-card-head"><strong>Edit times · #' + x.id + " " + esc(x.name || "") + "</strong>" +
       '<button class="btn btn-ghost btn-sm" type="button" data-lt-times-close>Close</button></div>' +
       '<p class="adm-note">Change the times while betting is still open. Tickets already bought stay in the draw.</p>' +
-      '<form class="adm-terms" data-form="lotto-times" data-id="' + x.id + '">' + ltTimeFields("ltaEd", x, { startOptional: true }) +
-      '<button class="btn btn-primary btn-sm" type="submit">Save times</button></form></section>';
+      '<form class="adm-terms lta-create-form" data-form="lotto-times" data-id="' + x.id + '" novalidate>' + ltTimeFields("ltaEd", x, { startOptional: true }) +
+      '<div class="lta-form-msg adm-wide" role="status" aria-live="polite" hidden></div>' +
+      '<button class="btn btn-primary btn-lg lta-submit" type="submit">Save times</button></form></section>';
     $("ltaEditTimes").scrollIntoView({ behavior: "smooth", block: "start" });
   }
   async function saveLottoTimes(form) {
     const times = ltReadTimes(form, "ltaEd");
-    if (times.error) return flash("error", times.error);
+    if (times.error) return ltFormMsg(form, "error", esc(times.error));
     const btn = form.querySelector("button[type=submit]");
     btn.disabled = true;
     const r = await api("/lotto/draws/" + form.dataset.id + "/times", times);
     btn.disabled = false;
-    if (!r.ok) return flash("error", errText(r, "Couldn't save the times."));
+    if (!r.ok) return ltFormMsg(form, "error", errText(r, "Couldn't save the times."));
     flash("ok", "Times saved. Betting closes " + ltWhen(r.data.closes_at) + ".");
     $("ltaEditTimes").innerHTML = "";
+    lt.highlight = r.data.id;
     loadLotto(false);
   }
   async function createLottoDraw(form) {
-    const value = (id) => form.querySelector("#" + id).value.trim();
-    const times = ltReadTimes(form, "ltaNew");
-    if (times.error) return flash("error", times.error);
-    const manualMode = form.querySelector('input[name="ltaDrawMode"]:checked').value === "MANUAL";
-    const rawNumbers = manualMode ? value("ltaNewNumbers") : "";
-    const manualNumbers = manualMode ? rawNumbers.split(",").map((n) => Number(n.trim())) : undefined;
-    if (manualNumbers) {
-      const ok = await ask({
-        title: "Commit these winning numbers before sales?",
-        text: "The selected numbers will be committed now, before ticket sales open. They cannot be edited or replaced after this draw is created. Players will see them only after publication.",
-        yes: "Create and lock",
-      });
-      if (ok === null) return;
-    }
     const btn = form.querySelector("button[type=submit]");
+    if (btn.disabled) return;
+    const value = (id) => form.querySelector("#" + id).value.trim();
+    const name = value("ltaNewName");
+    if (name.length < 2) { form.querySelector("#ltaNewName").focus(); return ltFormMsg(form, "error", "Give the draw a name, e.g. Saturday Special Lotto."); }
+    const times = ltReadTimes(form, "ltaNew");
+    if (times.error) return ltFormMsg(form, "error", esc(times.error));
+    const manualMode = form.querySelector('input[name="ltaDrawMode"]:checked').value === "MANUAL";
+    let manualNumbers;
+    if (manualMode) {
+      const nums = checkLottoNumbers(form, true);
+      if (nums.error) {
+        form.querySelectorAll(".lta-num")[nums.at].focus();
+        return ltFormMsg(form, "error", esc(nums.error));
+      }
+      manualNumbers = nums.numbers.slice().sort((a, b) => a - b);
+    }
+    ltFormMsg(form, "", "");
+    const line = (k, v) => "<div><dt>" + k + "</dt><dd>" + v + "</dd></div>";
+    const ok = await ask({
+      title: manualMode ? "Create and lock this manual draw?" : "Create this automatic draw?",
+      text: '<dl class="lta-confirm">' + line("Draw", esc(name)) +
+        line("Betting opens", times.opens_at ? ltWhen(times.opens_at) : "Straight away") + line("Betting closes", ltWhen(times.closes_at)) +
+        line("Draw time", ltWhen(times.draw_at || times.closes_at)) +
+        line("Winning numbers", manualMode ? ltBalls(manualNumbers) : "Generated by the server when betting closes") + "</dl>" +
+        (manualMode ? "These numbers are locked now and can never be changed. Players see them only when the results are published at the draw time." :
+          "The server generates the numbers when betting closes and the results are published at the draw time."),
+      yes: manualMode ? "Create and lock" : "Create draw",
+    });
+    if (ok === null) return;
     btn.disabled = true;
+    btn.textContent = "Saving…";
     const r = await api("/lotto/draws", {
-      name: value("ltaNewName"),
+      name,
       opens_at: times.opens_at,
       closes_at: times.closes_at,
       draw_at: times.draw_at,
       manual_numbers: manualNumbers,
     });
     btn.disabled = false;
-    if (!r.ok) return flash("error", errText(r, "Couldn't create the draw."));
-    flash("ok", manualMode ? "Draw created; numbers are committed and locked." : "Server-drawn Lotto event created.");
-    form.reset();
     setLottoDrawMode(form);
+    if (!r.ok) return ltFormMsg(form, "error", errText(r, "Couldn't create the draw. Check your connection and try again."));
+    const code = r.data.draw_code || "#" + r.data.id;
+    ltFormMsg(form, "ok", "<b>" + esc(name) + "</b> created · Draw ID <b>" + esc(code) + "</b>. It appears in the Draws list above and on the live Lotto page.");
+    form.reset();
+    lt.example = null;
+    checkLottoNumbers(form, false);
+    setLottoDrawMode(form);
+    lt.highlight = r.data.id;
     loadLotto(false);
+    ask({
+      title: "Draw created",
+      text: '<dl class="lta-confirm">' + line("Draw", esc(name)) + line("Draw ID", esc(code)) +
+        line("Betting opens", times.opens_at ? ltWhen(times.opens_at) : "Now") + line("Betting closes", ltWhen(times.closes_at)) +
+        line("Draw time", ltWhen(times.draw_at || times.closes_at)) +
+        line("Winning numbers", manualMode ? "Locked (hidden from players until the results are published)" : "Generated by the server at closing") + "</dl>",
+      yes: "OK", noCancel: true,
+    });
+  }
+  /* the five boxes: digits only, move on after two digits, check as the admin types */
+  function lottoNumberInput(box) {
+    const digits = box.value.replace(/\D/g, "").slice(0, 2);
+    if (digits !== box.value) box.value = digits;
+    checkLottoNumbers(box.form, false);
+    if (digits.length === 2) {
+      const next = box.form.querySelector("#ltaNum" + (Number(box.id.slice(-1)) + 1));
+      if (next) next.focus();
+    }
   }
   async function lottoToggle() {
     const on = !(lt.last && lt.last.enabled);
@@ -3831,8 +3964,18 @@
       loadPartnerStats();
     }
   });
+  document.querySelector(".adm-wrap").addEventListener("input", (e) => {
+    if (e.target.matches(".lta-num")) lottoNumberInput(e.target);
+  });
   document.querySelector(".adm-wrap").addEventListener("change", (e) => {
     if (e.target.matches('input[name="ltaDrawMode"]')) setLottoDrawMode(e.target.form);
+    if (e.target.matches("#ltaExampleMode")) {
+      const on = e.target.checked;
+      setLtExampleMode(on);
+      $("ltaExampleState").textContent = on ? "ON" : "OFF";
+      const form = $("ltaCreateDraw").querySelector('[data-form="lotto-draw"]');
+      if (on) fillLottoExample(form); else clearLottoExample(form);
+    }
   });
 
   document.querySelector(".adm-wrap").addEventListener("click", (e) => {
@@ -3844,6 +3987,7 @@
     if (e.target.closest("[data-lt-times-close]")) { $("ltaEditTimes").innerHTML = ""; return; }
     const ltTimesBtn = e.target.closest("[data-lt-times]");
     if (ltTimesBtn) return openLottoTimes(ltTimesBtn.dataset.ltTimes);
+    if (e.target.closest("[data-lt-example]")) return fillLottoExample($("ltaCreateDraw").querySelector('[data-form="lotto-draw"]'));
     if (e.target.closest("[data-lt-toggle]")) return lottoToggle();
     if (e.target.closest("[data-lt-sales]")) return lottoSales();
     const ltRel = e.target.closest("[data-lt-release]");

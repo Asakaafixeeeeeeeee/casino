@@ -20,8 +20,8 @@ import { assertGameOpen, assertStakeAllowed } from "./availability.js";
  * is open and never allow the result to be edited after creation; the seed is revealed with the result so the
  * commitment can be checked. The admin previews every ticket's result once betting has closed, then publishes with an
  * explicit confirmation: every winning ticket is paid once and the draw is locked. A draw can be cancelled (every
- * ticket refunded in full) only while betting is open; a closed draw nobody published is published automatically a
- * day after its draw time. Real-money ticket sales stay off until an admin switches them on.
+ * ticket refunded in full) only while betting is open; a named draw is published automatically at its draw time, and
+ * any other closed draw nobody published a day after its draw time. Real-money ticket sales stay off until an admin switches them on.
  *
  * Odds: P(Direct-k wins) = C(5,k) ÷ C(90,k). The default multiplier is RTP ÷ that chance, rounded down; an admin can
  * set each one, never above the fair figure (1 ÷ chance), so no ticket size is expected to lose the house money.
@@ -42,6 +42,14 @@ const num = (v: unknown) => Number(v ?? 0);
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
+
+/** A draw's public ID: WBL-<draw date, Ghana time>-<draw number>, e.g. WBL-20261015-5278. Unique, because the draw
+ *  number is; derived from the draw itself, so nothing new is stored and past results keep theirs. */
+export function lottoDrawCode(d: { id: string | number; draw_at: Date | string }): string {
+  const at = new Date(d.draw_at);
+  const ymd = String(at.getUTCFullYear()) + String(at.getUTCMonth() + 1).padStart(2, "0") + String(at.getUTCDate()).padStart(2, "0");
+  return `WBL-${ymd}-${Number(d.id)}`;
+}
 
 /* ---------------- odds and payouts ---------------- */
 
@@ -523,13 +531,13 @@ export async function cancelLottoDraw(db: Pool, id: unknown, by: string, now = D
   });
 }
 
-/** Closes due draws, publishes any closed draw nobody published within a day of its draw time, and keeps the daily
- *  draw open. */
+/** Closes due draws and publishes results: a named draw at its draw time, any other closed draw nobody published
+ *  within a day of its draw time. Keeps the daily draw open. */
 export async function lottoSweep(db: Pool, now = Date.now()): Promise<void> {
   await closeDueLottoDraws(db, now);
   const stale = (await db.query<{ id: string }>(
-    `SELECT id FROM lotto_draws WHERE status = 'CLOSED' AND draw_at <= $1 ORDER BY id`,
-    [new Date(now - LOTTO_AUTO_RELEASE_MS)])).rows;
+    `SELECT id FROM lotto_draws WHERE status = 'CLOSED' AND (draw_at <= $1 OR (NOT auto AND draw_at <= $2)) ORDER BY id`,
+    [new Date(now - LOTTO_AUTO_RELEASE_MS), new Date(now)])).rows;
   for (const { id } of stale) {
     try {
       await releaseLottoDraw(db, id, "auto-release", now);
@@ -565,7 +573,7 @@ function ticketView(t: TicketRow): LottoTicketView {
 
 /** The public draw: numbers and seed only once its results are published. */
 const drawView = (d: DrawRow) => ({
-  id: Number(d.id), name: d.name, draw_at: iso(d.draw_at), opens_at: iso(d.opens_at), closes_at: iso(d.closes_at),
+  id: Number(d.id), draw_code: lottoDrawCode(d), name: d.name, auto: d.auto, draw_at: iso(d.draw_at), opens_at: iso(d.opens_at), closes_at: iso(d.closes_at),
   status: d.status === "CLOSED" ? "DRAWING" : d.status, paused: d.paused, hash: d.hash, number_source: d.number_source ?? "SERVER",
   ...(d.status === "RELEASED" ? {
     numbers: (d.numbers ?? []).map(Number), seed: d.seed, published_at: iso(d.released_at),
@@ -573,7 +581,7 @@ const drawView = (d: DrawRow) => ({
 });
 /** The admin's draw: numbers once betting has closed (never while it's open). */
 const adminDrawView = (d: DrawRow) => ({
-  id: Number(d.id), name: d.name, draw_at: iso(d.draw_at), opens_at: iso(d.opens_at), closes_at: iso(d.closes_at),
+  id: Number(d.id), draw_code: lottoDrawCode(d), name: d.name, draw_at: iso(d.draw_at), opens_at: iso(d.opens_at), closes_at: iso(d.closes_at),
   status: d.status, paused: d.paused, auto: d.auto, hash: d.hash, number_source: d.number_source ?? "SERVER",
   created_by: d.created_by ?? null,
   numbers: d.status === "OPEN" || !d.numbers ? null : d.numbers.map(Number),
@@ -618,7 +626,7 @@ export async function myLottoTickets(db: Pool, userId: string, filter: unknown =
        FROM lotto_tickets WHERE user_id = $1`, [userId])).rows[0];
   return {
     tickets: rows.map((t) => ({
-      ...ticketView(t), draw_at: iso(t.draw_at), draw_name: t.draw_name,
+      ...ticketView(t), draw_at: iso(t.draw_at), draw_name: t.draw_name, draw_code: lottoDrawCode({ id: t.draw_id, draw_at: t.draw_at }),
       draw_status: t.draw_status === "CLOSED" ? "DRAWING" : t.draw_status,
       ...(t.draw_status === "RELEASED" ? { numbers: (t.numbers ?? []).map(Number) } : {}),
     })),

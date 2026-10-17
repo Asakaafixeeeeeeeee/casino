@@ -54,7 +54,7 @@ test("Add money opens in a sheet: a wrong number is told there, a right one is c
   test.setTimeout(120_000);
   /* a player the balance service has seen */
   const number = newPhone();
-  const reg = await request.post(`${ACCOUNTS}/api/register`, { data: { phone: number, password: PASSWORD, dob: "1992-04-05", country: "GH", currency: "GHS", full_name: "Efua Darko" } });
+  const reg = await request.post(`${ACCOUNTS}/api/register`, { data: { phone: number, password: PASSWORD, dob: "1992-04-05", country: "GH", currency: "GHS", full_name: "Efua Darko", accept_deposit_terms: true } });
   expect(reg.status()).toBe(201);
   const player = (await reg.json()).token as string;
   const balance = () => serverBalance(request, player);

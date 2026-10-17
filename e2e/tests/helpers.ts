@@ -42,6 +42,7 @@ export async function register(page: Page, opts: { phone?: string; currency?: "G
   await page.locator("#age").fill("1990-05-17");
   await page.locator("#currency").selectOption(opts.currency ?? "GHS");
   await page.locator("#terms").check();
+  await page.locator("#depositTerms").check();
   await page.locator("#regBtn").click();
   await page.waitForURL(/index\.html$/);
   const token = await sessionToken(page);
@@ -58,7 +59,7 @@ export async function adminSession(request: APIRequestContext, page?: Page): Pro
   let r = await request.post(`${ACCOUNTS}/api/login`, { data: { phone: ADMIN_PHONE, password: PASSWORD, remember: true } });
   if (r.status() === 404) {
     r = await request.post(`${ACCOUNTS}/api/register`, {
-      data: { phone: ADMIN_PHONE, password: PASSWORD, dob: "1990-05-17", country: "GH", currency: "GHS", full_name: "Test Admin" },
+      data: { phone: ADMIN_PHONE, password: PASSWORD, dob: "1990-05-17", country: "GH", currency: "GHS", full_name: "Test Admin", accept_deposit_terms: true },
     });
   }
   expect(r.ok(), `the admin signs in (HTTP ${r.status()})`).toBe(true);

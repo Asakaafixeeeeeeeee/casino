@@ -264,6 +264,27 @@ html.lt-locked, html.lt-locked body { overflow: hidden; }
 }
 .lt-row-latest .lt-ball { --s: 44px; }
 
+/* results history: one compact card per draw; the proof folds away under "Verify this draw" */
+.lt-result { gap: 8px; padding: 12px 14px; }
+.lt-result-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.lt-result-head b { min-width: 0; color: #fff; font-size: .92rem; line-height: 1.3; overflow-wrap: anywhere; }
+.lt-result-head span { flex: none; color: var(--muted); font-size: .76rem; font-weight: 800; }
+.lt-result-meta { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0; font-size: .8rem; }
+.lt-result-meta div { display: flex; gap: 6px; }
+.lt-result-meta dt { color: var(--dim); }
+.lt-result-meta dd { margin: 0; color: var(--text); font-weight: 700; }
+.lt-result-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding-top: 8px; border-top: 1px solid var(--lt-line); }
+.lt-draw-id { color: var(--dim); font-size: .78rem; }
+.lt-draw-id b { margin-left: 4px; color: var(--lt-gold); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .82rem; letter-spacing: .02em; }
+.lt-verify { font-size: .76rem; }
+.lt-verify summary { color: var(--muted); font-weight: 700; cursor: pointer; list-style: none; text-decoration: underline; text-underline-offset: 2px; }
+.lt-verify summary::-webkit-details-marker { display: none; }
+.lt-verify[open] { flex-basis: 100%; }
+.lt-verify[open] summary { margin-bottom: 6px; }
+.lt-verify .lt-hash { display: grid; gap: 2px; margin: 0; padding: 8px 10px; border-radius: 10px; background: rgba(0, 0, 0, .25); }
+.lt-verify .lt-hash span { margin-top: 4px; color: var(--muted); font-weight: 700; }
+.lt-verify code { font-size: .72rem; word-break: break-all; }
+
 /* ---------- shared bits: eyebrows, buttons, cards ---------- */
 .lt-eyebrow { display: inline-flex; align-items: center; gap: 8px; color: var(--lt-gold); font-size: .72rem; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
 .lt-eyebrow::before { content: ""; width: 18px; height: 2px; border-radius: 2px; background: var(--lt-gold-grad); }

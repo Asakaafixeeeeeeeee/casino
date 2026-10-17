@@ -37,6 +37,9 @@ if (process.env.E2E_DB === "pglite") {
   writeFileSync(path.join(stackDir, "db-url"), "pglite");
   const port = Number(process.env.PORT || 8781);
   createApp(env.db).listen(port, () => console.log(`[e2e] balance service (PGlite) on http://localhost:${port}`));
+  /* as src/server.ts does: Lotto draws close and publish on time */
+  const { startLottoSweep } = await import("../../backend/src/games/lotto.ts");
+  startLottoSweep(env.db);
 } else {
   const { default: EmbeddedPostgres } = await import("embedded-postgres");
   const dir = mkdtempSync(path.join(os.tmpdir(), "rw-e2e-pg-"));
