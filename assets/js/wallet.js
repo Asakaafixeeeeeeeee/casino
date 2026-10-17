@@ -471,8 +471,9 @@
 
     /* Card and Paybill: hand over to TheTeller's secure page */
     async function startCheckout(amt, errId, btn) {
-      if (paymentsOff) return paymentsUnavailable();
       if (!showError(errId, amountError(amt))) return;
+      if (paused) return showPaused();
+      if (paymentsOff) return paymentsUnavailable();
       if (!guardOk()) return;
       if (!rulesOk()) return;
       btn.disabled = true;
@@ -480,7 +481,10 @@
       const result = await U.paymentApi("/api/payments/teller/checkout", {
         body: { amount: amt, currency: "GHS", idempotency_key: newKey() }
       });
-      if (result.data && result.data.error === "payments_off") return paymentsUnavailable(result.data.message);
+      if (isOff(result.data)) {
+        btn.disabled = false;
+        return paymentsUnavailable();
+      }
       if (guardRefusal(result.data)) {
         btn.disabled = false;
         msg.innerHTML = "";
@@ -504,35 +508,44 @@
     const depAmount = $("depAmount");
     let waiting = false;
     let paused = false; // on a self-imposed break: deposits are blocked by the server too
-    let paymentsOff = false; // the admin switched TheTeller payments off: the server refuses new payments too
+    let paymentsOff = false; // payments switched off by the admin, or the gateway isn't set up yet: the server refuses new payments too
+    let pausedText = "";
+    /* the button follows the amount only; a blocked account is told why when it taps, never left with a dead grey button */
     const sync = () => {
-      showError("depAmountErr", "");
-      submit.disabled = waiting || paused || paymentsOff || !(Number(depAmount.value) >= DEPOSIT_MIN);
+      const amt = Number(depAmount.value);
+      showError("depAmountErr", depAmount.value === "" ? "" : amountError(amt));
+      submit.disabled = waiting || !(amt >= DEPOSIT_MIN && amt <= DEPOSIT_MAX);
     };
     resync = sync;
-    const OFF_TEXT = "Payments are temporarily unavailable. Please try again later.";
-    function paymentsUnavailable(text) {
+    const OFF_TITLE = "💳 PAYMENT SERVICE UNAVAILABLE";
+    const OFF_TEXT = "Mobile Money deposits are currently being configured. Please try again when our payment service becomes available.";
+    function paymentsUnavailable() {
       paymentsOff = true;
       sync();
-      ["pbSubmit", "cdSubmit"].forEach((id) => { if ($(id)) $(id).disabled = true; });
-      showMsg("error", U.esc(text || OFF_TEXT));
+      msg.innerHTML = "";
+      openDialog(OFF_TITLE, "<p>" + OFF_TEXT + "</p>", [{ label: "OK", primary: true, onClick: () => closeDialog() }]);
     }
-    /* the admin's ON/OFF switch (Admin -> TheTeller Payment Settings); payments already made are still checked and credited */
+    const isOff = (data) => !!data && (data.error === "payments_off" || data.error === "payments_unavailable");
+    function showPaused() {
+      openDialog("DEPOSITS PAUSED", "<p>" + pausedText + "</p>", [{ label: "OK", primary: true, onClick: () => closeDialog() }]);
+    }
+    /* the admin's ON/OFF switch (Admin -> TheTeller Payment Settings) and whether the gateway is set up at all;
+       payments already made are still checked and credited */
     U.paymentApi("/api/payments/config").then((r) => {
-      if (r.ok && r.data && r.data.paymentsOn === false) paymentsUnavailable(r.data.message);
+      if (r.ok && r.data && (r.data.paymentsOn === false || r.data.enabled === false)) paymentsOff = true;
     });
     U.paymentApi("/api/user/limits").then((r) => {
       if (!r.ok || !r.data.excludedUntil) return;
       paused = true;
-      sync();
-      ["pbSubmit", "cdSubmit"].forEach((id) => { if ($(id)) $(id).disabled = true; });
-      showMsg("info", "You're taking a break until <b>" + new Date(r.data.excludedUntil).toLocaleString("en-GB",
-        { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + "</b>. Deposits are paused until then; withdrawals still work.");
+      pausedText = "You're taking a break until <b>" + new Date(r.data.excludedUntil).toLocaleString("en-GB",
+        { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + "</b>. Deposits are paused until then; withdrawals still work.";
+      showMsg("info", pausedText);
     });
     depAmount.addEventListener("input", sync);
     wireIncrements("quick", depAmount, sync);
 
     submit.addEventListener("click", async () => {
+      if (paused) return showPaused();
       if (paymentsOff) return paymentsUnavailable();
       const amt = Math.round(Number(depAmount.value) * 100) / 100;
       if (!showError("depAmountErr", amountError(amt))) return;
@@ -569,10 +582,10 @@
         PayFX.close();
         return;
       }
-      if (result.data && result.data.error === "payments_off") {
+      if (isOff(result.data)) {
         waiting = false;
         PayFX.close();
-        return paymentsUnavailable(result.data.message);
+        return paymentsUnavailable();
       }
       if (result.data && result.data.error === "rules_not_accepted") {
         waiting = false;

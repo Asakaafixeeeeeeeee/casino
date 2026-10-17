@@ -1735,7 +1735,6 @@ a, button, [role="button"], [data-cta] {
 .pay-phone-mine[hidden] { display: none; }
 .pay-phone-hint { margin: 2px 4px 14px; font-size: .8rem; line-height: 1.45; color: var(--dim); }
 .pay-phone-locked input { cursor: default; }
-.pay-lock { flex: none; padding: 4px 9px; border-radius: var(--r-full); border: 1px solid var(--line); font-size: .68rem; font-weight: 800; letter-spacing: .06em; color: var(--green); }
 
 /* deposit: the 10-minute wait, and the one-time number confirmation */
 .dep-wait { margin: 0 0 14px; padding: 14px; border-radius: var(--r); border: 1px solid rgba(255, 75, 69, .45); background: rgba(255, 75, 69, .08); text-align: center; }
