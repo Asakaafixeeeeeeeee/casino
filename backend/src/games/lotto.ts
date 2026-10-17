@@ -238,10 +238,16 @@ export async function saveLottoSettings(db: Pool, admin: string, input: Record<s
       max_lines, daily_enabled, daily_name, real_money, admin]);
   /* the daily draw taking bets follows the new schedule and name */
   const at = nextDrawAt({ draw_time, cutoff_min }, now);
+  const scheduleChanged = draw_time !== cur.draw_time || cutoff_min !== cur.cutoff_min;
   try {
-    await db.query(
-      `UPDATE lotto_draws SET draw_at = $1, closes_at = $2, name = $4 WHERE auto AND status = 'OPEN' AND closes_at > $3`,
-      [at, new Date(at.getTime() - cutoff_min * 60e3), new Date(now), daily_name]);
+    /* saving other settings (odds, limits) must not undo times an admin set by hand on the live draw */
+    if (scheduleChanged) {
+      await db.query(
+        `UPDATE lotto_draws SET draw_at = $1, closes_at = $2, name = $4 WHERE auto AND status = 'OPEN' AND closes_at > $3`,
+        [at, new Date(at.getTime() - cutoff_min * 60e3), new Date(now), daily_name]);
+    } else {
+      await db.query(`UPDATE lotto_draws SET name = $2 WHERE auto AND status = 'OPEN' AND closes_at > $1`, [new Date(now), daily_name]);
+    }
   } catch (e) {
     if ((e as { code?: string }).code !== "23505") throw e;
   }

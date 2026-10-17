@@ -231,7 +231,6 @@
   }
 
   function tick() {
-    tickCards();
     const st = state.st;
     const d = draw();
     if (!st || !d) return;
@@ -255,54 +254,6 @@
     }
   }
 
-  /* ---------------- the page overview: games, upcoming draws and recent results ---------------- */
-  const clock = (ms) => {
-    const h = Math.floor(ms / 3600e3), m = Math.floor((ms % 3600e3) / 60e3), s = Math.floor((ms % 60e3) / 1000);
-    return (h >= 24 ? Math.floor(h / 24) + "d " : "") + [h % 24, m, s].map((v) => String(v).padStart(2, "0")).join(":");
-  };
-  function tickCards() {
-    document.querySelectorAll("[data-cd]").forEach((el) => {
-      const ms = new Date(el.dataset.cd).getTime() - serverNow();
-      el.textContent = ms > 0 ? clock(ms) : "Closed";
-    });
-  }
-  function paintOverview() {
-    const st = state.st;
-    if (!st) return;
-    const open = st.draws || [];
-    $("ltGames").innerHTML = open.length ? open.map((d) =>
-      `<article class="lt-game${d.paused ? " is-paused" : ""}">
-        <header><h3>${esc(d.name)}</h3><span class="lt-badge${d.paused ? " is-drawing" : ""}">${d.paused ? "Paused" : "Betting open"}</span></header>
-        <dl>
-          <div><dt>Closes in</dt><dd class="lt-game-cd" data-cd="${esc(d.closes_at)}">--:--:--</dd></div>
-          <div><dt>Draw</dt><dd>${esc(when(d.draw_at))}</dd></div>
-        </dl>
-        <button type="button" class="lt-btn-gold" data-pick-draw="${d.id}"${d.paused ? " disabled" : ""}>Bet now</button>
-      </article>`).join("") : '<p class="lt-none">No draw is taking bets right now. The next one appears here as soon as it opens.</p>';
-    const up = st.upcoming || [];
-    $("ltUpcomingSec").hidden = !up.length;
-    $("ltUpcoming").innerHTML = up.map((d) =>
-      `<li><span class="lt-up-ico" aria-hidden="true">${new Date(d.draw_at).toLocaleDateString("en-GB", { timeZone: "Africa/Accra", day: "numeric" })}<small>${new Date(d.draw_at).toLocaleDateString("en-GB", { timeZone: "Africa/Accra", month: "short" })}</small></span>
-        <span><b>${esc(d.name)}</b><small>Betting opens ${esc(when(d.opens_at))}</small><small>Draw ${esc(when(d.draw_at))}</small></span></li>`).join("");
-    const recent = (st.results || []).filter((d) => d.numbers && d.numbers.length).slice(0, 3);
-    $("ltRecentSec").hidden = !recent.length;
-    $("ltRecent").innerHTML = recent.map((d) =>
-      `<article class="lt-recent-card"><header><h3>${esc(d.name || "WIN B Lotto")}</h3><small>${esc(dayLong(d.draw_at))} · ${esc(timeOnly(d.draw_at))}</small></header>
-        <div class="lt-recent-balls" aria-label="Winning numbers">${ballsHtml(d.numbers, "lt-ball-lg", false)}</div></article>`).join("");
-    const next = open.filter((d) => !d.paused).sort((a, b) => new Date(a.closes_at) - new Date(b.closes_at))[0];
-    const sc = $("ltShowCount");
-    if (next) { sc.dataset.cd = next.closes_at; $("ltShowName").textContent = next.name; }
-    else { delete sc.dataset.cd; sc.textContent = "—"; $("ltShowName").textContent = "No draw open"; }
-    tickCards();
-  }
-  document.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-pick-draw]");
-    if (!b) return;
-    state.drawId = Number(b.dataset.pickDraw);
-    paintDraw();
-    $("ltDrawTabs").scrollIntoView({ behavior: "smooth", block: "start" });
-  });
-
   async function load() {
     const r = await U.paymentApi(GAME + "/state");
     if (!r.ok || !r.data || !r.data.draws) { $("ltStatus").textContent = "Unavailable"; return; }
@@ -316,7 +267,6 @@
       state.drawId = pick ? pick.id : null;
     }
     paintDraw();
-    paintOverview();
   }
 
   /* ---------------- rules ---------------- */

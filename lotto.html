@@ -13,7 +13,7 @@
 <meta name="description" content="WIN B Lotto: pick numbers from 1-90 for 5/90 draws — Direct, Perm and Banker tickets, payouts fixed when you buy, numbers drawn at random by the server.">
 <link rel="stylesheet" href="assets/css/styles.css?v=43">
 <link rel="stylesheet" href="assets/css/minigame.css">
-<link rel="stylesheet" href="assets/css/lotto.css?v=6">
+<link rel="stylesheet" href="assets/css/lotto.css?v=7">
 <link rel="icon" href="assets/img/winb-mark.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="assets/img/app/w-apple-touch-icon-180.png">
@@ -40,34 +40,8 @@
 <main class="lt-main" id="ltMain">
   <p class="lt-closed" id="ltSalesClosed" hidden><b>Ticket sales open soon.</b> You can look around and pick your numbers — buying a ticket isn't available yet.</p>
 
-  <!-- showcase: the main banner, with the next draw's countdown -->
-  <section class="lt-showcase" aria-labelledby="ltShowTitle">
-    <div class="lt-photo lt-showcase-photo" style="--ph:url(assets/img/lotto/hero-celebration.jpg)" role="img" aria-label="Friends celebrating a win together"></div>
-    <div class="lt-showcase-copy">
-      <span class="lt-eyebrow">WIN B Lotto · 5/90</span>
-      <h2 id="ltShowTitle">Pick your numbers.<br><b>Play the daily draw.</b></h2>
-      <p>Official draws every day, payouts fixed when you buy, and winning tickets paid straight to your balance.</p>
-      <div class="lt-cta"><a class="lt-btn-gold" href="#ltPick">Play now</a><button type="button" class="lt-btn-glass" data-open-rules>How to play</button></div>
-    </div>
-    <div class="lt-showcase-clock">
-      <span class="lt-showcase-label" id="ltShowName">Next draw</span>
-      <b class="lt-showcase-time" id="ltShowCount">--:--:--</b>
-      <small>until betting closes · Ghana time (GMT)</small>
-    </div>
-  </section>
-
-  <nav class="lt-quick" aria-label="On this page">
-    <a href="#ltGamesSec">Games</a><a href="#ltPick">Bet</a><a href="#ltRecentSec">Results</a><a href="#ltUpcomingSec">Upcoming</a><a href="#ltPromoSec">Promotions</a><a href="#ltSupportSec">Support</a>
-  </nav>
-
-  <!-- available games and their countdowns -->
-  <section class="lt-games-sec" id="ltGamesSec" aria-labelledby="ltGamesTitle">
-    <div class="lt-sec-head"><div><span class="lt-eyebrow">Available now</span><h2 id="ltGamesTitle">Lotto games</h2></div></div>
-    <div class="lt-games" id="ltGames"><p class="lt-none">Loading draws…</p></div>
-  </section>
-
-  <!-- the previous welcome slides stay in the page for scripts that drive them, but the new banner replaces them -->
-  <section class="lt-hero" id="ltHero" aria-roledescription="carousel" aria-label="WIN B Lotto" hidden>
+  <!-- welcome slides: they slide by themselves; swipe or use the arrows -->
+  <section class="lt-hero" id="ltHero" aria-roledescription="carousel" aria-label="WIN B Lotto">
     <div class="lt-hero-track" id="ltHeroTrack" aria-live="off">
       <article class="lt-slide lt-slide-welcome is-active" aria-roledescription="slide">
         <div class="lt-slide-copy">
@@ -191,31 +165,6 @@
   </div>
 
 
-  <!-- recent winning results -->
-  <section class="lt-recent-sec" id="ltRecentSec" aria-labelledby="ltRecentTitle" hidden>
-    <div class="lt-sec-head"><div><span class="lt-eyebrow">Winning numbers</span><h2 id="ltRecentTitle">Recent results</h2></div>
-      <button type="button" class="lt-btn-glass" data-show-results>All results</button></div>
-    <div class="lt-recent" id="ltRecent"></div>
-  </section>
-
-  <!-- upcoming draws -->
-  <section class="lt-upcoming-sec" id="ltUpcomingSec" aria-labelledby="ltUpTitle" hidden>
-    <div class="lt-sec-head"><div><span class="lt-eyebrow">Coming up</span><h2 id="ltUpTitle">Upcoming draws</h2></div></div>
-    <ul class="lt-upcoming" id="ltUpcoming"></ul>
-  </section>
-
-  <!-- promotional banners: photographs go in assets/img/lotto (see assets/img/lotto/README.txt) -->
-  <section class="lt-promo-sec" id="ltPromoSec" aria-label="Promotions">
-    <article class="lt-promo">
-      <div class="lt-photo" style="--ph:url(assets/img/lotto/promo-winners.jpg)" role="img" aria-label="Winners celebrating"></div>
-      <div class="lt-promo-copy"><span class="lt-eyebrow">Daily draws</span><h3>Your numbers could be next</h3><p>Pick up to 5 numbers from 1 to 90 and play the draw.</p><a class="lt-btn-gold" href="#ltPick">Pick numbers</a></div>
-    </article>
-    <article class="lt-promo">
-      <div class="lt-photo" style="--ph:url(assets/img/lotto/promo-payout.jpg)" role="img" aria-label="A winner checking a payout on a phone"></div>
-      <div class="lt-promo-copy"><span class="lt-eyebrow">Paid to your balance</span><h3>Winnings credited automatically</h3><p>Winning tickets are settled by the server once results are published.</p><a class="lt-btn-glass" href="#ltWinTitle">See verified winners</a></div>
-    </article>
-  </section>
-
   <!-- verified winners: real winning tickets from released draws only -->
   <section class="lt-winners" aria-labelledby="ltWinTitle">
     <div class="lt-sec-head">
@@ -276,13 +225,6 @@
   </section>
 
 
-  <!-- customer support -->
-  <section class="lt-support" id="ltSupportSec" aria-labelledby="ltSupTitle">
-    <div><span class="lt-eyebrow">Customer support</span><h2 id="ltSupTitle">Questions about Lotto?</h2>
-      <p>Ask about tickets, results, deposits or withdrawals. Our assistant answers instantly and our team follows up on anything it can't.</p></div>
-    <button type="button" class="lt-btn-gold" data-open-chat>Chat with WIN B Support</button>
-  </section>
-
   <!-- account security: only what the site really does -->
   <section class="lt-secure" aria-labelledby="ltSecTitle">
     <span class="lt-eyebrow">Account security</span>
@@ -330,6 +272,6 @@
 </dialog>
 
 <script src="assets/js/site.js?v=58"></script>
-<script src="assets/js/lotto.js?v=8"></script>
+<script src="assets/js/lotto.js?v=9"></script>
 </body>
 </html>
