@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { logAction } from "./admin.js";
+import { notifyPlayer, SUPPORT_PUSH } from "./push.js";
 
 /*
  * Live support chat. Each player has one conversation with the WIN B casino team; a player's message (re)opens it, an
@@ -83,6 +84,7 @@ export async function adminThreads(db: Pool, input: { status?: unknown } = {}) {
   const { rows } = await db.query(
     `SELECT t.id, t.status, t.last_message_at, t.created_at, u.id AS user_id, u.username, u.phone,
             (SELECT count(*) FROM support_messages m WHERE m.thread_id = t.id AND m.sender = 'player' AND m.id > t.admin_read_id) AS unread,
+            t.needs_human,
             (SELECT row_to_json(x) FROM (SELECT sender, body FROM support_messages m WHERE m.thread_id = t.id ORDER BY id DESC LIMIT 1) x) AS last
        FROM support_threads t JOIN users u ON u.id = t.user_id
       WHERE ($1 = '' OR t.status = $1)
@@ -91,7 +93,7 @@ export async function adminThreads(db: Pool, input: { status?: unknown } = {}) {
       LIMIT 200`, [status]);
   return {
     threads: rows.map((t) => ({
-      id: t.id, status: t.status, user_id: t.user_id, username: t.username, phone: t.phone, unread: num(t.unread),
+      id: t.id, status: t.status, user_id: t.user_id, username: t.username, phone: t.phone, unread: num(t.unread), needs_human: !!t.needs_human,
       last_at: t.last_message_at, preview: t.last ? String(t.last.body).slice(0, 140) : "", last_from: t.last ? t.last.sender : null,
     })),
   };
@@ -126,8 +128,9 @@ export async function adminReply(db: Pool, admin: string, threadId: unknown, inp
   const m = (await db.query<MessageRow>(
     `INSERT INTO support_messages (thread_id, sender, admin_phone, body) VALUES ($1, 'admin', $2, $3) RETURNING *`,
     [t.id, admin, body])).rows[0]!;
-  await db.query(`UPDATE support_threads SET status = 'OPEN', last_message_at = now(), admin_read_id = GREATEST(admin_read_id, $2) WHERE id = $1`,
+  await db.query(`UPDATE support_threads SET status = 'OPEN', needs_human = false, last_message_at = now(), admin_read_id = GREATEST(admin_read_id, $2) WHERE id = $1`,
     [t.id, num(m.id)]);
+  void notifyPlayer(db, t.user_id, SUPPORT_PUSH);
   return { message: forAdmin(m) };
 }
 

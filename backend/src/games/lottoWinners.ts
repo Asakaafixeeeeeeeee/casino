@@ -34,7 +34,7 @@ function winView(r: WinRow) {
 const WINS = `SELECT t.code, t.bet_type, t.size, t.picks, t.banker, t.stake, t.payout, t.winning_lines, u.phone,
                      d.id AS draw_id, d.name AS draw_name, d.draw_at, d.numbers
                 FROM lotto_tickets t JOIN lotto_draws d ON d.id = t.draw_id JOIN users u ON u.id = t.user_id
-               WHERE t.status = 'WON' AND t.payout > 0 AND d.status = 'RELEASED'`;
+               WHERE t.status = 'WON' AND t.payout > 0 AND d.status = 'RELEASED' AND d.result_hidden_at IS NULL`;
 
 /** The biggest wins of the last 90 days, the latest wins, and the all-time count and total paid. */
 export async function lottoWinners(db: Pool, now = Date.now()) {
@@ -54,7 +54,7 @@ export async function lottoWinners(db: Pool, now = Date.now()) {
 /** The latest published result, for the site-wide congratulations popup: only a draw whose results were released. */
 export async function latestLottoResult(db: Pool) {
   const d = (await db.query<{ id: string; name: string | null; numbers: number[] | null; released_at: Date | null; draw_at: Date }>(
-    `SELECT id, name, numbers, released_at, draw_at FROM lotto_draws WHERE status = 'RELEASED' AND numbers IS NOT NULL
+    `SELECT id, name, numbers, released_at, draw_at FROM lotto_draws WHERE status = 'RELEASED' AND result_hidden_at IS NULL AND numbers IS NOT NULL
       ORDER BY released_at DESC NULLS LAST, id DESC LIMIT 1`)).rows[0];
   return {
     result: d ? {

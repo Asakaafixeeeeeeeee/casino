@@ -1056,9 +1056,72 @@
       else say("agent", '<b class="bubble-who">WIN B casino Support</b>' + text2html(m.body));
     }
     function setUnread(n) {
-      if (!fab) return;
-      fab.classList.toggle("has-unread", n > 0);
-      fab.setAttribute("aria-label", n > 0 ? "Live chat — new reply from our team" : "Live chat");
+      if (fab) {
+        fab.classList.toggle("has-unread", n > 0);
+        if (n > 0) fab.setAttribute("data-unread", n > 9 ? "9+" : String(n)); else fab.removeAttribute("data-unread");
+        fab.setAttribute("aria-label", n > 0 ? "Live chat — " + n + " new message" + (n === 1 ? "" : "s") + " from WIN B Support" : "Live chat");
+      }
+      /* a reply arrived while they're on the site: tell them right away (the toast opens the chat) */
+      if (n > 0 && sheet.hidden) {
+        let seen = 0;
+        try { seen = Number(sessionStorage.getItem("wbSupportToast") || 0); } catch (e) { /* storage blocked */ }
+        if (n > seen) {
+          replyToast();
+          try { sessionStorage.setItem("wbSupportToast", String(n)); } catch (e) { /* storage blocked */ }
+        }
+      }
+      if (n === 0) { try { sessionStorage.removeItem("wbSupportToast"); } catch (e) { /* storage blocked */ } }
+    }
+    function replyToast() {
+      let host = document.querySelector(".toast-host");
+      if (!host) {
+        host = document.createElement("div");
+        host.className = "toast-host";
+        host.setAttribute("role", "status");
+        host.setAttribute("aria-live", "polite");
+        document.body.appendChild(host);
+      }
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = "toast info toast-reply";
+      el.innerHTML = "<b>WIN B Casino</b><span>You have received a new message from WIN B Support. Tap to view your conversation.</span>";
+      el.addEventListener("click", () => { el.remove(); chat.open(); });
+      host.appendChild(el);
+      setTimeout(() => el.remove(), 9000);
+    }
+    /* browser notifications for when they're away: needs their permission, and the server's VAPID key */
+    const pushSupported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+    const b64 = (s) => {
+      const p = (s + "=".repeat((4 - (s.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/");
+      return Uint8Array.from(atob(p), (c) => c.charCodeAt(0));
+    };
+    async function enablePush() {
+      const k = await paymentApi("/api/support/push-key");
+      if (!k.ok || !k.data || !k.data.key) { toast("Notifications aren't available right now.", "error"); return false; }
+      if ((await Notification.requestPermission()) !== "granted") { toast("Notifications were not allowed on this device.", "error"); return false; }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(k.data.key) }));
+      const r = await paymentApi("/api/support/push-subscribe", { body: sub.toJSON() });
+      if (!r.ok) { toast("Couldn't turn notifications on. Try again.", "error"); return false; }
+      toast("Notifications are on for WIN B Support replies.", "success");
+      return true;
+    }
+    async function offerPush() {
+      const old = sheet.querySelector(".chat-notify");
+      if (old) old.remove();
+      if (!pushSupported || !session.get() || Notification.permission !== "default") return;
+      const k = await paymentApi("/api/support/push-key");
+      if (!k.ok || !k.data || !k.data.key) return; /* push isn't configured on the server */
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "chat-notify";
+      btn.textContent = "Turn on notifications for replies";
+      btn.addEventListener("click", async () => { if (await enablePush()) btn.remove(); });
+      form.parentNode.insertBefore(btn, form);
+    }
+    if (pushSupported && session.get()) {
+      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+      navigator.serviceWorker.addEventListener("message", (e) => { if (e.data && e.data.type === "support-reply") checkUnread(true); });
     }
     async function loadLive() {
       const r = await paymentApi("/api/support/thread" + (live.lastId ? "?after=" + live.lastId : ""));
@@ -1070,14 +1133,16 @@
       r.data.messages.forEach(showMessage);
       setUnread(0); /* fetching the conversation marks the team's replies as seen */
     }
-    async function checkUnread() {
-      if (!session.get() || !sheet.hidden) return;
+    async function checkUnread(force) {
+      if (!session.get() || !sheet.hidden || (document.hidden && force !== true)) return;
       const r = await paymentApi("/api/support/unread");
       if (r.ok && r.data) setUnread(r.data.unread);
     }
-    if (session.get() && fab) {
+    if (session.get()) {
       checkUnread();
-      setInterval(checkUnread, 60000);
+      setInterval(checkUnread, 15000);
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) checkUnread(); });
+      if (/[?&]chat=1\b/.test(location.search)) setTimeout(() => chat.open(), 400);
     }
 
     form.addEventListener("submit", async (e) => {
@@ -1128,6 +1193,7 @@
       }
       clearInterval(live.timer);
       if (open && signedIn) {
+        offerPush();
         loadLive();
         live.timer = setInterval(() => { if (!sheet.hidden) loadLive(); }, 5000); /* the team's replies, while it's open */
       }

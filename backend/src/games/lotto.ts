@@ -254,6 +254,7 @@ export interface DrawRow {
   id: string; name: string; draw_at: Date; opens_at: Date | null; closes_at: Date; seed: string; hash: string;
   numbers: number[] | null; number_source: "SERVER" | "MANUAL"; status: "OPEN" | "CLOSED" | "RELEASED" | "CANCELLED"; paused: boolean; auto: boolean;
   decided_by: string | null; created_by: string | null; released_at: Date | null; created_at: Date;
+  result_hidden_at?: Date | null; result_hidden_by?: string | null; result_hidden_reason?: string | null;
 }
 interface TicketRow {
   id: string; code: string; draw_id: string; user_id: string; bet_type: BetType; size: number; banker: number | null;
@@ -531,6 +532,22 @@ export async function cancelLottoDraw(db: Pool, id: unknown, by: string, now = D
   });
 }
 
+/** Takes a published result off the public pages. Only the public listing changes: tickets, settlement, payouts and
+ *  the ledger are never touched, and the draw stays RELEASED so nothing can be re-settled. Idempotent per draw. */
+export async function hideLottoResult(db: Pool, id: unknown, by: string, reason: unknown = "") {
+  const drawId = drawIdOf(id);
+  const why = String(reason ?? "").trim().slice(0, 300);
+  return inTransaction(db, async (client) => {
+    const d = (await client.query<DrawRow>(`SELECT * FROM lotto_draws WHERE id = $1 FOR UPDATE`, [drawId])).rows[0];
+    if (!d) throw new GameError("not_found", "That draw wasn't found", 404);
+    if (d.status !== "RELEASED") throw new GameError("not_published", "Only a published result can be deleted from the results page.", 409);
+    if (d.result_hidden_at) throw new GameError("already_deleted", "This result has already been removed from the results page.", 409);
+    await client.query(`UPDATE lotto_draws SET result_hidden_at = now(), result_hidden_by = $2, result_hidden_reason = $3 WHERE id = $1`,
+      [drawId, by, why || null]);
+    return { id: drawId, name: d.name, numbers: (d.numbers ?? []).map(Number), reason: why || null };
+  });
+}
+
 /** Closes due draws and publishes results: a named draw at its draw time, any other closed draw nobody published
  *  within a day of its draw time. Keeps the daily draw open. */
 export async function lottoSweep(db: Pool, now = Date.now()): Promise<void> {
@@ -587,6 +604,7 @@ const adminDrawView = (d: DrawRow) => ({
   numbers: d.status === "OPEN" || !d.numbers ? null : d.numbers.map(Number),
   ...(d.status === "RELEASED" ? { seed: d.seed } : {}),
   decided_by: d.decided_by ?? null, released_at: iso(d.released_at),
+  result_hidden_at: d.result_hidden_at ? iso(d.result_hidden_at) : null, result_hidden_by: d.result_hidden_by ?? null,
 });
 
 /** The lotto page: draws taking bets, the odds, bet types and limits, and the latest results. */
@@ -597,7 +615,7 @@ export async function lottoState(db: Pool, now = Date.now()) {
   const upcoming = (await db.query<DrawRow>(
     `SELECT * FROM lotto_draws WHERE status = 'OPEN' AND opens_at > $1 ORDER BY opens_at LIMIT 5`, [new Date(now)])).rows;
   const results = (await db.query<DrawRow>(
-    `SELECT * FROM lotto_draws WHERE status IN ('RELEASED', 'CLOSED', 'CANCELLED') ORDER BY draw_at DESC, id DESC LIMIT 12`)).rows;
+    `SELECT * FROM lotto_draws WHERE status IN ('RELEASED', 'CLOSED', 'CANCELLED') AND result_hidden_at IS NULL ORDER BY draw_at DESC, id DESC LIMIT 12`)).rows;
   const rtpOf = (k: number) => round2(s.odds[k]! * lottoChance(k) * 100);
   return {
     now: new Date(now).toISOString(),

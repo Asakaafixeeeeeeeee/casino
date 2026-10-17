@@ -22,7 +22,7 @@ import { adminReply, adminThread, adminThreads, setThreadStatus, SupportError, u
 import { listAdminMinesSignals } from "../services/minesSignal.js";
 import { DepositError, recheckDeposit, waitingDeposits } from "../services/depositRecheck.js";
 import { aviatorOverview, saveAviatorSettings } from "../services/aviatorAdmin.js";
-import { cancelLotto, createLotto, lottoKey, lottoOverview, lottoPreview, lottoTickets, pauseLotto, releaseLotto, saveLottoAdminSettings, updateLottoTimes } from "../services/lottoAdmin.js";
+import { cancelLotto, createLotto, deleteLottoResult, lottoKey, lottoOverview, lottoPreview, lottoTickets, pauseLotto, releaseLotto, saveLottoAdminSettings, updateLottoTimes } from "../services/lottoAdmin.js";
 import { gameDetail, gamesOverview, saveGameControls } from "../services/gameAdmin.js";
 import { getPlayerRisk, playerMoney, playersWithLimits, recentDeposits, riskOverview, savePlayerRisk, saveRiskSettings } from "../services/risk.js";
 import { adminReviews, decideReview } from "../services/reviews.js";
@@ -118,6 +118,7 @@ export function adminRouter(db: Pool): Router {
   r.post("/lotto/draws/:id/pause", send((req) => pauseLotto(db, adminOf(req), req.params.id, req.body ?? {})));
   r.post("/lotto/draws/:id/release", send((req) => releaseLotto(db, adminOf(req), req.params.id, req.body ?? {})));
   r.post("/lotto/draws/:id/cancel", send((req) => cancelLotto(db, adminOf(req), req.params.id)));
+  r.post("/lotto/draws/:id/delete-result", send((req) => deleteLottoResult(db, adminOf(req), req.params.id, req.body?.reason)));
 
   /* Blocked, Banned and Deleted users: the lists, one player's restriction and history, and the actions (block,
      unblock, ban, lift_ban, deactivate, delete, restore). Records and balances are never removed. */

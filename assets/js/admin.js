@@ -2465,7 +2465,7 @@
             '<div class="txr-row adm-chat-row' + (t.unread ? " unread" : "") + '" data-thread="' + esc(t.id) + '" role="button" tabindex="0">' + avatar(t.username) +
             '<span class="txr-main"><strong>' + esc(t.username || "Player") + (t.phone ? " · " + esc(t.phone) : "") + "</strong>" +
             '<small class="txr-detail">' + (t.last_from === "admin" ? "You: " : "") + esc(t.preview) + "</small>" +
-            "<small>" + ago(t.last_at) + (t.status === "CLOSED" ? " · closed" : "") + "</small></span>" +
+            "<small>" + ago(t.last_at) + (t.status === "CLOSED" ? " · closed" : "") + (t.needs_human ? ' · <strong class="adm-note">Needs admin</strong>' : "") + "</small></span>" +
             '<span class="txr-end">' + (t.unread ? '<span class="badge">' + t.unread + "</span>" : "") + "</span></div>").join("") + "</div>"
         : empty(sp.view === "OPEN" ? "No open conversations. New messages from players show up here." : "Nothing here.", "chat"));
   }
@@ -2475,7 +2475,7 @@
     const s = sheet("Support chat");
     const conv = { lastId: 0, shown: new Set(), thread: null };
     const msgHtml = (m) => '<div class="adm-msg ' + m.from + '">' + esc(m.body).replace(/\n/g, "<br>") +
-      "<small>" + (m.from === "admin" ? "Support · " + esc(m.admin || "") + " · " : "") + when(m.at) + "</small></div>";
+      "<small>" + (m.from === "admin" ? "Support · " + (m.admin === "ai-assistant" ? "AI assistant" : esc(m.admin || "")) + " · " : "") + when(m.at) + "</small></div>";
     const headHtml = (t) =>
       '<div class="adm-who">' + avatar(t.username) + "<div><strong>" + esc(t.username || "Player") + "</strong>" +
         "<small>" + (t.phone ? '<a href="tel:' + esc(t.phone) + '">' + esc(t.phone) + "</a> · " : "") + "since " + when(t.created_at) + "</small></div>" +
@@ -2839,7 +2839,8 @@
       let act = '<button class="btn btn-ghost btn-sm" type="button" data-lt-tickets="' + x.id + '">Tickets</button>';
       if (x.status === "OPEN") act += ' <button class="btn btn-ghost btn-sm" type="button" data-lt-times="' + x.id + '">Edit times</button> <button class="btn btn-danger btn-sm" type="button" data-lt-cancel="' + x.id + '">Cancel &amp; refund</button>';
       if (x.status === "CLOSED") act += ' <button class="btn btn-success btn-sm" type="button" data-lt-release="' + x.id + '">Release results</button>';
-      const result = x.numbers ? ltBalls(x.numbers) : '<span class="adm-note">' +
+      if (x.status === "RELEASED" && !x.result_hidden_at) act += ' <button class="btn btn-danger btn-sm" type="button" data-lt-delres="' + x.id + '">Delete Result</button>';
+      const result = x.numbers ? ltBalls(x.numbers) + (x.result_hidden_at ? '<br><small class="adm-note">Removed from the public results by ' + esc(x.result_hidden_by || "admin") + " · " + ltWhen(x.result_hidden_at) + "</small>" : "") : '<span class="adm-note">' +
         (x.number_source === "MANUAL" ? "Precommitted; hidden until close" : "Hidden until betting closes") + "</span>";
       const pay = x.status === "CLOSED" && x.projected ? count(x.projected.winners) + " win · " + money(x.projected.payout) + " to pay"
         : x.status === "RELEASED" ? count(x.winners) + " won · " + money(x.paid) + " paid"
@@ -3148,6 +3149,15 @@
     const r = await api("/lotto/draws/" + id + "/release", { confirm: true });
     flash(r.ok ? "ok" : "error", r.ok ? "Draw #" + id + " released: " + count(r.data.winners) + " winner(s), " + money(r.data.paid) + " paid." : errText(r, "Couldn't release the results."));
     refreshBadges();
+    loadLotto(false);
+  }
+  async function lottoDeleteResult(id) {
+    const x = lt.last && lt.last.draws.find((d) => d.id === Number(id));
+    const ok = await ask({ title: "Delete the result of draw #" + id + "?",
+      text: "Numbers " + (x && x.numbers ? x.numbers.join(", ") : "") + " will be removed from the public Lotto results straight away. Tickets, payments and payouts are NOT changed, and this removal is recorded with your name and the time.", yes: "Delete result", danger: true });
+    if (ok === null) return;
+    const r = await api("/lotto/draws/" + id + "/delete-result", {});
+    flash(r.ok ? "ok" : "error", r.ok ? "The result of draw #" + id + " was removed from the public results." : errText(r, "Couldn't delete the result."));
     loadLotto(false);
   }
   async function lottoCancel(id) {
@@ -3992,6 +4002,8 @@
     if (e.target.closest("[data-lt-sales]")) return lottoSales();
     const ltRel = e.target.closest("[data-lt-release]");
     if (ltRel) return lottoRelease(ltRel.dataset.ltRelease);
+    const ltDel = e.target.closest("[data-lt-delres]");
+    if (ltDel) return lottoDeleteResult(ltDel.dataset.ltDelres);
     const ltCan = e.target.closest("[data-lt-cancel]");
     if (ltCan) return lottoCancel(ltCan.dataset.ltCancel);
     const ltTix = e.target.closest("[data-lt-tickets]");

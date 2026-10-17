@@ -54,6 +54,7 @@ const MIGRATIONS = [
   "045_remove_unused_withdrawal_notice_cohort.sql",
   "046_lotto_precommitted_manual_numbers.sql",
   "047_deposit_phone_lock.sql",
+  "048_support_ai_push_lotto_hide.sql",
 ];
 
 // The production code takes a pg Pool; PGlite is one in-process Postgres connection.

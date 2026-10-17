@@ -10,7 +10,7 @@ import type { Pool } from "pg";
 import { hiddenCatalog } from "../games/availability.js";
 import { GameError } from "../games/catalog.js";
 import {
-  cancelLottoDraw, createLottoDraw, getLottoSettings, lottoAdminDraws, lottoChance, lottoDrawCode, lottoPlacements, pauseLottoDraw,
+  cancelLottoDraw, createLottoDraw, getLottoSettings, hideLottoResult, lottoAdminDraws, lottoChance, lottoDrawCode, lottoPlacements, pauseLottoDraw,
   lottoResultCommitmentValid, previewLottoDraw, updateLottoDrawTimes, releaseLottoDraw, saveLottoSettings,
 } from "../games/lotto.js";
 import { AdminError, logAction } from "./admin.js";
@@ -105,6 +105,13 @@ export const releaseLotto = (db: Pool, admin: string, id: unknown, input: Record
 export const cancelLotto = (db: Pool, admin: string, id: unknown) => asAdmin(async () => {
   const out = await cancelLottoDraw(db, id, admin);
   await logAction(db, admin, "lotto.cancel", `lotto:${out.id}`, out);
+  return out;
+});
+
+/** Removes a published result from the public pages (audited); tickets, payouts and the ledger stay exactly as they were. */
+export const deleteLottoResult = (db: Pool, admin: string, id: unknown, reason: unknown) => asAdmin(async () => {
+  const out = await hideLottoResult(db, id, admin, reason);
+  await logAction(db, admin, "lotto.result_delete", `lotto:${out.id}`, out);
   return out;
 });
 

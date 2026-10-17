@@ -52,6 +52,13 @@ services:
         sync: false
       - key: TELLER_PASSCODE
         sync: false
+      # browser push for support replies: generate a pair with `npx web-push generate-vapid-keys` (leave unset to disable push)
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        value: mailto:support@winbcasino.com
       # pending-withdrawal emails via a Google Apps Script web app (backend/gmail-notify.gs); Render's free plan blocks SMTP
       - key: GMAIL_WEBHOOK_URL
         sync: false
@@ -126,3 +133,6 @@ services:
       - path: /*.html
         name: Cache-Control
         value: public, max-age=0, must-revalidate
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache

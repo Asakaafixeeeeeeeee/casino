@@ -1759,6 +1759,16 @@ a, button, [role="button"], [data-cta] {
   content: ""; position: absolute; top: 3px; right: 3px; width: 13px; height: 13px; border-radius: 50%;
   background: var(--red); border: 2px solid var(--bg); animation: adm-pulse-red 1.8s infinite;
 }
+.chat-fab.has-unread[data-unread]::after {
+  content: attr(data-unread); display: grid; place-items: center; width: auto; min-width: 18px; height: 18px; padding: 0 4px;
+  border-radius: 9px; font-size: .68rem; font-weight: 800; line-height: 1; color: #fff;
+}
+.toast.toast-reply { display: grid; gap: 2px; width: 100%; text-align: left; cursor: pointer; color: var(--text); font: inherit; border-left-color: var(--red); }
+.toast-reply b { font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; color: var(--yellow); }
+.chat-notify {
+  margin: 0 12px 8px; padding: 9px 12px; border-radius: var(--r); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer;
+  background: rgba(255, 200, 61, .12); border: 1px solid rgba(255, 200, 61, .4); color: var(--yellow);
+}
 @keyframes adm-pulse-red { 0% { box-shadow: 0 0 0 0 rgba(255, 75, 69, .6); } 70%, 100% { box-shadow: 0 0 0 9px rgba(255, 75, 69, 0); } }
 
 /* admin: the support inbox and a conversation */
