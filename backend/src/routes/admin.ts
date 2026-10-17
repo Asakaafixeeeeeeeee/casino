@@ -22,7 +22,7 @@ import { adminReply, adminThread, adminThreads, setThreadStatus, SupportError, u
 import { listAdminMinesSignals } from "../services/minesSignal.js";
 import { DepositError, recheckDeposit, waitingDeposits } from "../services/depositRecheck.js";
 import { aviatorOverview, saveAviatorSettings } from "../services/aviatorAdmin.js";
-import { cancelLotto, createLotto, lottoKey, lottoOverview, lottoPreview, lottoTickets, pauseLotto, releaseLotto, saveLottoAdminSettings } from "../services/lottoAdmin.js";
+import { cancelLotto, createLotto, lottoKey, lottoOverview, lottoPreview, lottoTickets, pauseLotto, releaseLotto, saveLottoAdminSettings, updateLottoTimes } from "../services/lottoAdmin.js";
 import { gameDetail, gamesOverview, saveGameControls } from "../services/gameAdmin.js";
 import { getPlayerRisk, playerMoney, playersWithLimits, recentDeposits, riskOverview, savePlayerRisk, saveRiskSettings } from "../services/risk.js";
 import { adminReviews, decideReview } from "../services/reviews.js";
@@ -113,6 +113,7 @@ export function adminRouter(db: Pool): Router {
   /* the Lotto Key: closed draws' locked numbers (drawn by the server at the close), their proof, and the audit trail */
   r.get("/lotto/key", send((req) => lottoKey(db, adminOf(req))));
   r.post("/lotto/draws", send((req) => createLotto(db, adminOf(req), req.body ?? {})));
+  r.post("/lotto/draws/:id/times", send((req) => updateLottoTimes(db, adminOf(req), req.params.id, req.body ?? {})));
   r.get("/lotto/draws/:id/preview", send((req) => lottoPreview(db, req.params.id)));
   r.post("/lotto/draws/:id/pause", send((req) => pauseLotto(db, adminOf(req), req.params.id, req.body ?? {})));
   r.post("/lotto/draws/:id/release", send((req) => releaseLotto(db, adminOf(req), req.params.id, req.body ?? {})));

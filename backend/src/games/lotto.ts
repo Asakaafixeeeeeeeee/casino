@@ -340,6 +340,34 @@ export async function createLottoDraw(db: Pool, admin: string, input: Record<str
   });
 }
 
+/** Changes when betting opens, closes and the draw happens, on a draw that is still taking bets (not yet closed). */
+export async function updateLottoDrawTimes(db: Pool, id: unknown, input: Record<string, unknown>, now = Date.now()): Promise<{ before: DrawRow; after: DrawRow }> {
+  const drawId = drawIdOf(id);
+  const t = (k: string) => {
+    const v = input[k];
+    return v === undefined || v === null || v === "" ? NaN : new Date(String(v)).getTime();
+  };
+  const closes = t("closes_at");
+  if (Number.isNaN(closes)) throw new GameError("invalid_times", "Set when betting closes");
+  return inTransaction(db, async (client) => {
+    const before = (await client.query<DrawRow>(`SELECT * FROM lotto_draws WHERE id = $1 FOR UPDATE`, [drawId])).rows[0];
+    if (!before) throw new GameError("not_found", "That draw wasn't found", 404);
+    if (before.status !== "OPEN" || new Date(before.closes_at).getTime() <= now) {
+      throw new GameError("not_open", "Betting has already closed on this draw, so its times can't be changed.", 409);
+    }
+    const opens = Number.isNaN(t("opens_at")) ? (before.opens_at ? new Date(before.opens_at).getTime() : now) : t("opens_at");
+    const drawAt = Number.isNaN(t("draw_at")) ? Math.max(closes, new Date(before.draw_at).getTime()) : t("draw_at");
+    if (closes <= now) throw new GameError("invalid_times", "The closing time must be in the future");
+    if (opens >= closes) throw new GameError("invalid_times", "Betting must open before it closes");
+    if (drawAt < closes) throw new GameError("invalid_times", "The draw time can't be before betting closes");
+    if (closes - now > 60 * 86400e3) throw new GameError("invalid_times", "Draws can be set up to 60 days ahead");
+    const after = (await client.query<DrawRow>(
+      `UPDATE lotto_draws SET opens_at = $2, closes_at = $3, draw_at = $4 WHERE id = $1 RETURNING *`,
+      [drawId, new Date(opens), new Date(closes), new Date(drawAt)])).rows[0]!;
+    return { before, after };
+  });
+}
+
 /** Stops (or restarts) new tickets on one draw; tickets already bought stay in it. */
 export async function pauseLottoDraw(db: Pool, id: unknown, paused: boolean): Promise<DrawRow> {
   const drawId = Number(id);

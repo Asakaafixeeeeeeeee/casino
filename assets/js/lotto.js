@@ -203,7 +203,7 @@
       badge.className = "lt-badge" + (d.paused ? " is-drawing" : "");
       badge.textContent = d.paused ? "Paused" : "Betting open";
       $("ltDrawTitle").textContent = d.name;
-      $("ltDrawWhen").textContent = "Draw " + when(d.draw_at) + (d.number_source === "MANUAL" ? " · admin-selected before sales" : " · server-generated");
+      $("ltDrawWhen").textContent = "Betting closes " + when(d.closes_at) + " GMT · Draw " + when(d.draw_at) + (d.number_source === "MANUAL" ? " · admin-selected before sales" : " · server-generated");
       $("ltHashRow").hidden = !d.hash;
       if (d.hash) { $("ltHash").textContent = d.hash.slice(0, 16) + "…" + d.hash.slice(-8); $("ltHash").title = d.hash; }
     }

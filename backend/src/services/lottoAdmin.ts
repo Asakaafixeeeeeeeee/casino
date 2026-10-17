@@ -11,7 +11,7 @@ import { hiddenCatalog } from "../games/availability.js";
 import { GameError } from "../games/catalog.js";
 import {
   cancelLottoDraw, createLottoDraw, getLottoSettings, lottoAdminDraws, lottoChance, lottoPlacements, pauseLottoDraw,
-  lottoResultCommitmentValid, previewLottoDraw, releaseLottoDraw, saveLottoSettings,
+  lottoResultCommitmentValid, previewLottoDraw, updateLottoDrawTimes, releaseLottoDraw, saveLottoSettings,
 } from "../games/lotto.js";
 import { AdminError, logAction } from "./admin.js";
 
@@ -72,6 +72,16 @@ export const createLotto = (db: Pool, admin: string, input: Record<string, unkno
     number_source: d.number_source, commitment: d.hash, ...(d.number_source === "MANUAL" ? { numbers: d.numbers } : {}),
   });
   return { id: Number(d.id), name: d.name };
+});
+
+export const updateLottoTimes = (db: Pool, admin: string, id: unknown, input: Record<string, unknown>) => asAdmin(async () => {
+  const { before, after } = await updateLottoDrawTimes(db, id, input);
+  await logAction(db, admin, "lotto.draw_times", `lotto:${after.id}`, {
+    name: after.name,
+    before: { opens_at: before.opens_at, closes_at: before.closes_at, draw_at: before.draw_at },
+    after: { opens_at: after.opens_at, closes_at: after.closes_at, draw_at: after.draw_at },
+  });
+  return { id: Number(after.id), opens_at: after.opens_at, closes_at: after.closes_at, draw_at: after.draw_at };
 });
 
 export const pauseLotto = (db: Pool, admin: string, id: unknown, input: Record<string, unknown>) => asAdmin(async () => {
