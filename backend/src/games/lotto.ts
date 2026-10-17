@@ -311,9 +311,10 @@ export async function currentLottoDraw(db: Pool, now = Date.now()): Promise<Draw
 /** Draws taking bets now (open, not paused, past their opening time, before their closing time). */
 async function openDraws(db: Pool, now: number): Promise<DrawRow[]> {
   await currentLottoDraw(db, now);
+  const daily = (await getLottoSettings(db)).daily_enabled;
   return (await db.query<DrawRow>(
     `SELECT * FROM lotto_draws WHERE status = 'OPEN' AND closes_at > $1 AND (opens_at IS NULL OR opens_at <= $1)
-      ORDER BY closes_at, id`, [new Date(now)])).rows;
+      AND ($2 OR NOT auto) ORDER BY closes_at, id`, [new Date(now), daily])).rows;
 }
 
 /** An admin's own draw: a name, when betting opens and closes, and the draw time. */
@@ -751,6 +752,7 @@ export async function buyLottoTicket(
     if (!draw) throw new GameError("no_draw", "There's no draw taking bets right now. Check back soon.", 409);
   }
   if (draw.status === "CANCELLED") throw new GameError("draw_cancelled", "This draw was cancelled. Check back for the next one.", 409);
+  if (draw.auto && !s.daily_enabled) throw new GameError("no_draw", "There's no draw taking bets right now. Check back soon.", 409);
   if (draw.status !== "OPEN" || now >= new Date(draw.closes_at).getTime()) {
     throw new GameError("too_late", "Betting on that draw has closed — your ticket can go on the next draw.", 409);
   }

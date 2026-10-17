@@ -55,6 +55,7 @@ const migrationFiles = [
   "047_deposit_phone_lock.sql",
   "048_support_ai_push_lotto_hide.sql",
   "049_lotto_numbers_immutable.sql",
+  "050_lotto_manual_only.sql",
 ];
 
 if (!process.env.DATABASE_URL) {
