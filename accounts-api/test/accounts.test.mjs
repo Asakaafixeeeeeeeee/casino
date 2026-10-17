@@ -29,7 +29,7 @@ async function server(env = {}) {
   return { base, call, stop: () => proc.kill() };
 }
 const PW = "Sup3r-secret!";
-const player = (n) => ({ phone: "024" + String(1000000 + n).slice(-7), password: PW, dob: "1990-05-17", country: "GH", currency: "GHS", full_name: "Ama Mensah" });
+const player = (n) => ({ phone: "024" + String(1000000 + n).slice(-7), password: PW, dob: "1990-05-17", country: "GH", currency: "GHS", full_name: "Ama Mensah", accept_deposit_terms: true });
 
 test("Sign up, log in, log out: a logged-out token is dead", async (t) => {
   const s = await server(); t.after(s.stop);
@@ -53,6 +53,18 @@ test("Sign-up input is checked: bad number, country or age, and duplicates", asy
   assert.equal((await s.call("POST", "/api/register", { ...player(2), password: "12345678" })).status, 400);
   assert.equal((await s.call("POST", "/api/register", player(2))).status, 201);
   assert.equal((await s.call("POST", "/api/register", player(2))).status, 409);
+});
+
+test("Sign-up requires accepting the deposit-number rule, and the acceptance is recorded", async (t) => {
+  const s = await server(); t.after(s.stop);
+  const { accept_deposit_terms: _no, ...without } = player(7);
+  const refused = await s.call("POST", "/api/register", without);
+  assert.deepEqual([refused.status, refused.body.field], [400, "depositTerms"]);
+  assert.equal((await s.call("POST", "/api/register", { ...without, accept_deposit_terms: "yes" })).status, 400);
+  const reg = await s.call("POST", "/api/register", player(7));
+  assert.equal(reg.status, 201);
+  const me = await s.call("GET", "/api/session/verify", null, { authorization: "Bearer " + reg.body.token });
+  assert.ok(me.body.user.deposit_terms_accepted_at, "the acceptance is saved and handed to the balance service");
 });
 
 test("Sign-up takes the player's full name: checked, tidied, and handed to the balance service", async (t) => {

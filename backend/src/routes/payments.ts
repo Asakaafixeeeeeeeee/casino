@@ -4,6 +4,8 @@ import type { Pool } from "pg";
 import { authenticate, requireUser } from "../middleware/authenticate.js";
 import {
   checkTellerStatus,
+  checkoutEmail,
+  canonicalTellerSubscriberNumber,
   createPaymentIntent,
   credentialHints,
   initiateTellerCheckout,
@@ -26,6 +28,10 @@ import { PAYMENTS_OFF_MESSAGE, paymentsEnabled } from "../services/paymentSettin
 import {
   acceptRules, amountText, fundsOf, getMoneyRules, hasAcceptedRules, MAX_DEPOSIT, MoneyRuleError, publicRules,
 } from "../services/moneyRules.js";
+import {
+  checkRegisteredNumber, confirmDepositPhone, DepositGuardError, depositState, depositWaitSeconds, localNumber, lockedNumber,
+  PHONE_NOT_CONFIRMED_MESSAGE, waitError,
+} from "../services/depositGuard.js";
 
 /* the minimum deposit is the admin's live setting (Admin -> Betting & withdrawal settings; GHS 135 by default) */
 export const RULES_NOT_ACCEPTED_MESSAGE =
@@ -41,12 +47,17 @@ function siteUrl(): string {
 }
 
 function readAmount(raw: unknown, min: number): number | null {
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < min || n > MAX_DEPOSIT) return null;
-  return Math.round(n * 100) / 100;
+  if (typeof raw !== "number" && typeof raw !== "string") return null;
+  const value = typeof raw === "string" ? raw.trim() : String(raw);
+  if (!/^\d+(?:\.\d{1,2})?$/.test(value)) return null;
+  const n = Number(value);
+  const minor = Math.round(n * 100);
+  if (!Number.isSafeInteger(minor) || minor <= 0) return null;
+  const amount = minor / 100;
+  if (amount < min || amount > MAX_DEPOSIT) return null;
+  return amount;
 }
 const ghs = (n: number) => "GHS " + amountText(n);
-
 
 const clientStatus = (dbStatus: string) =>
   dbStatus === "CONFIRMED" ? "approved" : dbStatus === "PENDING" ? "pending" : "declined";
@@ -110,9 +121,9 @@ export function paymentsRouter(db: Pool): Router {
 
   /* deposit limits and breaks are enforced here, whatever the page shows */
   /* A new deposit's checks and its intent, under one per-player lock: deposits started at once can no longer all pass
-     a limit only one of them fits (each now sees the others), and no player can have more than MAX_OPEN_PROMPTS
-     payments waiting at once (a PIN prompt goes to whatever number is given). A retried key returns its intent. */
-  const MAX_OPEN_PROMPTS = 3;
+     a limit only one of them fits (each now sees the others). Only one payment may be waiting for approval at a time,
+     and none may start within 10 minutes of a successful deposit. A retried key returns its intent. */
+  const MAX_OPEN_PROMPTS = 1;
   async function openIntent(userId: string, amount: number, key: string, redirectUrl: string, res: Response, a: DepositAttempt, network: string | null = null) {
     const client = await db.connect();
     try {
@@ -120,6 +131,13 @@ export function paymentsRouter(db: Pool): Router {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["deposit:" + userId]);
       const replay = await client.query(`SELECT 1 FROM payment_intents WHERE idempotency_key = $1 AND user_id = $2`, [key, userId]);
       if (!replay.rowCount) {
+        const wait = await depositWaitSeconds(client, userId);
+        if (wait > 0) {
+          await client.query("ROLLBACK");
+          const e = waitError(wait);
+          await reject(res, e.status, e.code, e.message, a, e.extra);
+          return null;
+        }
         try {
           await checkDeposit(client, userId, amount);
         } catch (e) {
@@ -132,7 +150,7 @@ export function paymentsRouter(db: Pool): Router {
           `SELECT count(*)::int AS n FROM payment_intents WHERE user_id = $1 AND status = 'PENDING' AND created_at > now() - interval '10 minutes'`, [userId]);
         if (open.rows[0]!.n >= MAX_OPEN_PROMPTS) {
           await client.query("ROLLBACK");
-          await reject(res, 429, "too_many_pending", "You have payments still waiting for approval. Approve or wait for them before starting another.", a);
+          await reject(res, 429, "too_many_pending", "You already have a payment waiting for approval. Approve it, or wait a few minutes for it to expire, before starting another.", a);
           return null;
         }
       }
@@ -150,12 +168,22 @@ export function paymentsRouter(db: Pool): Router {
       client.release();
     }
   }
-  /* the transaction id is set once: a retry racing the first request can't start a second, untracked charge */
-  async function claimTxId(intentId: string, txId: string, payerPhone: string | null): Promise<boolean> {
-    const { rowCount } = await db.query(
-      `UPDATE payment_intents SET transaction_id = $1, payer_phone = COALESCE($3, payer_phone), updated_at = now()
-        WHERE id = $2 AND transaction_id IS NULL`, [txId, intentId, payerPhone]);
-    return (rowCount ?? 0) > 0;
+  /* The database unique index is authoritative; retry only if a random 12-digit id collides with another intent. */
+  async function claimTxId(intentId: string, payerPhone: string | null): Promise<string | null> {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const txId = newTxId();
+      try {
+        const { rowCount } = await db.query(
+          `UPDATE payment_intents SET transaction_id = $1, payer_phone = COALESCE($3, payer_phone), updated_at = now()
+            WHERE id = $2 AND transaction_id IS NULL`, [txId, intentId, payerPhone]);
+        return (rowCount ?? 0) > 0 ? txId : null;
+      } catch (error) {
+        if (!error || typeof error !== "object") throw error;
+        const pgError = error as { code?: unknown; constraint?: unknown };
+        if (pgError.code !== "23505" || pgError.constraint !== "payment_intents_transaction_id_idx") throw error;
+      }
+    }
+    throw new Error("Could not allocate a unique TheTeller transaction ID");
   }
 
   router.get("/config", async (_req: Request, res: Response, next: NextFunction) => {
@@ -227,6 +255,34 @@ export function paymentsRouter(db: Pool): Router {
     }
   });
 
+  /* The deposit page: the registered number, whether it's confirmed, and the wait left after the last successful deposit. */
+  router.get("/deposit-status", authenticate, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = requireUser(req);
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await depositState(db, user.id, user.phone));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /* "CONFIRM & LOCK NUMBER": saved once; the number is always the one registered, never one sent by the page. */
+  router.post("/confirm-phone", authenticate, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = requireUser(req);
+      const { phone } = (req.body ?? {}) as Record<string, unknown>;
+      await confirmDepositPhone(db, user.id, user.phone, phone);
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await depositState(db, user.id, user.phone));
+    } catch (error) {
+      if (error instanceof DepositGuardError) {
+        res.status(error.status).json({ error: error.code, message: error.message });
+        return;
+      }
+      next(error);
+    }
+  });
+
   /* Hosted checkout: the customer pays on TheTeller's page and comes back to wallet.html?transaction_id=… */
   router.post("/teller/checkout", authenticate, async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -241,17 +297,20 @@ export function paymentsRouter(db: Pool): Router {
       const amt = await depositAmount(amount, res, attempt);
       if (amt === null) return;
       if (currency !== "GHS") return reject(res, 400, "unsupported_currency", "Only GHS deposits are supported", attempt);
-      if (typeof idempotency_key !== "string" || !idempotency_key.trim()) {
-        return reject(res, 400, "invalid_idempotency_key", "A non-empty idempotency_key is required", attempt);
+      if (typeof idempotency_key !== "string" || !idempotency_key.trim() || idempotency_key.length > 120) {
+        return reject(res, 400, "invalid_idempotency_key", "A 1-120 character idempotency_key is required", attempt);
       }
       if (await refuseUntilAccepted(user.id, res, attempt)) return;
+      if (!(await lockedNumber(db, user.id)).confirmed) {
+        return reject(res, 409, "phone_not_confirmed", PHONE_NOT_CONFIRMED_MESSAGE, attempt);
+      }
 
       const config = loadTellerConfig(process.env);
       const site = siteUrl();
       // Only ever send the customer back to our own site; a client-supplied redirect is ignored.
       const redirectUrl = `${site}/wallet.html`;
 
-      const intent = await openIntent(user.id, amt, idempotency_key, redirectUrl, res, attempt);
+      const intent = await openIntent(user.id, amt, idempotency_key.trim(), redirectUrl, res, attempt);
       if (!intent) return;
       if (intent.transactionId && intent.checkoutUrl) {
         res.json({ checkout_url: intent.checkoutUrl, transaction_id: intent.transactionId, reference: depositReference(intent.transactionId),
@@ -264,8 +323,8 @@ export function paymentsRouter(db: Pool): Router {
       }
 
       // Saved before TheTeller is called, so a crash can never lose track of a payment.
-      const txId = newTxId();
-      if (!(await claimTxId(intent.id, txId, null))) {
+      const txId = await claimTxId(intent.id, null);
+      if (!txId) {
         return reject(res, 409, "already_processed", "This payment was already started. Please try again.", attempt);
       }
       console.log("[teller/checkout] user=%s amount=%s tx=%s", user.id, amt, txId);
@@ -275,7 +334,7 @@ export function paymentsRouter(db: Pool): Router {
           transactionId: txId,
           amountMajor: amt,
           redirectUrl,
-          email: `${user.accountId}@${new URL(site).hostname}`,
+          email: checkoutEmail(user.accountId, new URL(site).hostname),
           desc: depositReference(txId),
         });
         await db.query(`UPDATE payment_intents SET checkout_url = $1, updated_at = now() WHERE id = $2`, [checkoutUrl, intent.id]);
@@ -308,37 +367,57 @@ export function paymentsRouter(db: Pool): Router {
       const amt = await depositAmount(amount, res, attempt);
       if (amt === null) return;
       if (currency !== "GHS") return reject(res, 400, "unsupported_currency", "Only GHS deposits are supported", attempt);
-      if (typeof idempotency_key !== "string" || !idempotency_key.trim()) {
-        return reject(res, 400, "invalid_idempotency_key", "A non-empty idempotency_key is required", attempt);
+      if (typeof idempotency_key !== "string" || !idempotency_key.trim() || idempotency_key.length > 120) {
+        return reject(res, 400, "invalid_idempotency_key", "A 1-120 character idempotency_key is required", attempt);
       }
-      const subscriber = String(account_number ?? "").replace(/\D/g, "");
-      if (!/^233[235]\d{8}$/.test(subscriber)) return reject(res, 400, "invalid_account", "Enter a valid Ghanaian mobile money number", attempt);
-      if (!NETWORKS.includes(network as MomoNetwork)) return reject(res, 400, "invalid_network", "Choose MTN, Telecel or AirtelTigo", attempt);
+      /* only the registered number may pay: a number sent by the page is just checked against it, never used */
+      if (account_number !== undefined && account_number !== null && account_number !== "") {
+        const sent = canonicalTellerSubscriberNumber(account_number);
+        if (!sent) return reject(res, 400, "invalid_account", "Enter a valid Ghanaian mobile money number", attempt);
+        if (localNumber(user.phone) !== "0" + sent.slice(3)) {
+          return reject(res, 403, "phone_not_registered", "Deposits can only be made from the phone number registered to your account.", attempt);
+        }
+      }
+      if (network !== undefined && network !== null && network !== "" && !NETWORKS.includes(network as MomoNetwork)) {
+        return reject(res, 400, "invalid_network", "Choose MTN, Telecel or AirtelTigo", attempt);
+      }
       if (await refuseUntilAccepted(user.id, res, attempt)) return;
+      let target: Awaited<ReturnType<typeof checkRegisteredNumber>>;
+      try {
+        target = await checkRegisteredNumber(db, user.id, user.phone);
+      } catch (e) {
+        if (!(e instanceof DepositGuardError)) throw e;
+        return reject(res, e.status, e.code, e.message, attempt, e.extra);
+      }
+      const subscriber = target.subscriber;
+      /* the page may name another network for a number that moved (ported); otherwise it's the number's own */
+      const chosenNetwork = (network ? network : target.network) as MomoNetwork;
+      attempt.phone = target.local;
+      attempt.network = chosenNetwork;
       const config = loadTellerConfig(process.env);
-      const intent = await openIntent(user.id, amt, idempotency_key, `${siteUrl()}/wallet.html`, res, attempt, network as string);
+      const intent = await openIntent(user.id, amt, idempotency_key.trim(), `${siteUrl()}/wallet.html`, res, attempt, chosenNetwork);
       if (!intent) return;
       if (intent.transactionId) {
         res.json({ transaction_id: intent.transactionId, reference: depositReference(intent.transactionId), status: clientStatus(intent.status) });
         return;
       }
 
-      const txId = newTxId();
-      /* the number paying: any mobile money wallet may fund a deposit (winnings only ever go to the registered one) */
-      if (!(await claimTxId(intent.id, txId, "0" + subscriber.slice(3)))) {
+      /* the number paying is always the registered one */
+      const txId = await claimTxId(intent.id, "0" + subscriber.slice(3));
+      if (!txId) {
         const now = (await db.query<{ transaction_id: string; status: string }>(
           `SELECT transaction_id, status FROM payment_intents WHERE id = $1`, [intent.id])).rows[0]!;
         res.json({ transaction_id: now.transaction_id, reference: depositReference(now.transaction_id), status: clientStatus(now.status) });
         return;
       }
-      console.log("[teller/momo] user=%s amount=%s network=%s tx=%s", user.id, amt, network, txId);
+      console.log("[teller/momo] user=%s amount=%s network=%s tx=%s", user.id, amt, chosenNetwork, txId);
 
       momoWaiting.add(txId);
       requestMomoPayment(config, {
         transactionId: txId,
         amountMajor: amt,
         subscriberNumber: subscriber,
-        network: network as MomoNetwork,
+        network: chosenNetwork,
         desc: depositReference(txId),
       })
         .then(async (data) => {

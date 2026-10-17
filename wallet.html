@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0d0e10">
 <title>Deposit | WIN B WIN</title>
 <meta name="description" content="Fund your WIN B casino wallet with mobile money, bank transfer or card.">
-<link rel="stylesheet" href="assets/css/styles.css?v=41">
+<link rel="stylesheet" href="assets/css/styles.css?v=43">
 <link rel="icon" href="assets/img/winb-mark.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="assets/img/app/w-apple-touch-icon-180.png">
@@ -55,14 +55,20 @@
     <div id="depFunds"></div>
     <!-- MOBILE MONEY -->
     <section class="pay-panel" data-panel="momo">
-      <div class="pay-row pay-phone-edit">
+      <div class="pay-row pay-phone-edit pay-phone-locked">
         <i data-icon="phone"></i>
-        <input id="depPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="16"
-               placeholder="Mobile money number" aria-label="Mobile money number to pay from" aria-describedby="depPhoneHint">
-        <button class="pay-phone-mine" type="button" id="depPhoneMine" hidden>Use my number</button>
+        <input id="depPhone" type="tel" inputmode="numeric" readonly maxlength="16"
+               placeholder="Registered mobile money number" aria-label="Your registered mobile money number (deposits are made from this number only)" aria-describedby="depPhoneHint">
+        <span class="pay-lock" aria-hidden="true">LOCKED</span>
       </div>
       <div class="pay-err" id="depPhoneErr"></div>
-      <p class="pay-phone-hint" id="depPhoneHint">Pay from any mobile money number — tap it to change.</p>
+      <p class="pay-phone-hint" id="depPhoneHint">Your registered number. All deposits are made from this number only.</p>
+
+      <section class="dep-wait" id="depWait" role="status" aria-live="polite" hidden>
+        <b>DEPOSIT TEMPORARILY UNAVAILABLE</b>
+        <p>For transaction security, a 10-minute waiting period applies between successful deposits. Please try again when the countdown expires.</p>
+        <div class="dep-count" data-dep-count>10:00</div>
+      </section>
 
       <button class="pay-row pay-provider" type="button" id="provBtn" aria-expanded="false">
         <span class="prov-logo" id="provLogo">MTN</span>
@@ -94,7 +100,8 @@
         <li>Minimum per transaction is GHS <span data-dep-min>135.00</span><span id="depMinUsd"></span></li>
         <li>Deposit is free, no transaction fees.</li>
         <li>Your balance can only be withdrawn to the mobile number that you registered with.</li>
-        <li>You can deposit from another mobile money number: change the number at the top. The prompt goes to that phone.</li>
+        <li>Deposits can only be made from your registered mobile money number, which is permanently linked to your account.</li>
+        <li>After a successful deposit, a 10-minute waiting period applies before your next deposit.</li>
       </ol>
       <p class="pay-note-extra">Note: For MTN users, if a bill prompt isn't received, dial *170#, then select 6 and 3 to approve the transaction.</p>
       <p class="pay-note-extra">Deposit, betting and withdrawal rules: see the <a href="terms.html#money-rules">Terms and Conditions</a>.</p>
@@ -142,6 +149,6 @@
 <script src="assets/js/data.js?v=58"></script>
 <script src="assets/js/site.js?v=56"></script>
 <script src="assets/js/pay-fx.js?v=33"></script>
-<script src="assets/js/wallet.js?v=41"></script>
+<script src="assets/js/wallet.js?v=42"></script>
 </body>
 </html>

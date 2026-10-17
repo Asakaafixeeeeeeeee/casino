@@ -29,6 +29,7 @@ export async function settleIntent(
             WHEN gateway_note IS NULL OR gateway_note = '' THEN $3::text
             WHEN position($3::text in gateway_note) > 0 THEN gateway_note
             ELSE gateway_note || ' / ' || $3::text END, 500),
+              confirmed_at = CASE WHEN $2::text = 'CONFIRMED' THEN now() ELSE confirmed_at END,
               updated_at = now()
         WHERE transaction_id = $1 AND status = 'PENDING'
         RETURNING user_id, currency, amount`,

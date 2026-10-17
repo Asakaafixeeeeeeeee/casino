@@ -128,49 +128,26 @@
     const submit = $("depSubmit");
     if (!submit) return; // not the deposit page
 
-    /* the number paying: the registered one to start with, or the last one used on this device. Any Ghanaian mobile
-       money number works — the prompt goes to that phone — and winnings are still only ever paid to the registered one. */
-    const LAST = "vb.depositPhone";
+    /* the number paying is always the registered one: it can't be edited, and the server refuses any other. The
+       network starts on the one the number belongs to (it can still be switched for a number that moved). */
     const regLocal = U.normalizePhone(regPhone);
     const phoneIn = $("depPhone");
     const pretty = (p) => (/^0\d{9}$/.test(p) ? p.slice(0, 3) + " " + p.slice(3, 6) + " " + p.slice(6) : p);
-    const payPhone = () => U.normalizePhone(phoneIn.value);
-    let last = "";
-    try {
-      last = localStorage.getItem(LAST) || "";
-    } catch (e) { /* storage unavailable */ }
-    phoneIn.value = pretty(U.isGhanaMobile(last) ? last : regLocal);
+    const payPhone = () => regLocal;
+    phoneIn.value = pretty(regLocal);
 
     const provider = initProvider();
     provider.match(payPhone());
-    /* a number on an unexpected network is pointed out, never blocked: numbers move between networks */
     function phoneHint() {
       const p = payPhone();
       const net = provider();
       const usual = MOMO.find((m) => m.prefixes.includes(p.slice(0, 3)));
-      $("depPhoneHint").textContent = !U.isGhanaMobile(p) ? "Pay from any mobile money number — tap it to change."
-        : usual && net && usual !== net ? "Numbers starting " + p.slice(0, 3) + " are usually " + usual.name + ". Keep " + net.name + " only if this number moved there."
-        : p === regLocal ? "Your registered number. To pay from another one, tap it to change."
-        : "Paying from another number: the prompt goes to that phone. Winnings are still paid to your registered number.";
+      $("depPhoneHint").textContent = !U.isGhanaMobile(p) ? "Your registered number isn't a Ghanaian mobile money number, so mobile money deposits aren't available. Contact support."
+        : usual && net && usual !== net ? "Numbers starting " + p.slice(0, 3) + " are usually " + usual.name + ". Keep " + net.name + " only if your number moved there."
+        : "Your registered number. All deposits are made from this number only.";
     }
-    function phoneChanged() {
-      const p = payPhone();
-      showError("depPhoneErr", "");
-      $("depPhoneMine").hidden = !regLocal || p === regLocal;
-      if (U.isGhanaMobile(p)) provider.match(p);
-      phoneHint();
-    }
-    phoneIn.addEventListener("input", phoneChanged);
-    phoneIn.addEventListener("blur", () => {
-      const p = payPhone();
-      if (U.isGhanaMobile(p)) phoneIn.value = pretty(p);
-    });
-    $("depPhoneMine").addEventListener("click", () => {
-      phoneIn.value = pretty(regLocal);
-      phoneChanged();
-    });
     $("provMenu").addEventListener("click", () => setTimeout(phoneHint, 0));
-    phoneChanged();
+    phoneHint();
 
     /* the live minimum deposit on every payment method: the amount fields, the "min." labels and the notes */
     const fixed = (n) => Number(n).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -193,6 +170,124 @@
       amt < DEPOSIT_MIN ? "Minimum deposit is GHS " + DEPOSIT_MIN.toFixed(2) + "." :
       amt > DEPOSIT_MAX ? "Maximum deposit is GHS " + DEPOSIT_MAX.toLocaleString() + "." : "";
     const newKey = () => "deposit:" + crypto.randomUUID() + ":" + Date.now();
+
+    /* ---------------- registered number lock and the 10-minute wait (the server enforces both) ---------------- */
+    const guard = { confirmed: null, phone: regLocal, waitUntil: 0, timer: 0, waitOpen: false };
+    const WAIT_TITLE = "DEPOSIT TEMPORARILY UNAVAILABLE";
+    const WAIT_TEXT = "For transaction security, a 10-minute waiting period applies between successful deposits.";
+    const WAIT_AFTER = "Please try again when the countdown expires.";
+    const remaining = () => Math.max(0, Math.ceil((guard.waitUntil - Date.now()) / 1000));
+    const clock = (s) => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+    const waitBanner = $("depWait");
+    let closeDialog = null;
+
+    function openDialog(title, html, buttons, onClose) {
+      if (closeDialog) closeDialog();
+      const wrap = document.createElement("div");
+      wrap.className = "dep-modal";
+      wrap.innerHTML = '<div class="dep-modal-box" role="dialog" aria-modal="true" aria-labelledby="depModalTitle" tabindex="-1">' +
+        '<h2 id="depModalTitle"></h2><div class="dep-modal-body"></div><p class="dep-modal-err" role="alert" hidden></p><div class="dep-modal-actions"></div></div>';
+      wrap.querySelector("h2").textContent = title;
+      wrap.querySelector(".dep-modal-body").innerHTML = html;
+      const actions = wrap.querySelector(".dep-modal-actions");
+      const els = buttons.map((b) => {
+        const el = document.createElement("button");
+        el.type = "button";
+        el.className = "btn btn-lg btn-block " + (b.primary ? "btn-primary" : "btn-ghost");
+        el.textContent = b.label;
+        el.addEventListener("click", () => b.onClick(el, wrap));
+        actions.appendChild(el);
+        return el;
+      });
+      const previous = document.activeElement;
+      const close = () => {
+        wrap.remove();
+        document.removeEventListener("keydown", onKey);
+        if (closeDialog === close) closeDialog = null;
+        if (onClose) onClose();
+        if (previous && previous.focus) previous.focus();
+      };
+      const onKey = (e) => { if (e.key === "Escape") close(); };
+      document.addEventListener("keydown", onKey);
+      closeDialog = close;
+      document.body.appendChild(wrap);
+      (els[0] || wrap.firstChild).focus();
+      return close;
+    }
+
+    function tick() {
+      const s = remaining();
+      document.querySelectorAll("[data-dep-count]").forEach((el) => (el.textContent = clock(s)));
+      if (s > 0) return;
+      clearInterval(guard.timer);
+      guard.timer = 0;
+      if (waitBanner) waitBanner.hidden = true;
+      if (guard.waitOpen && closeDialog) closeDialog();
+    }
+    /* seconds left according to the server; a page refresh or a new login asks it again, so the countdown always matches */
+    function setWait(seconds) {
+      clearInterval(guard.timer);
+      guard.timer = 0;
+      guard.waitUntil = Date.now() + Math.max(0, Number(seconds) || 0) * 1000;
+      if (remaining() > 0) {
+        if (waitBanner) waitBanner.hidden = false;
+        guard.timer = setInterval(tick, 1000);
+      }
+      tick();
+    }
+    function showWait() {
+      guard.waitOpen = true;
+      openDialog(WAIT_TITLE, "<p>" + WAIT_TEXT + "</p><p>" + WAIT_AFTER + "</p><div class='dep-count' data-dep-count>" + clock(remaining()) + "</div>",
+        [{ label: "OK", primary: true, onClick: () => closeDialog() }], () => { guard.waitOpen = false; });
+      tick();
+    }
+    function showConfirm() {
+      const shown = guard.phone || regLocal;
+      openDialog("CONFIRM YOUR REGISTERED PHONE NUMBER",
+        "<p><b>Is this your correct phone number?</b></p><div class='dep-phone-show'>" + U.esc(pretty(shown)) + "</div>" +
+        "<p>This phone number will be used exclusively for all future deposits. Once confirmed, it will be permanently linked to your account and cannot be changed.</p>" +
+        "<p>Please verify your number carefully before proceeding.</p>",
+        [{
+          label: "CONFIRM & LOCK NUMBER", primary: true,
+          onClick: async (btn, wrap) => {
+            const err = wrap.querySelector(".dep-modal-err");
+            wrap.querySelectorAll("button").forEach((b) => (b.disabled = true));
+            err.hidden = true;
+            const r = await U.paymentApi("/api/payments/confirm-phone", { body: { phone: shown, idempotency_key: "confirm-phone:" + crypto.randomUUID() } });
+            if (!r.ok) {
+              wrap.querySelectorAll("button").forEach((b) => (b.disabled = false));
+              err.textContent = (r.data && r.data.message) || "Couldn't save your confirmation. Try again in a moment.";
+              err.hidden = false;
+              return;
+            }
+            guard.confirmed = true;
+            closeDialog();
+            U.toast("Phone number confirmed and locked", "ok");
+          }
+        }, { label: "CANCEL", onClick: () => closeDialog() }]);
+    }
+    async function loadGuard(quiet) {
+      const r = await U.paymentApi("/api/payments/deposit-status");
+      if (!r.ok || !r.data) return;
+      guard.confirmed = !!r.data.confirmed;
+      if (r.data.phone) guard.phone = U.normalizePhone(r.data.phone);
+      setWait(r.data.retry_after_seconds);
+      if (!guard.confirmed && !quiet) showConfirm();
+    }
+    /* true when a deposit may be sent now; otherwise the matching notice is shown */
+    function guardOk() {
+      if (guard.confirmed === false) { showConfirm(); return false; }
+      if (remaining() > 0) { showWait(); return false; }
+      return true;
+    }
+    /* the server's own refusal for the same two checks (another device, or a clock that drifted) */
+    function guardRefusal(data) {
+      if (!data) return false;
+      if (data.error === "phone_not_confirmed") { guard.confirmed = false; showConfirm(); return true; }
+      if (data.error === "deposit_cooldown") { setWait(data.retry_after_seconds); showWait(); return true; }
+      return false;
+    }
+    loadGuard();
 
     /* ---------------- "Before you deposit": the rules, accepted once per version ---------------- */
     const rulesBox = $("depRules");
@@ -307,6 +402,7 @@
       const why = result && result.reason ? " TheTeller said: \u201c" + U.esc(result.reason) + "\u201d." : "";
       if (status === "approved") {
         const balance = await U.refreshBalance();
+        loadGuard(true);
         showMsg("ok", "Deposit of " + U.money(amount) + " successful. Your balance has been updated.");
         PayFX.success({ amount, balance });
       } else if (status === "declined") {
@@ -354,6 +450,7 @@
       const balance = await U.refreshBalance();
       await loadHistory(false);
       if (arrived > 0) {
+        loadGuard(true);
         showMsg("ok", "Your deposit of " + U.money(arrived) + " has arrived.");
         PayFX.success({ amount: arrived, balance, title: "Your deposit has arrived" });
       }
@@ -376,6 +473,7 @@
     async function startCheckout(amt, errId, btn) {
       if (paymentsOff) return paymentsUnavailable();
       if (!showError(errId, amountError(amt))) return;
+      if (!guardOk()) return;
       if (!rulesOk()) return;
       btn.disabled = true;
       showMsg("info", "Starting secure payment…");
@@ -383,6 +481,11 @@
         body: { amount: amt, currency: "GHS", idempotency_key: newKey() }
       });
       if (result.data && result.data.error === "payments_off") return paymentsUnavailable(result.data.message);
+      if (guardRefusal(result.data)) {
+        btn.disabled = false;
+        msg.innerHTML = "";
+        return;
+      }
       if (result.data && result.data.error === "rules_not_accepted") {
         btn.disabled = false;
         msg.innerHTML = "";
@@ -436,7 +539,7 @@
       const net = provider();
       const local = payPhone();
       if (!U.isGhanaMobile(local)) {
-        showError("depPhoneErr", "Enter a valid Ghanaian mobile money number, e.g. 024 123 4567.");
+        showError("depPhoneErr", "Your registered number isn't a valid Ghanaian mobile money number, so it can't receive a payment prompt. Contact support.");
         phoneIn.focus();
         return;
       }
@@ -444,10 +547,8 @@
         showMsg("error", "Choose the mobile money network.");
         return;
       }
+      if (!guardOk()) return;
       if (!rulesOk()) return;
-      try {
-        localStorage.setItem(LAST, local);
-      } catch (e) { /* storage unavailable */ }
 
       waiting = true;
       sync();
@@ -462,6 +563,12 @@
           idempotency_key: newKey()
         }
       });
+      if (guardRefusal(result.data)) {
+        waiting = false;
+        sync();
+        PayFX.close();
+        return;
+      }
       if (result.data && result.data.error === "payments_off") {
         waiting = false;
         PayFX.close();

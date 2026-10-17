@@ -26,6 +26,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower ON users (lower(email)) WHERE email IS NOT NULL;
 -- set by the main admin from the balance service: BANNED and DELETED accounts can't log in (records are kept)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS access TEXT NOT NULL DEFAULT 'ACTIVE';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deposit_terms_accepted_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash  TEXT        PRIMARY KEY,

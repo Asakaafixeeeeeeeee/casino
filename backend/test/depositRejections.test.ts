@@ -44,6 +44,12 @@ test("Invalid deposit requests are refused and recorded, and never reach TheTell
     [() => momo({ amount: 150, idempotency_key: key() }), 409, "rules_not_accepted"],
     [() => card({ amount: 10, idempotency_key: key() }), 400, "invalid_amount"],
     [() => card({ amount: 150, idempotency_key: key() }), 409, "rules_not_accepted"],
+    [() => momo({ amount: 150.005, idempotency_key: key() }), 400, "invalid_amount"],
+    [() => momo({ amount: true, idempotency_key: key() }), 400, "invalid_amount"],
+    [() => momo({ amount: [150], idempotency_key: key() }), 400, "invalid_amount"],
+    [() => momo({ amount: 150, idempotency_key: key(), account_number: "abc233241234195" }), 400, "invalid_account"],
+    [() => momo({ amount: 150, idempotency_key: key(), account_number: "233291234567" }), 400, "invalid_account"],
+    [() => momo({ amount: 150, idempotency_key: "x".repeat(121) }), 400, "invalid_idempotency_key"],
   ];
   for (const [send, status, code] of cases) {
     const r = await send();
@@ -92,6 +98,7 @@ test("A valid request goes on to TheTeller; a duplicate of one already sent is r
   const { db, userId } = await setupWalletDb();
   const router = paymentsRouter(db);
   await acceptRules(db, userId);
+  await db.query(`UPDATE users SET deposit_phone = $2, deposit_phone_confirmed_at = now() WHERE id = $1`, [userId, PHONE]);
   /* valid: it passes every check and goes to TheTeller (not configured in tests, so it stops right there) */
   const ok = await call(router, "/teller/checkout", userId, { amount: 150, currency: "GHS", idempotency_key: key() });
   assert.ok(ok.failed instanceof TellerConfigurationError, "a valid request reaches the gateway step");

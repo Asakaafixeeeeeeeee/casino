@@ -1403,6 +1403,36 @@ a.provider:hover { border-color: var(--yellow); transform: translateY(-1px); }
 .auth-foot a { color: var(--muted); }
 .auth-foot .me-18 { width: 30px; height: 30px; border-width: 2px; font-size: .66rem; }
 
+/* On desktop, use the available canvas for page content and game layouts that
+   intentionally use a narrow, phone-first column. Phones keep their existing sizing. */
+@media (min-width: 1024px) {
+  .auth-page { max-width: min(760px, calc(100vw - 48px)); padding-top: 40px; padding-bottom: 32px; }
+  .auth-card { padding: 34px 36px 30px; }
+  .auth-card #regForm, .auth-card #loginForm, .auth-card #forgotForm {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 16px;
+  }
+  .auth-card #regForm > .checkbox, .auth-card #termsErr, .auth-card #regBtn,
+  .auth-card #loginForm > .auth-forgot, .auth-card #loginForm > button,
+  .auth-card #forgotForm > button, .auth-card #forgotForm > .auth-switch { grid-column: 1 / -1; }
+  .pay-wrap { width: min(1040px, calc(100vw - 48px)); max-width: none; padding-bottom: 32px; }
+  .pay-body { padding: 24px 32px; }
+  .me-page { max-width: min(1040px, calc(100vw - 48px)); padding-bottom: 32px; }
+  .me-quick { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .legal { max-width: min(1000px, calc(100vw - 48px)); }
+  .care { max-width: min(960px, calc(100vw - 48px)); }
+  .auth-page.ps-page { max-width: min(760px, calc(100vw - 48px)); }
+  body.game-page > main {
+    width: min(1320px, calc(100vw - 48px));
+    max-width: none;
+    margin-inline: auto;
+  }
+}
+@media (min-width: 1440px) {
+  :root { --container: 1400px; }
+}
+
 /* admin back office */
 .adm-actions { display: flex; gap: 6px; margin-top: 4px; }
 .adm-actions .btn { min-height: 32px; padding: 5px 12px; }
@@ -1704,6 +1734,23 @@ a, button, [role="button"], [data-cta] {
 }
 .pay-phone-mine[hidden] { display: none; }
 .pay-phone-hint { margin: 2px 4px 14px; font-size: .8rem; line-height: 1.45; color: var(--dim); }
+.pay-phone-locked input { cursor: default; }
+.pay-lock { flex: none; padding: 4px 9px; border-radius: var(--r-full); border: 1px solid var(--line); font-size: .68rem; font-weight: 800; letter-spacing: .06em; color: var(--green); }
+
+/* deposit: the 10-minute wait, and the one-time number confirmation */
+.dep-wait { margin: 0 0 14px; padding: 14px; border-radius: var(--r); border: 1px solid rgba(255, 75, 69, .45); background: rgba(255, 75, 69, .08); text-align: center; }
+.dep-wait b { display: block; font-size: .9rem; letter-spacing: .04em; color: var(--red); }
+.dep-wait p { margin: 6px 0 4px; font-size: .84rem; line-height: 1.5; color: var(--muted); }
+.dep-count { font-size: 2rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .06em; color: var(--yellow); }
+.dep-modal { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .72); overflow-y: auto; }
+.dep-modal-box { width: min(100%, 420px); max-height: 100%; overflow-y: auto; padding: 22px 18px; border-radius: var(--r); border: 1px solid var(--line); background: var(--bg-raised); outline: none; }
+.dep-modal-box h2 { margin: 0 0 12px; font-size: 1.05rem; letter-spacing: .03em; text-align: center; color: var(--yellow); }
+.dep-modal-body p { margin: 0 0 10px; font-size: .9rem; line-height: 1.55; color: var(--muted); }
+.dep-modal-body p b { color: var(--text); }
+.dep-modal-body .dep-count { margin: 6px 0 4px; text-align: center; }
+.dep-phone-show { margin: 4px 0 14px; padding: 12px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface-2); text-align: center; font-size: 1.5rem; font-weight: 800; letter-spacing: .08em; font-variant-numeric: tabular-nums; }
+.dep-modal-err { margin: 0 0 10px; font-size: .84rem; color: var(--red); text-align: center; }
+.dep-modal-actions { display: grid; gap: 10px; margin-top: 14px; }
 
 /* live support chat: the team's replies, notes, and the "new reply" dot */
 .bubble.agent { justify-self: start; background: rgba(255, 200, 61, .1); border: 1px solid rgba(255, 200, 61, .35); color: var(--text); border-bottom-left-radius: 4px; }

@@ -218,6 +218,7 @@
   ["fullName", "phone", "email", "promo", "pw", "age", "lphone", "lpw", "fphone", "fdob", "fpw"].forEach((id) =>
     $(id).addEventListener("input", () => setError(id, id + "Err", "")));
   $("terms").addEventListener("change", () => { if ($("terms").checked) $("termsErr").textContent = ""; });
+  $("depositTerms").addEventListener("change", () => { if ($("depositTerms").checked) $("depositTermsErr").textContent = ""; });
 
   /* ---------------- partner link and promo code ---------------- */
   /* a promo code from the link (?promo=CODE) or remembered from earlier fills the field; a partner link is noted */
@@ -270,8 +271,10 @@
     ];
     $("termsErr").textContent = $("terms").checked ? "" : "Please confirm you're 18+ and accept the terms.";
     ok.push($("terms").checked);
+    $("depositTermsErr").textContent = $("depositTerms").checked ? "" : "Please accept the deposit phone number rule to register.";
+    ok.push($("depositTerms").checked);
     if (ok.includes(false)) {
-      const first = forms.register.querySelector(".field.invalid input") || ($("terms").checked ? null : $("terms"));
+      const first = forms.register.querySelector(".field.invalid input") || (!$("terms").checked ? $("terms") : !$("depositTerms").checked ? $("depositTerms") : null);
       if (first) first.focus();
       return;
     }
@@ -282,7 +285,7 @@
       busy($("regBtn"), false);
       if (!setError("promo", "promoErr", problem)) return $("promo").focus();
     }
-    const r = await call($("regBtn"), "Creating account…", "/api/register", { full_name: fullName, phone, email, password: pw, dob, currency: $("currency").value, country: country().code });
+    const r = await call($("regBtn"), "Creating account…", "/api/register", { full_name: fullName, phone, email, password: pw, dob, currency: $("currency").value, country: country().code, accept_deposit_terms: true });
     if (!r.ok) return fieldError(r);
     /* the promo code goes with the account to the partner it belongs to (credited in leave()) */
     if (promo) U.referral.setPromo(promo);

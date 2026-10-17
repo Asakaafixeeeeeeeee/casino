@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0d0e10">
 <title>Log in or register — WIN B WIN</title>
 <meta name="description" content="Log in or create your WIN B casino account with your mobile number.">
-<link rel="stylesheet" href="assets/css/styles.css?v=41">
+<link rel="stylesheet" href="assets/css/styles.css?v=42">
 <link rel="icon" href="assets/img/winb-mark.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="assets/img/app/w-apple-touch-icon-180.png">
@@ -103,6 +103,8 @@
         <label class="checkbox auth-terms"><input type="checkbox" id="terms"><span>I'm 18 or older and accept the
           <a href="terms.html" target="_blank" rel="noopener">terms</a> and <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a>.</span></label>
         <span class="err" id="termsErr"></span>
+        <label class="checkbox auth-terms"><input type="checkbox" id="depositTerms"><span><b>Deposit phone number rule:</b> the mobile number I register with will be the only number I can use for deposits. It is permanently linked to my account and cannot be changed. To use a different number, I must register a new account.</span></label>
+        <span class="err" id="depositTermsErr"></span>
         <button class="btn btn-primary btn-lg btn-block" type="submit" id="regBtn">Create account</button>
       </form>
 
@@ -162,6 +164,6 @@
 
 <script src="assets/js/data.js?v=58"></script>
 <script src="assets/js/site.js?v=56"></script>
-<script src="assets/js/register.js?v=39"></script>
+<script src="assets/js/register.js?v=40"></script>
 </body>
 </html>

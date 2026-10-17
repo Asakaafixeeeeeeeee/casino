@@ -221,6 +221,7 @@ test("Deposits: below the live minimum is refused with it; at the minimum only a
   assert.equal((await call(router, "get", "/rules", env.userId)).body!.accepted, true);
 
   /* accepted: the amount and acceptance checks pass (this test has no TheTeller account, so it stops there) */
+  await env.db.query(`UPDATE users SET deposit_phone = '0241234194', deposit_phone_confirmed_at = now() WHERE id = $1`, [env.userId]);
   const ok = await call(router, "post", "/teller/checkout", env.userId, { amount: 135, currency: "GHS", idempotency_key: "deposit:" + key() });
   assert.ok(ok.failed instanceof TellerConfigurationError, "past the minimum and the rules, on to TheTeller");
 

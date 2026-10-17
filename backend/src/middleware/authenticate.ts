@@ -55,7 +55,7 @@ function closedError(restriction: string | null) {
 }
 
 interface SessionVerifyResponse {
-  user?: { id: string | number; username?: string; phone?: string; country?: string; full_name?: string | null; email?: string | null };
+  user?: { id: string | number; username?: string; phone?: string; country?: string; full_name?: string | null; email?: string | null; deposit_terms_accepted_at?: string | null };
 }
 
 export async function authenticate(
@@ -96,6 +96,13 @@ export async function authenticate(
     const balanceUserId = await ensureWalletAccount(db, String(accountId), user?.username, phone, user?.country);
     const email = /^[^@s]{1,64}@[^@s]{1,190}.[^@s]{2,}$/.test(String(user?.email ?? "")) ? String(user!.email).toLowerCase() : "";
     const { status, restriction, until } = await touchUser(balanceUserId, phone, fullName, email);
+    /* a player who accepted the deposit-number rule at sign-up has their registered number locked from the start */
+    const acceptedAt = user?.deposit_terms_accepted_at ? new Date(user.deposit_terms_accepted_at) : null;
+    if (acceptedAt && !Number.isNaN(acceptedAt.getTime()) && /^(?:\+|00)?(?:233|0)\d{9}$/.test(phone.replace(/[\s-]/g, ""))) {
+      await db.query(
+        `UPDATE users SET deposit_phone = $2, deposit_phone_confirmed_at = $3 WHERE id = $1 AND deposit_phone_confirmed_at IS NULL`,
+        [balanceUserId, "0" + phone.replace(/[\s-]/g, "").slice(-9), acceptedAt.toISOString()]);
+    }
     if (status === "CLOSED") {
       next(closedError(restriction));
       return;

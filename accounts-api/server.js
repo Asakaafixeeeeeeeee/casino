@@ -338,7 +338,8 @@ async function main() {
       RESERVED.includes(username.toLowerCase()) ? ["username", "That username is taken."] :
       passwordProblem(body.password) ? ["pw", passwordProblem(body.password)] :
       !(age >= 18) ? ["age", opts.admin ? "Partners must be 18 or older — check the date of birth." : "You must be 18 or older to register."] :
-      age > 120 ? ["age", "Check your date of birth."] : null;
+      age > 120 ? ["age", "Check your date of birth."] :
+      !opts.admin && body.accept_deposit_terms !== true ? ["depositTerms", "Please accept the deposit phone number rule to register."] : null;
     if (problem) throw new HttpError(400, problem[1], { field: problem[0] });
 
     const taken = await db.query("SELECT phone, lower(username) = lower($2) AS same_name FROM users WHERE phone = $1 OR lower(username) = lower($2)", [phone, username]);
@@ -352,8 +353,8 @@ async function main() {
     const hash = await hashPassword(body.password);
     try {
       const { rows: [user] } = await db.query(
-        "INSERT INTO users (phone, username, password_hash, dob, news, currency, country, full_name, email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
-        [phone, username, hash, dob, !!body.news, currency, country.code, fullName || null, email || null]);
+        "INSERT INTO users (phone, username, password_hash, dob, news, currency, country, full_name, email, deposit_terms_accepted_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *",
+        [phone, username, hash, dob, !!body.news, currency, country.code, fullName || null, email || null, opts.admin ? null : new Date().toISOString()]);
       return user;
     } catch (err) {
       /* two sign-ups for the same number or name at the same moment: the unique index decides */
@@ -453,7 +454,7 @@ async function main() {
 
     "GET /api/session/verify": async (req) => {
       const user = await signedIn(req);
-      return { body: { user: { id: user.id, phone: user.phone, username: user.username, full_name: user.full_name || null, email: user.email || null, currency: user.currency || "USD", country: user.country || "GH" } } };
+      return { body: { user: { id: user.id, phone: user.phone, username: user.username, full_name: user.full_name || null, email: user.email || null, currency: user.currency || "USD", country: user.country || "GH", deposit_terms_accepted_at: user.deposit_terms_accepted_at || null } } };
     },
 
     /* the optional email address, added or changed from the account settings (empty removes it) */
