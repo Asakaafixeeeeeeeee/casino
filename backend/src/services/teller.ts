@@ -115,10 +115,12 @@ export function tellerAmountMajor(amountMajor: number): string {
   return String(minor).padStart(12, "0");
 }
 
-/** TheTeller transaction ids are 12 digits and unique per transaction. Never a leading zero: anything reading the id
- *  as a number would drop it and see 11 digits. */
+/** TheTeller transaction ids are exactly 12 digits and unique per transaction. Ours always start with 1111 (so TheTeller
+ *  can spot WIN B Casino payments) followed by 8 random digits. The leading 1 also keeps the id from losing a zero if
+ *  anything reads it as a number. */
+export const TX_PREFIX = "1111";
 export function newTxId(): string {
-  return String(crypto.randomInt(1e11, 1e12));
+  return TX_PREFIX + String(crypto.randomInt(0, 1e8)).padStart(8, "0");
 }
 
 /** A valid address for TheTeller's required email field, built from the account id and our own host. */

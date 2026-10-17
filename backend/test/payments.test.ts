@@ -178,7 +178,7 @@ test("The integration guide's setting names work too", () => {
 });
 
 test("Transaction ids are 12 digits", () => {
-  for (let i = 0; i < 500; i++) assert.match(newTxId(), /^[1-9]\d{11}$/);
+  for (let i = 0; i < 500; i++) assert.match(newTxId(), /^1111\d{8}$/);
 });
 
 test("A deposit's reference is DES + its 12-digit TheTeller number", () => {
