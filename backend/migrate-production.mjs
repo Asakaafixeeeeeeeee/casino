@@ -52,6 +52,8 @@ const migrationFiles = [
   "044_existing_withdrawal_rule_notice.sql",
   "045_remove_unused_withdrawal_notice_cohort.sql",
   "046_lotto_precommitted_manual_numbers.sql",
+  "047_deposit_phone_lock.sql",
+  "048_support_ai_push_lotto_hide.sql",
 ];
 
 if (!process.env.DATABASE_URL) {
