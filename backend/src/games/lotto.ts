@@ -606,7 +606,7 @@ const drawView = (d: DrawRow) => ({
 const adminDrawView = (d: DrawRow) => ({
   id: Number(d.id), draw_code: lottoDrawCode(d), name: d.name, draw_at: iso(d.draw_at), opens_at: iso(d.opens_at), closes_at: iso(d.closes_at),
   status: d.status, paused: d.paused, auto: d.auto, hash: d.hash, number_source: d.number_source ?? "SERVER",
-  created_by: d.created_by ?? null,
+  created_by: d.created_by ?? null, created_at: iso(d.created_at),
   numbers: d.status === "OPEN" || !d.numbers ? null : d.numbers.map(Number),
   ...(d.status === "RELEASED" ? { seed: d.seed } : {}),
   decided_by: d.decided_by ?? null, released_at: iso(d.released_at),

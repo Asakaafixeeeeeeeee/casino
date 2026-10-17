@@ -3689,9 +3689,10 @@
     if (!r.ok || state.tab !== "lotto" || !$("ltaKey")) return;
     const d = r.data;
     const big = (ns) => '<span class="lta-key-balls">' + ns.map((n) => '<span class="lta-key-ball lt-c' + Math.min(8, Math.floor((n - 1) / 10)) + '"><i>' + n + "</i></span>").join("") + "</span>";
+    const kind = (x) => (x.auto ? pill("Automatic daily draw", "") : x.number_source === "MANUAL" ? pill("Manual draw", "warn") : pill("Custom draw · server numbers", ""));
     const pend = d.pending.map((x) =>
-      '<div class="lta-key-draw"><div class="lta-key-top"><div><strong>Draw #' + x.id + " · " + esc(x.name || "") + "</strong><small>Betting closed " + when(x.closed_at) + " · draw " + when(x.draw_at) + "</small></div>" +
-      (x.locked ? pill("Numbers locked", "ok") : pill("Check failed — don't publish", "bad")) + "</div>" + big(x.numbers) +
+      '<div class="lta-key-draw"><div class="lta-key-top"><div><strong>Draw ' + esc(x.draw_code || "#" + x.id) + " (ID " + x.id + ") · " + esc(x.name || "") + "</strong><small>Created " + when(x.created_at) + " · betting closed " + when(x.closed_at) + " · draw " + when(x.draw_at) + "</small></div>" +
+      '<div>' + kind(x) + " " + (x.locked ? pill("Numbers locked", "ok") : pill("Check failed — don't publish", "bad")) + "</div></div>" + big(x.numbers) +
       '<div class="lta-key-meta"><span>' + count(x.tickets) + " ticket(s) · " + money(x.staked) + " staked</span><span>" +
       (x.projected ? count(x.projected.winners) + " winner(s) · " + money(x.projected.payout) + " to pay" : "") + "</span></div>" +
       '<p class="adm-note">' + (x.number_source === "MANUAL" ? "Numbers were selected and committed before ticket sales opened." :
@@ -3704,6 +3705,10 @@
       when(x.published_at) + " by " + esc(x.published_by || "—") + " · " + count(x.winners) + " won · " + money(x.paid) +
       '</small><small class="adm-note lta-proof"><span>Seed</span><code>' + esc(x.seed) +
       '</code><span>SHA-256</span><code>' + esc(x.hash) + "</code></small></li>").join("");
+    const STATUS = { OPEN: "Betting open", CLOSED: "Waiting for publication", RELEASED: "Published", CANCELLED: "Cancelled" };
+    const hist = (d.history || []).map((x) => "<tr><td><b>" + esc(x.draw_code || "#" + x.id) + "</b><br><small>ID " + x.id + " · " + esc(x.name || "") + "</small></td><td>" + kind(x) + "</td><td>" +
+      (x.numbers ? ltBalls(x.numbers) : "<small>Hidden until betting closes</small>") + "</td><td><small>" + when(x.created_at) + "</small></td><td><small>" + when(x.draw_at) + "</small></td><td>" +
+      pill(STATUS[x.status] || x.status, x.status === "RELEASED" ? "ok" : x.status === "CANCELLED" ? "bad" : "warn") + (x.hidden ? " " + pill("Removed from public", "bad") : "") + "</td></tr>").join("");
     const LABEL = { "lotto.preview": "Previewed", "lotto.publish": "Published", "lotto.cancel": "Cancelled", "lotto.draw_create": "Created", "lotto.draw_pause": "Paused", "lotto.draw_resume": "Resumed" };
     const audit = d.audit.map((a) => "<li>" + pill(LABEL[a.action] || a.action, a.action === "lotto.publish" ? "ok" : a.action === "lotto.cancel" ? "bad" : "") +
       "<span>Draw #" + a.draw + '</span><small class="adm-note">' + when(a.at) + " · " + esc(a.admin) + "</small></li>").join("");
@@ -3711,6 +3716,7 @@
       '<p class="adm-note">Server-mode numbers come from the draw\'s secret seed, independent of tickets. For manual named draws, the admin selects numbers before ticket sales open and the server locks their commitment at creation; they cannot be changed. Preview either result here; players see nothing until you press <b>PUBLISH RESULT</b>.</p>' +
       (pend || '<p class="adm-note lta-key-none">No draw is waiting: numbers appear here as soon as a draw\'s betting closes.</p>') +
       (pub ? '<h4 class="lta-key-h">Published results</h4><ul class="lta-key-list">' + pub + "</ul>" : "") +
+      (hist ? '<h4 class="lta-key-h">Draw history</h4><div class="lta-hist-wrap"><table class="lta-hist"><thead><tr><th>Draw</th><th>Type</th><th>Five numbers</th><th>Created</th><th>Scheduled</th><th>Status</th></tr></thead><tbody>' + hist + "</tbody></table></div>" : "") +
       (audit ? '<h4 class="lta-key-h">Audit trail</h4><ul class="lta-key-list lta-key-audit">' + audit + "</ul>" : "") + "</section>";
   }
 

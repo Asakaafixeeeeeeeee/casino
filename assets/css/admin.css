@@ -751,3 +751,8 @@
 tr.lta-new td { background: rgba(255, 204, 0, .1); transition: background 2s; }
 @media (max-width: 380px) { .lta-nums { gap: 5px; } .lta-num { height: 46px; font-size: 18px; } .lta-when { column-gap: 6px; } }
 .me-dialog-actions > :only-child { grid-column: 1 / -1; }
+
+.lta-hist-wrap { overflow-x: auto; }
+.lta-hist { width: 100%; border-collapse: collapse; font-size: 13px; }
+.lta-hist th, .lta-hist td { padding: 8px 10px; text-align: left; border-bottom: 1px solid rgba(255,255,255,.08); vertical-align: middle; }
+.lta-hist th { font-size: 11px; text-transform: uppercase; opacity: .7; }

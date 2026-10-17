@@ -131,9 +131,18 @@ export async function lottoKey(db: Pool, admin: string) {
     const locked = lottoResultCommitmentValid(row.seed, Number(d.id), row.hash, stored, row.number_source);
     const seen = await db.query(`SELECT 1 FROM admin_actions WHERE admin = $1 AND action = 'lotto.preview' AND target = $2`, [admin, `lotto:${d.id}`]);
     if (!seen.rowCount) await logAction(db, admin, "lotto.preview", `lotto:${d.id}`, { numbers: stored, hash: row.hash });
-    pending.push({ id: d.id, name: d.name, draw_at: d.draw_at, closed_at: new Date(row.closes_at).toISOString(), numbers: stored, hash: row.hash,
+    pending.push({ id: d.id, draw_code: d.draw_code, auto: d.auto, created_at: d.created_at, name: d.name, draw_at: d.draw_at, closed_at: new Date(row.closes_at).toISOString(), numbers: stored, hash: row.hash,
       locked, number_source: row.number_source, tickets: d.tickets, staked: d.staked, projected: d.projected });
   }
+  /* every recent draw with its numbers and status, so manual and automatic draws can never be confused; the admin typed
+     the manual numbers, so they show even while betting is open (admin-only), server numbers stay secret until close */
+  const manualNums = new Map((await db.query<{ id: string; numbers: number[] }>(
+    `SELECT id, numbers FROM lotto_draws WHERE number_source = 'MANUAL' AND numbers IS NOT NULL`)).rows.map((r) => [Number(r.id), r.numbers.map(Number)]));
+  const history = draws.map((d) => ({
+    id: d.id, draw_code: d.draw_code, name: d.name, auto: d.auto, number_source: d.number_source, numbers: d.numbers ?? manualNums.get(d.id) ?? null,
+    created_at: d.created_at, draw_at: d.draw_at, closes_at: d.closes_at, status: d.status, tickets: d.tickets,
+    published_at: d.released_at, hidden: !!d.result_hidden_at,
+  }));
   const published = [];
   for (const d of draws.filter((x) => x.status === "RELEASED").slice(0, 10)) {
     const row = (await db.query<{ seed: string; hash: string; numbers: number[] | null; number_source: "SERVER" | "MANUAL" }>(
@@ -149,6 +158,7 @@ export async function lottoKey(db: Pool, admin: string) {
     `SELECT admin, action, target, details, created_at FROM admin_actions WHERE target LIKE 'lotto:%' ORDER BY created_at DESC LIMIT 40`)).rows;
   return {
     pending,
+    history,
     published,
     audit: audit.map((a) => ({ admin: a.admin, action: a.action, draw: Number(a.target.slice(6)), at: new Date(a.created_at).toISOString(), details: a.details })),
   };

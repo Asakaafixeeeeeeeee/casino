@@ -184,10 +184,8 @@ test("Lotto: manual numbers are committed before betting opens, hidden until rel
   const preview = await previewLottoDraw(w.db, d.id, closesAt);
   assert.deepEqual(preview.numbers, selected, "closing preserves the precommitted result");
   assert.equal(preview.totals.winners, 1);
-  await w.db.query(`UPDATE lotto_draws SET numbers = $2 WHERE id = $1`, [d.id, [1, 2, 3, 4, 5]]);
-  assert.equal((await lottoKey(w.db, "admin")).pending.find((x) => x.id === Number(d.id))!.locked, false);
-  await assert.rejects(releaseLottoDraw(w.db, d.id, "admin", drawAt), code("invalid_result_commitment"));
-  await w.db.query(`UPDATE lotto_draws SET numbers = $2 WHERE id = $1`, [d.id, selected]);
+  await assert.rejects(w.db.query(`UPDATE lotto_draws SET numbers = $2 WHERE id = $1`, [d.id, [1, 2, 3, 4, 5]]), /locked/);
+  assert.equal((await lottoKey(w.db, "admin")).pending.find((x) => x.id === Number(d.id))!.locked, true);
   const out = await releaseLottoDraw(w.db, d.id, "admin", drawAt);
   assert.deepEqual(out.numbers, selected, "publication cannot replace the committed result");
   const publicResult = (await lottoState(w.db, drawAt)).results.find((x) => x.id === Number(d.id))!;
