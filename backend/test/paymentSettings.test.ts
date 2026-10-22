@@ -12,8 +12,8 @@ import { setupWalletDb } from "./helpers/walletDb.js";
 
 const ADMIN = "0241112222";
 const ENV = {
-  TELLER_MODE: "live", TELLER_MERCHANT_ID: "TTM-00012020", TELLER_API_USERNAME: "secret-user-name",
-  TELLER_API_KEY: "super-secret-api-key", TELLER_PASSCODE: "float-pass",
+  PAYTELLER_MERCHANT_ID: "TTM-00012020", PAYTELLER_USERNAME: "secret-user-name",
+  PAYTELLER_API_KEY: "super-secret-api-key",
 };
 const reachable = async () => ({ reachable: true, http: 200, ms: 42, error: null });
 
@@ -46,7 +46,7 @@ test("Payments are ON by default, and the switch is saved until an admin changes
   assert.equal(await paymentsEnabled(db), false);
   await setPaymentsEnabled(db, ADMIN, { enabled: true });
   assert.equal(await paymentsEnabled(db), true);
-  const log = (await db.query(`SELECT action FROM admin_actions WHERE target = 'teller' ORDER BY id`)).rows.map((r) => r.action);
+  const log = (await db.query(`SELECT action FROM admin_actions WHERE target = 'payteller' ORDER BY id`)).rows.map((r) => r.action);
   assert.deepEqual(log, ["payments.off", "payments.on"]);
 });
 
@@ -62,23 +62,23 @@ test("The admin overview shows the merchant id and whether secrets are set, neve
   const { db } = await setupWalletDb();
   const o = await paymentSettingsOverview(db, ENV, reachable);
   assert.equal(o.payments_enabled, true);
-  assert.equal(o.teller.merchant_id, "TTM-00012020");
-  assert.equal(o.teller.merchant_id_looks_valid, true);
-  assert.equal(o.teller.mode, "live");
-  assert.deepEqual(o.teller.secrets, { api_username: true, api_key: true, payout_passcode: true });
+  assert.equal(o.payteller.merchant_id, "TTM-00012020");
+  assert.equal(o.payteller.merchant_id_looks_valid, true);
+  assert.equal(o.payteller.mode, "live");
+  assert.deepEqual(o.payteller.secrets, { api_username: true, api_key: true });
   assert.equal(o.connection.status, "connected");
   assert.equal(o.off_message, PAYMENTS_OFF_MESSAGE);
   const json = JSON.stringify(o);
-  for (const secret of ["secret-user-name", "super-secret-api-key", "float-pass"]) assert.ok(!json.includes(secret), secret + " never sent");
+  for (const secret of ["secret-user-name", "super-secret-api-key"]) assert.ok(!json.includes(secret), secret + " never sent");
 });
 
-test("The overview names what's missing when TheTeller isn't configured, without trying to connect", async () => {
+test("The overview names what's missing when Payteller isn't configured, without trying to connect", async () => {
   const { db } = await setupWalletDb();
   let pinged = false;
-  const o = await paymentSettingsOverview(db, { TELLER_MERCHANT_ID: "TTM-00012020" }, async () => { pinged = true; return reachable(); });
+  const o = await paymentSettingsOverview(db, { PAYTELLER_MERCHANT_ID: "TTM-00012020" }, async () => { pinged = true; return reachable(); });
   assert.equal(pinged, false);
-  assert.equal(o.teller.configured, false);
-  assert.deepEqual(o.teller.missing, ["TELLER_API_USERNAME", "TELLER_API_KEY"]);
+  assert.equal(o.payteller.configured, false);
+  assert.deepEqual(o.payteller.missing, ["PAYTELLER_USERNAME", "PAYTELLER_API_KEY"]);
   assert.equal(o.connection.status, "not_configured");
 });
 

@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
 <meta name="theme-color" content="#0d0e10">
 <title>Deposit | WIN B WIN</title>
-<meta name="description" content="Fund your WIN B casino wallet with mobile money, bank transfer or card.">
+<meta name="description" content="Fund your WIN B casino wallet with Ghana mobile money.">
 <link rel="stylesheet" href="assets/css/styles.css?v=43">
 <link rel="icon" href="assets/img/winb-mark.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
@@ -32,12 +32,6 @@
 </div>
 
 <main class="pay-wrap">
-  <div class="pay-tabs" role="tablist">
-    <button class="pay-tab on" type="button" role="tab" data-paytab="momo">Mobile Money</button>
-    <button class="pay-tab" type="button" role="tab" data-paytab="paybill">Paybill</button>
-    <button class="pay-tab" type="button" role="tab" data-paytab="card">Card</button>
-  </div>
-
   <div class="pay-body">
     <div id="msg" aria-live="polite"></div>
 
@@ -54,7 +48,7 @@
     </section>
     <div id="depFunds"></div>
     <!-- MOBILE MONEY -->
-    <section class="pay-panel" data-panel="momo">
+    <section class="pay-panel">
       <div class="pay-row pay-phone-edit pay-phone-locked">
         <i data-icon="phone"></i>
         <input id="depPhone" type="tel" inputmode="numeric" readonly maxlength="16"
@@ -97,45 +91,12 @@
       <ol class="pay-notes">
         <li>Maximum per transaction is GHS 50,000.00</li>
         <li>Minimum per transaction is GHS <span data-dep-min>135.00</span><span id="depMinUsd"></span></li>
-        <li>Deposit is free, no transaction fees.</li>
+        <li>Review any processing fee shown by Payteller before approving. Your wallet is credited with the amount entered here.</li>
         <li>Your balance can only be withdrawn to the mobile number that you registered with.</li>
         <li>Deposits can only be made from your registered mobile money number, which is permanently linked to your account.</li>
         <li>After a successful deposit, a 10-minute waiting period applies before your next deposit.</li>
       </ol>
-      <p class="pay-note-extra">Note: For MTN users, if a bill prompt isn't received, dial *170#, then select 6 and 3 to approve the transaction.</p>
       <p class="pay-note-extra">Deposit, betting and withdrawal rules: see the <a href="terms.html#money-rules">Terms and Conditions</a>.</p>
-    </section>
-
-    <!-- PAYBILL -->
-    <section class="pay-panel" data-panel="paybill" hidden>
-      <div class="pay-balance">Balance (GHS) <b data-wallet-balance-num>0.00</b></div>
-      <div class="pay-amount">
-        <input id="pbAmount" type="number" min="135" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
-        <span class="pay-min">min. <span data-dep-min>135.00</span></span>
-      </div>
-      <div class="pay-err" id="pbAmountErr"></div>
-      <button class="btn-topup" type="button" id="pbSubmit">Continue</button>
-      <ol class="pay-notes">
-        <li>Enter the amount and continue to pay from your mobile money menu.</li>
-        <li>You'll approve the payment with your mobile money PIN.</li>
-        <li>Your balance is credited once the payment is confirmed.</li>
-      </ol>
-    </section>
-
-    <!-- CARD -->
-    <section class="pay-panel" data-panel="card" hidden>
-      <div class="pay-balance">Balance (GHS) <b data-wallet-balance-num>0.00</b></div>
-      <div class="pay-amount">
-        <input id="cdAmount" type="number" min="135" max="50000" step="1" placeholder="Amount (GHS)" inputmode="numeric">
-        <span class="pay-min">min. <span data-dep-min>135.00</span></span>
-      </div>
-      <div class="pay-err" id="cdAmountErr"></div>
-      <button class="btn-topup" type="button" id="cdSubmit">Continue to secure payment</button>
-      <ol class="pay-notes">
-        <li>Visa and Mastercard are accepted.</li>
-        <li>Your card is verified with 3-D Secure on your bank's page.</li>
-        <li>Deposit is free, no transaction fees.</li>
-      </ol>
     </section>
 
     <section class="pay-history" id="depHistoryWrap" hidden>
@@ -148,6 +109,6 @@
 <script src="assets/js/data.js?v=58"></script>
 <script src="assets/js/site.js?v=58"></script>
 <script src="assets/js/pay-fx.js?v=33"></script>
-<script src="assets/js/wallet.js?v=44"></script>
+<script src="assets/js/wallet.js?v=45"></script>
 </body>
 </html>

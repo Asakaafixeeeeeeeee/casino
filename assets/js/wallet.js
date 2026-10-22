@@ -35,16 +35,6 @@
     return false;
   }
 
-  /* ---------------- tabs ---------------- */
-  const tabs = Array.from(document.querySelectorAll(".pay-tab"));
-  const panels = Array.from(document.querySelectorAll(".pay-panel"));
-  function showTab(name) {
-    tabs.forEach((t) => t.classList.toggle("on", t.dataset.paytab === name));
-    panels.forEach((p) => (p.hidden = p.dataset.panel !== name));
-    if (msg) msg.innerHTML = "";
-  }
-  tabs.forEach((t) => t.addEventListener("click", () => showTab(t.dataset.paytab)));
-
   /* ---------------- provider switch (shared) ---------------- */
   /* TheTeller's r-switch codes for each network */
   const NETWORK_CODE = { mtn: "MTN", telecel: "VDF", airteltigo: "ATL" };
@@ -128,8 +118,7 @@
     const submit = $("depSubmit");
     if (!submit) return; // not the deposit page
 
-    /* the number paying is always the registered one: it can't be edited, and the server refuses any other. The
-       network starts on the one the number belongs to (it can still be switched for a number that moved). */
+    /* The server checks the registered number before checkout; remind players to use that number on Payteller. */
     const regLocal = U.normalizePhone(regPhone);
     const phoneIn = $("depPhone");
     const pretty = (p) => (/^0\d{9}$/.test(p) ? p.slice(0, 3) + " " + p.slice(3, 6) + " " + p.slice(6) : p);
@@ -144,7 +133,7 @@
       const usual = MOMO.find((m) => m.prefixes.includes(p.slice(0, 3)));
       $("depPhoneHint").textContent = !U.isGhanaMobile(p) ? "Your registered number isn't a Ghanaian mobile money number, so mobile money deposits aren't available. Contact support."
         : usual && net && usual !== net ? "Numbers starting " + p.slice(0, 3) + " are usually " + usual.name + ". Keep " + net.name + " only if your number moved there."
-        : "Your registered number. All deposits are made from this number only.";
+        : "Use your registered number on Payteller checkout. It is not prefilled, so check it before paying.";
     }
     $("provMenu").addEventListener("click", () => setTimeout(phoneHint, 0));
     phoneHint();
@@ -395,11 +384,11 @@
       return last;
     }
 
-    /* result = { status, reason } from the status route; the reason is TheTeller's own words */
+    /* result = { status, reason } from the authenticated provider status route */
     async function reportResult(result, fallbackAmount) {
       const status = result && result.status;
       const amount = (result && result.amount) || fallbackAmount || 0;
-      const why = result && result.reason ? " TheTeller said: \u201c" + U.esc(result.reason) + "\u201d." : "";
+      const why = result && result.reason ? " The payment provider said: \u201c" + U.esc(result.reason) + "\u201d." : "";
       if (status === "approved") {
         const balance = await U.refreshBalance();
         loadGuard(true);
@@ -433,7 +422,7 @@
     }
 
     /* lists recent deposits; anything pending (or failed in the last 6 h) is asked about again, so a
-       payment TheTeller confirmed late is credited the next time this page opens */
+       payment the provider confirmed late is credited the next time this page opens */
     async function loadHistory(recheck) {
       const r = await U.paymentApi("/api/payments/teller/deposits");
       if (!r.ok || !Array.isArray(r.data.deposits)) return;
@@ -456,7 +445,7 @@
       }
     }
 
-    /* back from TheTeller's checkout page: wallet.html?transaction_id=… */
+    /* back from the hosted checkout: wallet.html?transaction_id=… */
     (function handleReturn() {
       const txId = new URLSearchParams(location.search).get("transaction_id");
       history.replaceState({}, "", location.pathname);
@@ -469,7 +458,7 @@
       waitForPayment(txId).then((r) => reportResult(r)).then(() => loadHistory(true));
     })();
 
-    /* Card and Paybill: hand over to TheTeller's secure page */
+    /* Other payment methods: hand over to Payteller's secure checkout */
     async function startCheckout(amt, errId, btn) {
       if (!showError(errId, amountError(amt))) return;
       if (paused) return showPaused();
@@ -504,7 +493,7 @@
       location.assign(result.data.checkout_url);
     }
 
-    /* Mobile Money: TheTeller sends a PIN prompt to the phone; we wait for the answer here */
+    /* Payteller collects the selected payment method in its secure hosted checkout. */
     const depAmount = $("depAmount");
     let waiting = false;
     let paused = false; // on a self-imposed break: deposits are blocked by the server too
@@ -529,7 +518,7 @@
     function showPaused() {
       openDialog("DEPOSITS PAUSED", "<p>" + pausedText + "</p>", [{ label: "OK", primary: true, onClick: () => closeDialog() }]);
     }
-    /* the admin's ON/OFF switch (Admin -> TheTeller Payment Settings) and whether the gateway is set up at all;
+    /* the admin's ON/OFF switch (Admin -> Payteller Payment Settings) and whether the gateway is set up at all;
        payments already made are still checked and credited */
     U.paymentApi("/api/payments/config").then((r) => {
       if (r.ok && r.data && (r.data.paymentsOn === false || r.data.enabled === false)) paymentsOff = true;
@@ -566,7 +555,7 @@
       waiting = true;
       sync();
       msg.innerHTML = "";
-      PayFX.waiting({ title: "Sending payment prompt", text: "Connecting to " + U.esc(net.name) + "…", amount: amt });
+      PayFX.waiting({ title: "Opening secure checkout", text: "Connecting to Payteller…", amount: amt });
       const result = await U.paymentApi("/api/payments/teller/momo", {
         body: {
           amount: amt,
@@ -594,6 +583,11 @@
         loadRules().then(() => needAcceptance(result.data.message));
         return;
       }
+      if (result.ok && result.data.checkout_url) {
+        PayFX.close();
+        location.assign(result.data.checkout_url);
+        return;
+      }
       if (!result.ok || !result.data.transaction_id) {
         waiting = false;
         sync();
@@ -604,9 +598,8 @@
       }
       PayFX.waiting({
         amount: amt,
-        text: "We sent a prompt to <b>" + U.esc(maskPhone(local)) + "</b>. Enter the mobile money PIN on that phone to confirm." +
-          (net.id === "mtn" ? "<span class='payfx-hint'>No prompt? Dial *170#, then select 6 and 3.</span>" : ""),
-        onHide: () => showMsg("info", "Waiting for you to approve the payment on your phone…")
+        text: "Continue in Payteller’s secure checkout to complete your " + U.esc(net.name) + " payment.",
+        onHide: () => showMsg("info", "Waiting for you to complete the payment in Payteller…")
       });
       loadHistory(false);
       const outcome = await waitForPayment(result.data.transaction_id);
@@ -618,14 +611,6 @@
     });
     sync();
 
-    /* Paybill + Card tabs reuse the same checkout */
-    ["pb", "cd"].forEach((pfx) => {
-      const amt = $(pfx + "Amount");
-      const btn = $(pfx + "Submit");
-      if (!amt || !btn) return;
-      amt.addEventListener("input", () => showError(pfx + "AmountErr", ""));
-      btn.addEventListener("click", () => startCheckout(Math.round(Number(amt.value) * 100) / 100, pfx + "AmountErr", btn));
-    });
   }
 
   /* =====================================================================

@@ -41,16 +41,14 @@ services:
         value: https://asakaa-casino.onrender.com
       - key: ADMIN_PHONES
         sync: false
-      # TheTeller production server; set to "test" to use the sandbox
-      - key: TELLER_MODE
-        value: live
-      - key: TELLER_MERCHANT_ID
+      # Payteller production collections; credentials must all belong to this merchant
+      - key: PAYTELLER_API_BASE_URL
+        value: https://paytelller.com/api/v1
+      - key: PAYTELLER_MERCHANT_ID
         sync: false
-      - key: TELLER_API_USERNAME
+      - key: PAYTELLER_USERNAME
         sync: false
-      - key: TELLER_API_KEY
-        sync: false
-      - key: TELLER_PASSCODE
+      - key: PAYTELLER_API_KEY
         sync: false
       # browser push for support replies: generate a pair with `npx web-push generate-vapid-keys` (leave unset to disable push)
       - key: VAPID_PUBLIC_KEY

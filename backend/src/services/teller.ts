@@ -342,22 +342,26 @@ export async function createPaymentIntent(
   currency: string,
   idempotencyKey: string,
   redirectUrl: string,
-  network: string | null = null
-): Promise<{ id: string; transactionId: string | null; checkoutUrl: string | null; status: string }> {
-  const existing = await client.query<{ id: string; user_id: string; transaction_id: string | null; checkout_url: string | null; status: string }>(
-    `SELECT id, user_id, transaction_id, checkout_url, status FROM payment_intents WHERE idempotency_key = $1`,
+  network: string | null = null,
+  gateway: "teller" | "payteller" = "teller"
+): Promise<{ id: string; transactionId: string | null; checkoutUrl: string | null; status: string; gateway: "teller" | "payteller" }> {
+  const existing = await client.query<{ id: string; user_id: string; transaction_id: string | null; checkout_url: string | null; status: string; gateway: "teller" | "payteller" }>(
+    `SELECT id, user_id, transaction_id, checkout_url, status, gateway FROM payment_intents WHERE idempotency_key = $1`,
     [idempotencyKey]
   );
   if (existing.rowCount) {
     const current = existing.rows[0]!;
     /* another player's key: never hand back their checkout page or transaction */
     if (current.user_id !== userId) throw new TellerRequestError("That payment key was already used", true);
-    return { id: current.id, transactionId: current.transaction_id, checkoutUrl: current.checkout_url, status: current.status };
+    return {
+      id: current.id, transactionId: current.transaction_id, checkoutUrl: current.checkout_url,
+      status: current.status, gateway: current.gateway,
+    };
   }
   const result = await client.query<{ id: string }>(
-    `INSERT INTO payment_intents (user_id, amount, currency, idempotency_key, redirect_url, status, network)
-     VALUES ($1, $2, $3, $4, $5, 'PENDING', $6) RETURNING id`,
-    [userId, amountMajor, currency, idempotencyKey, redirectUrl, network]
+    `INSERT INTO payment_intents (user_id, amount, currency, idempotency_key, redirect_url, status, network, gateway)
+     VALUES ($1, $2, $3, $4, $5, 'PENDING', $6, $7) RETURNING id`,
+    [userId, amountMajor, currency, idempotencyKey, redirectUrl, network, gateway]
   );
-  return { id: result.rows[0]!.id, transactionId: null, checkoutUrl: null, status: "PENDING" };
+  return { id: result.rows[0]!.id, transactionId: null, checkoutUrl: null, status: "PENDING", gateway };
 }

@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import type { Pool } from "pg";
 import { authenticate, requireAdmin, requireUser } from "../middleware/authenticate.js";
 import { loadTellerConfig, TellerConfigurationError } from "../services/teller.js";
+import { loadPaytellerConfig } from "../services/payteller.js";
 import {
   listWithdrawals,
   payWithdrawal,
@@ -32,7 +33,7 @@ import {
 } from "../services/partnerPlatform.js";
 import { partnerOf } from "../services/affiliates.js";
 import { cancelInvite, createInvite, listInvites, renewInvite } from "../services/partnerInvites.js";
-import { paymentSettingsOverview, pingTeller, setPaymentsEnabled } from "../services/paymentSettings.js";
+import { paymentSettingsOverview, pingPayteller, setPaymentsEnabled } from "../services/paymentSettings.js";
 import { accountRestriction, controlAccount, restrictedUsers } from "../services/accountControl.js";
 import { affectedPlayers, moneyRulesHistory, moneyRulesOverview, saveMoneyRules } from "../services/moneyRules.js";
 
@@ -145,11 +146,10 @@ export function adminRouter(db: Pool): Router {
   r.get("/game-control/:id", send((req) => gameDetail(db, req.params.id)));
   r.post("/game-control/:id", send((req) => saveGameControls(db, adminOf(req), req.params.id, req.body ?? {})));
 
-  /* TheTeller Payment Settings: the ON/OFF switch for new payments (saved until changed), the merchant id and the
-     connection; secrets show only as set / not set */
+  /* Payteller Payment Settings: the ON/OFF switch for new deposits, merchant connection and hidden secrets. */
   r.get("/payment-settings", send(() => paymentSettingsOverview(db)));
   r.post("/payment-settings", send((req) => setPaymentsEnabled(db, adminOf(req), req.body ?? {})));
-  r.post("/payment-settings/test", send(() => pingTeller()));
+  r.post("/payment-settings/test", send(() => pingPayteller()));
 
   /* Betting & withdrawal settings: the minimum deposit, the betting eligibility rule, the withdrawal play-through rule
      and their wording; who each rule affects; and every change (each save is audited) */
@@ -252,7 +252,12 @@ export function adminRouter(db: Pool): Router {
   r.get("/deposits/waiting", send(() => waitingDeposits(db)));
   r.post("/deposits/:txId/recheck", handle(async (req, res) => {
     try {
-      res.json(await recheckDeposit(db, loadTellerConfig(process.env), String(req.params.txId), requireUser(req).phone));
+      const txId = String(req.params.txId);
+      const gateway = (await db.query<{ gateway: "teller" | "payteller" }>(
+        `SELECT gateway FROM payment_intents WHERE transaction_id = $1`, [txId])).rows[0]?.gateway;
+      if (!gateway) throw new DepositError("not_found", "No deposit with that reference", 404);
+      const config = gateway === "payteller" ? loadPaytellerConfig(process.env) : loadTellerConfig(process.env);
+      res.json(await recheckDeposit(db, config, txId, requireUser(req).phone));
     } catch (e) {
       if (e instanceof DepositError) { res.status(e.status).json({ error: e.code, message: e.message }); return; }
       throw e;

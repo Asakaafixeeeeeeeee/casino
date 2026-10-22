@@ -237,7 +237,7 @@
     panel.innerHTML = '<div id="ovAttn">' + attention() + "</div>" + figures() + loading;
     const [r, waiting] = await Promise.all([api("/overview?range=" + ov.range), api("/deposits/waiting")]);
     if (state.tab !== "overview") return;
-    /* deposits from the last day TheTeller hasn't answered for yet (older ones stay listed under Money) */
+    /* deposits from the last day their provider hasn't answered for yet (older ones stay listed under Money) */
     if (waiting.ok) ov.waitingDeposits = waiting.data.filter((d) => d.status === "PENDING" && Date.now() - new Date(d.created_at).getTime() < 864e5).length;
     if (!r.ok) {
       panel.innerHTML = '<div id="ovAttn">' + attention() + "</div>" + figures();
@@ -495,7 +495,7 @@
       const r = await api("/deposits/" + encodeURIComponent(btn.dataset.deprecheck) + "/recheck", {});
       if (!r.ok) { btn.disabled = false; return flash("error", errText(r, "Couldn't recheck that deposit.")); }
       flash(r.data.status === "approved" ? "ok" : r.data.status === "declined" ? "error" : "info",
-        r.data.status === "approved" ? "TheTeller confirmed it — the deposit is credited." :
+        r.data.status === "approved" ? "The payment provider confirmed it — the deposit is credited." :
         r.data.status === "declined" ? "TheTeller declined it" + (r.data.note ? ": " + esc(r.data.note) : ".") :
         "No final answer from TheTeller yet" + (r.data.note ? " (" + esc(r.data.note) + ")" : "") + ". Try again later.");
       loadMoney();
@@ -3184,14 +3184,14 @@
     loadLotto(true);
   }
 
-  /* ================= TheTeller Payment Settings ================= */
+  /* ================= Payteller Payment Settings ================= */
   /* the main admin's ON/OFF switch for new payments, the merchant id and the connection; API keys and passwords never
      reach this page (the server sends only whether each one is set) */
   const tp = { loading: false, last: null, test: null };
   const TP_CONN = { connected: ["Connected", "ok"], unreachable: ["Not reachable", "bad"], not_configured: ["Not configured", "bad"] };
   function renderPaymentSettings(d) {
     const on = d.payments_enabled;
-    const t = d.teller;
+    const t = d.payteller;
     const c = tp.test ? Object.assign({}, d.connection, tp.test, { status: tp.test.reachable ? "connected" : (t.configured ? "unreachable" : "not_configured") }) : d.connection;
     const conn = TP_CONN[c.status] || [c.status, ""];
     const secret = (set) => set ? '<span class="adm-tp-secret">' + U.icon("shield") + "Set · hidden</span>" : '<span class="adm-tp-missing">Not set</span>';
@@ -3199,13 +3199,13 @@
     panelOf("payments").innerHTML =
       '<section class="adm-card adm-tp-hero ' + (on ? "is-on" : "is-off") + '">' +
         '<div class="adm-studio-head"><div><strong>Payments are ' + (on ? "ON" : "OFF") + "</strong><small>" +
-          (on ? "All TheTeller payments work normally: players can deposit by mobile money, Paybill and card."
-            : "No one can start a new payment anywhere on the website. Payments already started are still checked with TheTeller and credited.") + "</small></div>" +
-        '<label class="adm-switch adm-tp-switch"><input type="checkbox" data-pay-switch' + (on ? " checked" : "") + ' aria-label="TheTeller payments on or off"><span aria-hidden="true"></span></label></div>' +
+          (on ? "New deposits use Payteller secure checkout."
+            : "No one can start a new deposit. Payments already started are still checked with their original provider and credited.") + "</small></div>" +
+        '<label class="adm-switch adm-tp-switch"><input type="checkbox" data-pay-switch' + (on ? " checked" : "") + ' aria-label="Payteller deposits on or off"><span aria-hidden="true"></span></label></div>' +
         (on ? "" : '<div class="adm-tp-notice"><span>Players see</span><p>' + esc(d.off_message) + "</p></div>") +
         '<p class="adm-note">' + (d.updated_by ? "Last changed " + when(d.updated_at) + " by " + esc(d.updated_by) : "Never changed (on by default)") +
           ". The switch stays as you set it until an admin changes it.</p></section>" +
-      '<section class="adm-card"><div class="adm-mines-card-head"><strong>TheTeller account</strong>' +
+      '<section class="adm-card"><div class="adm-mines-card-head"><strong>Payteller account</strong>' +
         '<button class="btn btn-ghost btn-sm" type="button" data-tp-test>' + U.icon("refresh") + "Test connection</button></div>" +
         '<div class="adm-mines-meta adm-tp-meta">' +
           avStat("Merchant ID", t.merchant_id ? esc(t.merchant_id) + (t.merchant_id_looks_valid ? "" : ' <small class="adm-tp-missing">check format</small>') : '<span class="adm-tp-missing">Not set</span>') +
@@ -3214,17 +3214,16 @@
           avStat("Mode", t.mode === "test" ? "Sandbox (test)" : "Live") +
           avStat("API username", secret(t.secrets.api_username)) +
           avStat("API key", secret(t.secrets.api_key)) +
-          avStat("Payout passcode", secret(t.secrets.payout_passcode)) +
           avStat("Last confirmed payment", c.last_confirmed_at ? ago(c.last_confirmed_at) : "none yet") +
         "</div>" +
         (t.configured ? "" : '<p class="adm-note adm-tp-missing">Missing on the asakaa-balance service in Render: <b>' + esc(t.missing.join(", ")) + "</b>.</p>") +
         '<p class="adm-note">API keys and passwords are kept on the server (Render environment variables) and are never shown here. ' +
-          "“Connected” means TheTeller's server answered; the last confirmed payment shows the keys are being accepted.</p></section>" +
+          "Payouts remain on their separate provider. Configure the checkout return address in Payteller if you want customers sent back here after paying.</p></section>" +
       '<section class="adm-card"><h3 class="adm-h">Last 24 hours</h3><div class="adm-mines-meta">' +
         avStat("Confirmed", count(h.confirmed), "in") + avStat("Amount confirmed", money(h.confirmed_amount)) +
         avStat("Pending", count(h.pending)) + avStat("Failed", count(h.failed), h.failed ? "bad" : "") + "</div>" +
-        '<p class="adm-note">' + count(d.waiting_to_settle) + " payment(s) waiting for TheTeller's answer. Turning payments OFF never stops these: " +
-        "they keep being verified every minute and are credited once TheTeller confirms them. See <b>Recent deposits</b> for each one.</p></section>";
+        '<p class="adm-note">' + count(d.waiting_to_settle) + " payment(s) waiting for their provider's answer. Turning payments OFF never stops these: " +
+        "they keep being verified and are credited once the provider confirms them. See <b>Recent deposits</b> for each one.</p></section>";
   }
   async function loadPaymentSettings(fresh) {
     if (tp.loading || state.tab !== "payments") return;
@@ -3240,7 +3239,7 @@
   async function paymentSwitch(input) {
     const on = input.checked;
     const ok = on
-      ? await ask({ title: "Turn payments ON?", text: "Players can deposit again with TheTeller (mobile money, Paybill and card).", yes: "Turn ON" })
+      ? await ask({ title: "Turn deposits ON?", text: "Players can start deposits through Payteller secure checkout.", yes: "Turn ON" })
       : await ask({ title: "Turn payments OFF?", text: "No one can start a new payment anywhere on the website. Players see: “" + esc(tp.last ? tp.last.off_message : "Payments are temporarily unavailable. Please try again later.") +
           "” Payments already started are still verified and credited.", yes: "Turn OFF", danger: true });
     if (ok === null) { input.checked = !on; return; }
@@ -3248,7 +3247,7 @@
     const r = await api("/payment-settings", { enabled: on });
     input.disabled = false;
     if (!r.ok) { input.checked = !on; return flash("error", errText(r, "Couldn't change it.")); }
-    flash("ok", "TheTeller payments are now <b>" + (on ? "ON" : "OFF") + "</b>.");
+    flash("ok", "Payteller deposits are now <b>" + (on ? "ON" : "OFF") + "</b>.");
     refreshBadges();
     loadPaymentSettings(false);
   }
@@ -3258,7 +3257,7 @@
     btn.disabled = false;
     if (!r.ok) return flash("error", errText(r, "Couldn't test the connection."));
     tp.test = r.data;
-    flash(r.data.reachable ? "ok" : "error", r.data.reachable ? "TheTeller answered in " + r.data.ms + " ms." : "TheTeller didn't answer: " + esc(r.data.error || "unknown error") + ".");
+    flash(r.data.reachable ? "ok" : "error", r.data.reachable ? "Payteller answered in " + r.data.ms + " ms." : "Payteller didn't answer: " + esc(r.data.error || "unknown error") + ".");
     if (tp.last) renderPaymentSettings(tp.last);
   }
 
@@ -3723,7 +3722,7 @@
   /* ================= sections, menu, events, badges ================= */
   /* ================= Recent deposits ================= */
   const dep = { status: "all", q: "", timer: 0 };
-  const DEP_STATUS = [["all", "All"], ["successful", "Successful"], ["pending", "Pending"], ["failed", "Failed at TheTeller"], ["rejected", "Stopped by our checks"]];
+  const DEP_STATUS = [["all", "All"], ["successful", "Successful"], ["pending", "Pending"], ["failed", "Failed at provider"], ["rejected", "Stopped by our checks"]];
   const DEP_TONE = { successful: "in", pending: "warn", failed: "bad", reversed: "bad", rejected: "bad" };
   function depositsShell() {
     const panel = panelOf("deposits");
@@ -3884,7 +3883,7 @@
     blocked: { title: AC.blocked.title, lead: AC.blocked.lead },
     banned: { title: AC.banned.title, lead: AC.banned.lead },
     deleted: { title: AC.deleted.title, lead: AC.deleted.lead },
-    payments: { title: "TheTeller Payment Settings", lead: "Switch TheTeller payments ON or OFF for the whole website, and check the merchant ID and the connection. OFF stops new payments only; payments already started are still verified and credited. API keys and passwords stay hidden." },
+    payments: { title: "Payteller Payment Settings", lead: "Switch Payteller deposits ON or OFF for the website, and check the merchant ID and connection. OFF stops new deposits only; payments already started are still verified and credited. Payouts remain on their separate provider. API keys and passwords stay hidden." },
     moneyrules: { title: "Betting & withdrawal settings", lead: "The minimum deposit, the betting eligibility rule and the withdrawal play-through rule, with the messages players see. Both rules are OFF by default, never deduct money and never hold winnings. Every change is confirmed, logged and shown in the history below." },
     withdrawals: { title: "Withdrawals", lead: "Players' requests to cash out. Send the money by hand, then Approve marks it paid; Reject returns it to the player's balance." },
     games: { title: "Games", lead: "Manage every game: switch it on or off, choose whether it offers free play (same odds as real money) and a strip of real big wins, pause and resume it, set bet limits and round timing, and watch live play, statistics and players' wins and losses. Results are drawn by the server and can't be seen or changed before a round ends." },

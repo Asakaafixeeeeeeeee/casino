@@ -7,19 +7,25 @@ import {
   checkoutEmail,
   canonicalTellerSubscriberNumber,
   createPaymentIntent,
-  credentialHints,
-  initiateTellerCheckout,
   loadTellerConfig,
   newTxId,
   paidPesewas,
   reasonText,
-  requestMomoPayment,
   TellerConfigurationError,
   TellerRequestError,
   depositReference,
   verdict,
   type MomoNetwork,
 } from "../services/teller.js";
+import {
+  checkPaytellerPayment,
+  createPaytellerPayment,
+  loadPaytellerConfig,
+  paytellerPaidPesewas,
+  paytellerVerdict,
+  PaytellerConfigurationError,
+  PaytellerRequestError,
+} from "../services/payteller.js";
 import { noteIntent, reopenFailedIntent, settleIntent } from "../services/tellerSettlement.js";
 import { checkDeposit, LimitError } from "../services/responsibleGaming.js";
 import { partnerOf } from "../services/affiliates.js";
@@ -93,7 +99,7 @@ export function paymentsRouter(db: Pool): Router {
     res.status(status).json({ error: code, message, ...extra });
   }
 
-  /* The main admin's TheTeller switch (Admin -> TheTeller Payment Settings): while it's OFF no new payment can start.
+  /* The main admin's Payteller switch (Admin -> Payteller Payment Settings): while it's OFF no new deposit can start.
      Only the routes that start a payment ask; checking and crediting payments already started never does. */
   async function refuseWhenOff(res: Response, a: DepositAttempt): Promise<boolean> {
     if (await paymentsEnabled(db)) return false;
@@ -124,7 +130,10 @@ export function paymentsRouter(db: Pool): Router {
      a limit only one of them fits (each now sees the others). Only one payment may be waiting for approval at a time,
      and none may start within 10 minutes of a successful deposit. A retried key returns its intent. */
   const MAX_OPEN_PROMPTS = 1;
-  async function openIntent(userId: string, amount: number, key: string, redirectUrl: string, res: Response, a: DepositAttempt, network: string | null = null) {
+  async function openIntent(
+    userId: string, amount: number, key: string, redirectUrl: string, res: Response, a: DepositAttempt,
+    network: string | null = null, gateway: "teller" | "payteller" = "teller"
+  ) {
     const client = await db.connect();
     try {
       await client.query("BEGIN");
@@ -154,7 +163,7 @@ export function paymentsRouter(db: Pool): Router {
           return null;
         }
       }
-      const intent = await createPaymentIntent(client, userId, amount, "GHS", key, redirectUrl, network);
+      const intent = await createPaymentIntent(client, userId, amount, "GHS", key, redirectUrl, network, gateway);
       await client.query("COMMIT");
       return intent;
     } catch (e) {
@@ -186,6 +195,69 @@ export function paymentsRouter(db: Pool): Router {
     throw new Error("Could not allocate a unique TheTeller transaction ID");
   }
 
+  async function startPaytellerCheckout(
+    userId: string, accountId: string, amount: number, key: string, res: Response, attempt: DepositAttempt
+  ): Promise<void> {
+    const site = siteUrl();
+    const config = loadPaytellerConfig(process.env);
+    const network = typeof attempt.network === "string" ? attempt.network : null;
+    const intent = await openIntent(userId, amount, key, `${site}/wallet.html`, res, attempt, network, "payteller");
+    if (!intent) return;
+    if (intent.gateway !== "payteller") {
+      return reject(res, 409, "payment_provider_changed", "This payment was already started with another provider. Check your deposit history.", attempt);
+    }
+    if (intent.transactionId && intent.checkoutUrl && intent.status === "PENDING") {
+      res.json({
+        checkout_url: intent.checkoutUrl,
+        transaction_id: intent.transactionId,
+        reference: depositReference(intent.transactionId),
+        status: clientStatus(intent.status),
+      });
+      return;
+    }
+    if (intent.status !== "PENDING") {
+      return reject(res, 409, "already_processed", "This payment was already processed. Please start a new deposit.", attempt);
+    }
+
+    const txId = intent.transactionId ?? await claimTxId(intent.id, null);
+    if (!txId) {
+      return reject(res, 409, "already_processed", "This payment was already started. Check your deposit history.", attempt);
+    }
+    const reference = depositReference(txId);
+    console.log("[payteller/checkout] user=%s amount=%s ref=%s", userId, amount, reference);
+
+    try {
+      const { checkoutUrl } = await createPaytellerPayment(config, {
+        amountMajor: amount,
+        reference,
+        customerEmail: checkoutEmail(accountId, new URL(site).hostname),
+        description: `Casino deposit ${reference}`,
+      });
+      await db.query(`UPDATE payment_intents SET checkout_url = $1, updated_at = now() WHERE id = $2`, [checkoutUrl, intent.id]);
+      res.status(201).json({ checkout_url: checkoutUrl, transaction_id: txId, reference, status: "pending" });
+    } catch (error) {
+      if (!(error instanceof PaytellerRequestError)) throw error;
+      const message = error.message.slice(0, 500);
+      if (error.declined) {
+        await db.query(
+          `UPDATE payment_intents SET status = 'FAILED', gateway_note = $2, updated_at = now() WHERE id = $1 AND status = 'PENDING'`,
+          [intent.id, message]
+        );
+      } else {
+        await noteIntent(db, txId, message);
+      }
+      console.error("[payteller/checkout] %s %s: %s", reference, error.declined ? "rejected" : "outcome uncertain", message);
+      res.status(502).json({
+        error: error.declined ? "gateway_error" : "payment_pending",
+        message: error.declined
+          ? message
+          : "Payteller did not confirm checkout creation. Check your deposit history before trying again.",
+        transaction_id: txId,
+        reference,
+      });
+    }
+  }
+
   router.get("/config", async (_req: Request, res: Response, next: NextFunction) => {
     res.setHeader("Cache-Control", "no-store");
     let on: boolean;
@@ -206,19 +278,18 @@ export function paymentsRouter(db: Pool): Router {
     }
     const sw = { paymentsOn: on, ...(on ? {} : { message: PAYMENTS_OFF_MESSAGE }), minDeposit: rules.min_deposit, maxDeposit: rules.max_deposit, rules };
     try {
-      const config = loadTellerConfig(process.env);
+      const config = loadPaytellerConfig(process.env);
       res.json({
         ...sw,
         enabled: true,
-        provider: "teller",
+        provider: "payteller",
         baseUrl: config.apiBaseUrl,
-        checkoutUrl: config.checkoutBaseUrl,
-        ...credentialHints(process.env),
+        merchantIdLooksValid: /^TTM-\d{8}$/.test(config.merchantId),
         commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? null,
       });
     } catch (error) {
-      if (error instanceof TellerConfigurationError) {
-        res.json({ ...sw, enabled: false, provider: "teller", reason: error.message });
+      if (error instanceof PaytellerConfigurationError) {
+        res.json({ ...sw, enabled: false, provider: "payteller", reason: error.message });
         return;
       }
       throw error;
@@ -283,7 +354,7 @@ export function paymentsRouter(db: Pool): Router {
     }
   });
 
-  /* Hosted checkout: the customer pays on TheTeller's page and comes back to wallet.html?transaction_id=… */
+  /* Payteller hosted checkout; payment is settled only after Payteller's authenticated status confirms it. */
   router.post("/teller/checkout", authenticate, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = requireUser(req);
@@ -305,55 +376,13 @@ export function paymentsRouter(db: Pool): Router {
         return reject(res, 409, "phone_not_confirmed", PHONE_NOT_CONFIRMED_MESSAGE, attempt);
       }
 
-      const config = loadTellerConfig(process.env);
-      const site = siteUrl();
-      // Only ever send the customer back to our own site; a client-supplied redirect is ignored.
-      const redirectUrl = `${site}/wallet.html`;
-
-      const intent = await openIntent(user.id, amt, idempotency_key.trim(), redirectUrl, res, attempt);
-      if (!intent) return;
-      if (intent.transactionId && intent.checkoutUrl) {
-        res.json({ checkout_url: intent.checkoutUrl, transaction_id: intent.transactionId, reference: depositReference(intent.transactionId),
-          status: clientStatus(intent.status) });
-        return;
-      }
-      /* a duplicate of a request already sent: never a second call to TheTeller */
-      if (intent.transactionId || intent.status !== "PENDING") {
-        return reject(res, 409, "already_processed", "This payment was already started. Please try again.", attempt);
-      }
-
-      // Saved before TheTeller is called, so a crash can never lose track of a payment.
-      const txId = await claimTxId(intent.id, null);
-      if (!txId) {
-        return reject(res, 409, "already_processed", "This payment was already started. Please try again.", attempt);
-      }
-      console.log("[teller/checkout] user=%s amount=%s tx=%s", user.id, amt, txId);
-
-      try {
-        const { checkoutUrl } = await initiateTellerCheckout(config, {
-          transactionId: txId,
-          amountMajor: amt,
-          redirectUrl,
-          email: checkoutEmail(user.accountId, new URL(site).hostname),
-          desc: depositReference(txId),
-        });
-        await db.query(`UPDATE payment_intents SET checkout_url = $1, updated_at = now() WHERE id = $2`, [checkoutUrl, intent.id]);
-        res.status(201).json({ checkout_url: checkoutUrl, transaction_id: txId, reference: depositReference(txId), status: "pending" });
-      } catch (err) {
-        // No checkout page was handed out, so no money can have moved.
-        await db.query(
-          `UPDATE payment_intents SET status = 'FAILED', gateway_note = $2, updated_at = now() WHERE id = $1 AND status = 'PENDING'`,
-          [intent.id, (err as Error).message || null]
-        );
-        console.error("[teller/checkout] %s failed: %s", txId, (err as Error).message);
-        res.status(502).json({ error: "gateway_error", message: (err as Error).message || "The payment provider refused the request" });
-      }
+      await startPaytellerCheckout(user.id, user.accountId, amt, idempotency_key.trim(), res, attempt);
     } catch (error) {
       next(error);
     }
   });
 
-  /* Direct mobile money: TheTeller pushes a PIN prompt to the phone. We answer at once and settle in the background. */
+  /* Legacy route for the deposit page. Payteller handles payment-method selection in hosted checkout. */
   router.post("/teller/momo", authenticate, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = requireUser(req);
@@ -389,68 +418,21 @@ export function paymentsRouter(db: Pool): Router {
         if (!(e instanceof DepositGuardError)) throw e;
         return reject(res, e.status, e.code, e.message, attempt, e.extra);
       }
-      const subscriber = target.subscriber;
-      /* the page may name another network for a number that moved (ported); otherwise it's the number's own */
-      const chosenNetwork = (network ? network : target.network) as MomoNetwork;
       attempt.phone = target.local;
-      attempt.network = chosenNetwork;
-      const config = loadTellerConfig(process.env);
-      const intent = await openIntent(user.id, amt, idempotency_key.trim(), `${siteUrl()}/wallet.html`, res, attempt, chosenNetwork);
-      if (!intent) return;
-      if (intent.transactionId) {
-        res.json({ transaction_id: intent.transactionId, reference: depositReference(intent.transactionId), status: clientStatus(intent.status) });
-        return;
-      }
-
-      /* the number paying is always the registered one */
-      const txId = await claimTxId(intent.id, "0" + subscriber.slice(3));
-      if (!txId) {
-        const now = (await db.query<{ transaction_id: string; status: string }>(
-          `SELECT transaction_id, status FROM payment_intents WHERE id = $1`, [intent.id])).rows[0]!;
-        res.json({ transaction_id: now.transaction_id, reference: depositReference(now.transaction_id), status: clientStatus(now.status) });
-        return;
-      }
-      console.log("[teller/momo] user=%s amount=%s network=%s tx=%s", user.id, amt, chosenNetwork, txId);
-
-      momoWaiting.add(txId);
-      requestMomoPayment(config, {
-        transactionId: txId,
-        amountMajor: amt,
-        subscriberNumber: subscriber,
-        network: chosenNetwork,
-        desc: depositReference(txId),
-      })
-        .then(async (data) => {
-          await settleIntent(db, txId, "approved", paidPesewas(data.amount));
-        })
-        .catch(async (err: unknown) => {
-          const message = (err as Error).message || "";
-          if (err instanceof TellerRequestError && err.declined) {
-            await settleIntent(db, txId, "declined", null, message);
-            return;
-          }
-          console.error("[teller/momo] %s left pending: %s", txId, message); // a status check decides later
-          await noteIntent(db, txId, message);
-        })
-        .catch(async (err: unknown) => {
-          console.error("[teller/momo] %s settle failed", txId, err);
-          await noteIntent(db, txId, `Could not credit: ${(err as Error).message}`).catch(() => undefined);
-        })
-        .finally(() => momoWaiting.delete(txId));
-
-      res.status(202).json({ transaction_id: txId, reference: depositReference(txId), status: "pending" });
+      attempt.network = network ?? target.network;
+      await startPaytellerCheckout(user.id, user.accountId, amt, idempotency_key.trim(), res, attempt);
     } catch (error) {
       next(error);
     }
   });
 
-  /* The browser polls this. Only the owner can see a transaction; TheTeller is asked while it's undecided. */
+  /* The browser polls this. Only the owner can see a transaction; its original provider is checked until it settles. */
   router.get("/teller/status/:id", authenticate, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = requireUser(req);
       const txId = String(req.params.id ?? "");
-      const { rows } = await db.query<{ user_id: string; status: string; updated_at: Date }>(
-        `SELECT user_id, status, updated_at FROM payment_intents WHERE transaction_id = $1`,
+      const { rows } = await db.query<{ user_id: string; status: string; updated_at: Date; gateway: "teller" | "payteller" }>(
+        `SELECT user_id, status, updated_at, gateway FROM payment_intents WHERE transaction_id = $1`,
         [txId]
       );
       const local = rows[0];
@@ -471,24 +453,34 @@ export function paymentsRouter(db: Pool): Router {
       };
       if (local.status === "CONFIRMED" || local.status === "REVERSED") return await answer(clientStatus(local.status));
       if (momoWaiting.has(txId)) return await answer("pending");
-      // A recent failure is rechecked once more, in case TheTeller approved it late.
+      // A recent failure is rechecked once more in case the provider reported a late approval.
       const recentFailure = local.status === "FAILED" && Date.now() - new Date(local.updated_at).getTime() < 6 * 3600 * 1000;
       if (local.status !== "PENDING" && !recentFailure) return await answer(clientStatus(local.status));
 
       try {
-        const config = loadTellerConfig(process.env);
-        const remote = await checkTellerStatus(config, txId);
-        const v = verdict(remote);
-        const reason = reasonText(remote.reason ?? remote.description);
+        let v: "approved" | "declined" | null;
+        let amount: number | null;
+        let reason: string;
+        if (local.gateway === "payteller") {
+          const remote = await checkPaytellerPayment(loadPaytellerConfig(process.env), depositReference(txId));
+          v = paytellerVerdict(remote.status);
+          amount = paytellerPaidPesewas(remote.amount);
+          reason = typeof remote.error === "string" ? remote.error : "";
+        } else {
+          const remote = await checkTellerStatus(loadTellerConfig(process.env), txId);
+          v = verdict(remote);
+          amount = paidPesewas(remote.amount);
+          reason = reasonText(remote.reason ?? remote.description);
+        }
         if (v === "approved" && local.status === "FAILED") await reopenFailedIntent(db, txId);
         if (v && (local.status === "PENDING" || v === "approved")) {
-          await settleIntent(db, txId, v, paidPesewas(remote.amount), reason);
+          await settleIntent(db, txId, v, amount, reason);
         } else if (!v && local.status === "PENDING") {
           await noteIntent(db, txId, reason);
         }
       } catch (err) {
-        if (err instanceof TellerConfigurationError) throw err;
-        console.error("[teller/status] %s check failed: %s", txId, (err as Error).message); // never a decline
+        if (err instanceof TellerConfigurationError || err instanceof PaytellerConfigurationError) throw err;
+        console.error("[%s/status] %s check failed: %s", local.gateway, txId, (err as Error).message);
         await noteIntent(db, txId, `Check failed: ${(err as Error).message}`).catch(() => undefined);
       }
       const after = await db.query<{ status: string }>(`SELECT status FROM payment_intents WHERE transaction_id = $1`, [txId]);
@@ -535,32 +527,31 @@ export function paymentsRouter(db: Pool): Router {
   return router;
 }
 
-/** Every minute, asks TheTeller about deposits still pending from the last 6 hours, so a payment the player
- *  confirmed after leaving the deposit screen is credited within about a minute (late confirmations). */
+/** Every minute, asks each payment's original provider about pending deposits, including ones left after checkout. */
 export function startPendingRecheck(db: Pool): void {
   const run = async () => {
-    let config;
     try {
-      config = loadTellerConfig(process.env);
-    } catch {
-      return;
-    }
-    try {
-      const { rows } = await db.query<{ transaction_id: string }>(
-        `SELECT transaction_id FROM payment_intents
+      const { rows } = await db.query<{ transaction_id: string; gateway: "teller" | "payteller" }>(
+        `SELECT transaction_id, gateway FROM payment_intents
           WHERE status = 'PENDING' AND transaction_id IS NOT NULL
             AND created_at < now() - interval '45 seconds'
             AND created_at > now() - interval '6 hours'
           ORDER BY created_at LIMIT 50`
       );
-      for (const { transaction_id: txId } of rows) {
+      for (const { transaction_id: txId, gateway } of rows) {
         if (momoWaiting.has(txId)) continue;
         try {
-          const remote = await checkTellerStatus(config, txId);
-          const v = verdict(remote);
-          if (v) await settleIntent(db, txId, v, paidPesewas(remote.amount), reasonText(remote.reason ?? remote.description));
+          if (gateway === "payteller") {
+            const remote = await checkPaytellerPayment(loadPaytellerConfig(process.env), depositReference(txId));
+            const v = paytellerVerdict(remote.status);
+            if (v) await settleIntent(db, txId, v, paytellerPaidPesewas(remote.amount), remote.error);
+          } else {
+            const remote = await checkTellerStatus(loadTellerConfig(process.env), txId);
+            const v = verdict(remote);
+            if (v) await settleIntent(db, txId, v, paidPesewas(remote.amount), reasonText(remote.reason ?? remote.description));
+          }
         } catch (err) {
-          console.error("[teller/recheck] %s: %s", txId, (err as Error).message);
+          console.error("[%s/recheck] %s: %s", gateway, txId, (err as Error).message);
           await noteIntent(db, txId, `Check failed: ${(err as Error).message}`).catch(() => undefined);
         }
       }
