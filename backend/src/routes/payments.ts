@@ -531,24 +531,41 @@ export function paymentsRouter(db: Pool): Router {
 export function startPendingRecheck(db: Pool): void {
   const run = async () => {
     try {
-      const { rows } = await db.query<{ transaction_id: string; gateway: "teller" | "payteller" }>(
-        `SELECT transaction_id, gateway FROM payment_intents
-          WHERE status = 'PENDING' AND transaction_id IS NOT NULL
-            AND created_at < now() - interval '45 seconds'
-            AND created_at > now() - interval '6 hours'
+      const { rows } = await db.query<{ transaction_id: string; gateway: "teller" | "payteller"; status: "PENDING" | "FAILED" }>(
+        `SELECT transaction_id, gateway, status FROM payment_intents
+          WHERE transaction_id IS NOT NULL
+            AND (status = 'PENDING' OR (status = 'FAILED' AND updated_at > now() - interval '6 hours'))
+            AND created_at < now() - interval '20 seconds'
+            AND created_at > now() - interval '24 hours'
           ORDER BY created_at LIMIT 50`
       );
-      for (const { transaction_id: txId, gateway } of rows) {
+      for (const { transaction_id: txId, gateway, status } of rows) {
         if (momoWaiting.has(txId)) continue;
         try {
           if (gateway === "payteller") {
             const remote = await checkPaytellerPayment(loadPaytellerConfig(process.env), depositReference(txId));
             const v = paytellerVerdict(remote.status);
-            if (v) await settleIntent(db, txId, v, paytellerPaidPesewas(remote.amount), remote.error);
+            const note = typeof remote.error === "string" ? remote.error : "";
+            if (v === "approved") {
+              if (status === "FAILED") await reopenFailedIntent(db, txId);
+              await settleIntent(db, txId, "approved", paytellerPaidPesewas(remote.amount), note);
+            } else if (v === "declined" && status === "PENDING") {
+              await settleIntent(db, txId, "declined", paytellerPaidPesewas(remote.amount), note);
+            } else if (!v && note) {
+              await noteIntent(db, txId, note);
+            }
           } else {
             const remote = await checkTellerStatus(loadTellerConfig(process.env), txId);
             const v = verdict(remote);
-            if (v) await settleIntent(db, txId, v, paidPesewas(remote.amount), reasonText(remote.reason ?? remote.description));
+            const note = reasonText(remote.reason ?? remote.description);
+            if (v === "approved") {
+              if (status === "FAILED") await reopenFailedIntent(db, txId);
+              await settleIntent(db, txId, "approved", paidPesewas(remote.amount), note);
+            } else if (v === "declined" && status === "PENDING") {
+              await settleIntent(db, txId, "declined", paidPesewas(remote.amount), note);
+            } else if (!v && note) {
+              await noteIntent(db, txId, note);
+            }
           }
         } catch (err) {
           console.error("[%s/recheck] %s: %s", gateway, txId, (err as Error).message);
