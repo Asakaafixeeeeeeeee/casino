@@ -79,6 +79,7 @@ test("Payteller creates a GHS checkout with documented auth headers and decimal 
       reference: "DES111100000001",
       customerEmail: "account-1@example.com",
       description: "Casino deposit DES111100000001",
+      returnUrl: "https://asakaa-casino.onrender.com/wallet.html",
     });
     assert.match(result.checkoutUrl, /^http:\/\/127\.0\.0\.1:\d+\/checkout\/private$/);
     assert.equal(api.requests[0]!.method, "POST");
@@ -92,6 +93,7 @@ test("Payteller creates a GHS checkout with documented auth headers and decimal 
       reference: "DES111100000001",
       customer_email: "account-1@example.com",
       description: "Casino deposit DES111100000001",
+      return_url: "https://asakaa-casino.onrender.com/wallet.html",
     });
   } finally {
     await api.close();
@@ -153,13 +155,14 @@ test("Deposit checkout and status route create and settle through Payteller", as
   );
   await acceptRules(db, userId);
 
-  const envNames = ["PAYTELLER_API_BASE_URL", "PAYTELLER_MERCHANT_ID", "PAYTELLER_USERNAME", "PAYTELLER_API_KEY"];
+  const envNames = ["PAYTELLER_API_BASE_URL", "PAYTELLER_MERCHANT_ID", "PAYTELLER_USERNAME", "PAYTELLER_API_KEY", "SITE_URL"];
   const oldEnv = new Map(envNames.map((name) => [name, process.env[name]]));
   for (const [name, value] of Object.entries({
     PAYTELLER_API_BASE_URL: "https://paytelller.test/api/v1",
     PAYTELLER_MERCHANT_ID: "TTM-00390313",
     PAYTELLER_USERNAME: "merchant-user",
     PAYTELLER_API_KEY: "private-key",
+    SITE_URL: "https://asakaa-casino.onrender.com",
   })) process.env[name] = value;
 
   const originalFetch = globalThis.fetch;
@@ -221,6 +224,10 @@ test("Deposit checkout and status route create and settle through Payteller", as
     const created = checkout.out.body as { transaction_id: string; checkout_url: string };
     assert.equal(created.checkout_url, "https://paytelller.test/checkout/private");
     assert.match(requests[0]!.url, /\/api\/v1\/payments$/);
+    assert.equal(
+      (JSON.parse(String(requests[0]!.init?.body)) as Record<string, unknown>).return_url,
+      "https://asakaa-casino.onrender.com/wallet.html",
+    );
     const pending = (await db.query<{ gateway: string; status: string }>(
       `SELECT gateway, status FROM payment_intents WHERE transaction_id = $1`, [created.transaction_id])).rows[0];
     assert.deepEqual(pending, { gateway: "payteller", status: "PENDING" });

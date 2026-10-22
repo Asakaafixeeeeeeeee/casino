@@ -232,6 +232,7 @@ export function paymentsRouter(db: Pool): Router {
         reference,
         customerEmail: checkoutEmail(accountId, new URL(site).hostname),
         description: `Casino deposit ${reference}`,
+        returnUrl: `${site}/wallet.html`,
       });
       await db.query(`UPDATE payment_intents SET checkout_url = $1, updated_at = now() WHERE id = $2`, [checkoutUrl, intent.id]);
       res.status(201).json({ checkout_url: checkoutUrl, transaction_id: txId, reference, status: "pending" });

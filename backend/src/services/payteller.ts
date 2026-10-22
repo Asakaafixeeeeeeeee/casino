@@ -126,7 +126,7 @@ export function paytellerAmount(amountMajor: number): string {
 
 export async function createPaytellerPayment(
   config: PaytellerConfig,
-  args: { amountMajor: number; reference: string; customerEmail: string; description: string },
+  args: { amountMajor: number; reference: string; customerEmail: string; description: string; returnUrl?: string },
 ): Promise<{ checkoutUrl: string; payment: PaytellerPayment }> {
   if (!/^[A-Za-z0-9_-]{3,100}$/.test(args.reference)) {
     throw new PaytellerRequestError("Payteller reference must contain 3-100 letters, digits, underscores or hyphens", true);
@@ -139,6 +139,7 @@ export async function createPaytellerPayment(
       reference: args.reference,
       customer_email: args.customerEmail,
       description: args.description,
+      ...(args.returnUrl ? { return_url: args.returnUrl } : {}),
     }),
   });
   if (status < 200 || status >= 300) {
