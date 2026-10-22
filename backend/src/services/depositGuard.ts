@@ -1,15 +1,11 @@
 /* Deposit safety checks that run on our side before any payment request is sent to TheTeller:
    the registered number (the only one that may pay, confirmed once), a valid Ghanaian mobile money number on a
-   supported network, and the 10-minute wait after a successful deposit. A gateway's real answer is never touched here. */
+   supported network. A gateway's real answer is never touched here. */
 import type { Pool, PoolClient } from "pg";
 import { canonicalTellerSubscriberNumber, networkForPhone, type MomoNetwork } from "./teller.js";
 
 type Queryable = Pick<Pool | PoolClient, "query">;
 
-export const DEPOSIT_WAIT_SECONDS = 600;
-export const COOLDOWN_TITLE = "DEPOSIT TEMPORARILY UNAVAILABLE";
-export const COOLDOWN_MESSAGE =
-  "For transaction security, a 10-minute waiting period applies between successful deposits. Please try again when the countdown expires.";
 export const PHONE_NOT_CONFIRMED_MESSAGE =
   "Please confirm your registered phone number before depositing. It will be used exclusively for all your deposits.";
 
@@ -23,21 +19,6 @@ export class DepositGuardError extends Error {
 export function localNumber(raw: unknown): string | null {
   const subscriber = canonicalTellerSubscriberNumber(raw);
   return subscriber ? "0" + subscriber.slice(3) : null;
-}
-
-/** Seconds left of the wait after this player's last successful deposit (0 when free to deposit). */
-export async function depositWaitSeconds(db: Queryable, userId: string): Promise<number> {
-  const { rows } = await db.query<{ left: string | number | null }>(
-    `SELECT ceil(extract(epoch FROM (max(coalesce(confirmed_at, updated_at)) + make_interval(secs => $2) - now()))) AS left
-       FROM payment_intents WHERE user_id = $1 AND status = 'CONFIRMED'`, [userId, DEPOSIT_WAIT_SECONDS]);
-  const left = Number(rows[0]?.left ?? 0);
-  return Number.isFinite(left) && left > 0 ? Math.min(left, DEPOSIT_WAIT_SECONDS) : 0;
-}
-
-export function waitError(seconds: number): DepositGuardError {
-  return new DepositGuardError(429, "deposit_cooldown", COOLDOWN_MESSAGE, {
-    title: COOLDOWN_TITLE, retry_after_seconds: seconds, available_at: new Date(Date.now() + seconds * 1000).toISOString(),
-  });
 }
 
 /** Whether this account has confirmed (or accepted at sign-up) its registered number, and which number is locked. */
@@ -69,13 +50,12 @@ export async function checkRegisteredNumber(db: Queryable, userId: string, sessi
 export async function depositState(db: Queryable, userId: string, sessionPhone: string) {
   const local = localNumber(sessionPhone);
   const locked = await lockedNumber(db, userId);
-  const seconds = await depositWaitSeconds(db, userId);
   return {
     phone: local ?? (sessionPhone || null),
     network: local ? networkForPhone(local) : null,
     confirmed: locked.confirmed,
-    retry_after_seconds: seconds,
-    available_at: seconds ? new Date(Date.now() + seconds * 1000).toISOString() : null,
+    retry_after_seconds: 0,
+    available_at: null,
   };
 }
 

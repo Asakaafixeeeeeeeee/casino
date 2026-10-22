@@ -1,4 +1,4 @@
-/* Deposit number lock and the 10-minute wait: every check runs on the server before TheTeller is contacted, and a
+/* Deposit number lock: every check runs on the server before the gateway is contacted, and a
    payment that passes them still goes to the gateway, whose answer is recorded as it comes. */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -6,7 +6,7 @@ import type { Response } from "express";
 import { acceptRules, clearMoneyRulesCache } from "../src/services/moneyRules.js";
 import { paymentsRouter } from "../src/routes/payments.js";
 import { settleIntent } from "../src/services/tellerSettlement.js";
-import { depositWaitSeconds, localNumber } from "../src/services/depositGuard.js";
+import { localNumber } from "../src/services/depositGuard.js";
 import { setupWalletDb } from "./helpers/walletDb.js";
 
 const PHONE = "0241234195";
@@ -22,7 +22,10 @@ async function call(router: unknown, method: "get" | "post", path: string, userI
 }
 let n = 0;
 const key = () => "deposit:lock-" + ++n + "-" + Date.now();
-const TELLER = { TELLER_MERCHANT_ID: "TTM-00000001", TELLER_API_USERNAME: "user", TELLER_API_KEY: "key", TELLER_MODE: "test" };
+const TELLER = {
+  TELLER_MERCHANT_ID: "TTM-00000001", TELLER_API_USERNAME: "user", TELLER_API_KEY: "key", TELLER_MODE: "test",
+  PAYTELLER_MERCHANT_ID: "TTM-00000001", PAYTELLER_USERNAME: "user", PAYTELLER_API_KEY: "key",
+};
 async function withTeller<T>(fn: () => Promise<T>): Promise<T> {
   const saved = { ...process.env };
   Object.assign(process.env, TELLER);
@@ -93,7 +96,7 @@ test("Only the registered number may pay; the network comes from it", async () =
   assert.equal(localNumber("0301234567"), null);
 });
 
-test("A successful deposit starts a 10-minute wait that holds across sessions; a request in it never reaches the gateway", async () => {
+test("A successful deposit does not impose a wait before the next checkout", async () => {
   clearMoneyRulesCache();
   const { db, userId } = await setupWalletDb();
   const router = paymentsRouter(db);
@@ -101,34 +104,42 @@ test("A successful deposit starts a 10-minute wait that holds across sessions; a
   await call(router, "post", "/confirm-phone", userId, {});
   await db.query(`INSERT INTO payment_intents (user_id, amount, currency, idempotency_key, status, transaction_id, redirect_url)
                   VALUES ($1, 150, 'GHS', 'deposit:first', 'PENDING', '000000000201', 'http://localhost/wallet.html')`, [userId]);
-  assert.equal(await depositWaitSeconds(db, userId), 0, "a payment still pending starts no wait");
   const settled = await settleIntent(db, "000000000201", "approved", 15000);
   assert.equal(settled!.status, "CONFIRMED");
 
-  const wait = await depositWaitSeconds(db, userId);
-  assert.ok(wait > 590 && wait <= 600, "about 10 minutes, counted from the confirmation: " + wait);
   const st = await call(router, "get", "/deposit-status", userId); /* a refresh, or a new login, asks the server */
-  assert.ok(Number(st.body!.retry_after_seconds) > 590);
-  assert.ok(st.body!.available_at);
+  assert.equal(st.body!.retry_after_seconds, 0);
+  assert.equal(st.body!.available_at, null);
 
-  await withTeller(async () => {
+  const saved = { ...process.env };
+  Object.assign(process.env, {
+    PAYTELLER_MERCHANT_ID: "TTM-00000001", PAYTELLER_USERNAME: "user",
+    PAYTELLER_API_KEY: "key", PAYTELLER_API_BASE_URL: "https://paytelller.test/api/v1",
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({
+      ...body, environment: "live", status: "pending",
+      checkout_url: "https://paytelller.test/checkout/test",
+    }), { status: 201 });
+  };
+  try {
     for (const send of [() => momo(router, userId), () => call(router, "post", "/teller/checkout", userId, { currency: "GHS", amount: 150, idempotency_key: key() })]) {
       const r = await send();
       assert.equal(r.failed, undefined);
-      assert.deepEqual([r.status, r.body!.error, r.body!.title], [429, "deposit_cooldown", "DEPOSIT TEMPORARILY UNAVAILABLE"]);
-      assert.match(String(r.body!.message), /10-minute waiting period/);
-      assert.ok(Number(r.body!.retry_after_seconds) > 590);
+      assert.equal(r.status, 201);
+      const txId = String(r.body!.transaction_id);
+      await settleIntent(db, txId, "approved", 15000);
     }
-  });
-  assert.equal((await db.query(`SELECT count(*)::int AS n FROM payment_intents`)).rows[0].n, 1, "no new payment was started");
-
-  /* ten minutes on, deposits are open again */
-  await db.query(`UPDATE payment_intents SET confirmed_at = now() - interval '601 seconds' WHERE transaction_id = '000000000201'`);
-  assert.equal(await depositWaitSeconds(db, userId), 0);
-  /* older deposits (no confirmed_at) fall back to their last update */
-  await db.query(`UPDATE payment_intents SET confirmed_at = NULL, updated_at = now() - interval '60 seconds' WHERE transaction_id = '000000000201'`);
-  const legacy = await depositWaitSeconds(db, userId);
-  assert.ok(legacy > 530 && legacy <= 540, String(legacy));
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const name of ["PAYTELLER_MERCHANT_ID", "PAYTELLER_USERNAME", "PAYTELLER_API_KEY", "PAYTELLER_API_BASE_URL"]) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  }
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM payment_intents`)).rows[0].n, 3);
 });
 
 test("Only one payment may wait for approval at a time, and failed or declined payments start no wait", async () => {
@@ -140,11 +151,9 @@ test("Only one payment may wait for approval at a time, and failed or declined p
   await db.query(`INSERT INTO payment_intents (user_id, amount, currency, idempotency_key, status, transaction_id, redirect_url)
                   VALUES ($1, 150, 'GHS', 'deposit:p1', 'PENDING', '000000000301', 'http://localhost/wallet.html'),
                          ($1, 150, 'GHS', 'deposit:p2', 'FAILED', '000000000302', 'http://localhost/wallet.html')`, [userId]);
-  assert.equal(await depositWaitSeconds(db, userId), 0);
   await withTeller(async () => {
     const r = await momo(router, userId);
     assert.deepEqual([r.status, r.body!.error], [429, "too_many_pending"]);
   });
   await settleIntent(db, "000000000301", "declined", null, "Declined by customer");
-  assert.equal(await depositWaitSeconds(db, userId), 0, "a declined payment isn't a successful deposit");
 });

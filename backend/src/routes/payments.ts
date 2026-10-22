@@ -35,8 +35,8 @@ import {
   acceptRules, amountText, fundsOf, getMoneyRules, hasAcceptedRules, MAX_DEPOSIT, MoneyRuleError, publicRules,
 } from "../services/moneyRules.js";
 import {
-  checkRegisteredNumber, confirmDepositPhone, DepositGuardError, depositState, depositWaitSeconds, localNumber, lockedNumber,
-  PHONE_NOT_CONFIRMED_MESSAGE, waitError,
+  checkRegisteredNumber, confirmDepositPhone, DepositGuardError, depositState, localNumber, lockedNumber,
+  PHONE_NOT_CONFIRMED_MESSAGE,
 } from "../services/depositGuard.js";
 
 /* the minimum deposit is the admin's live setting (Admin -> Betting & withdrawal settings; GHS 135 by default) */
@@ -128,7 +128,7 @@ export function paymentsRouter(db: Pool): Router {
   /* deposit limits and breaks are enforced here, whatever the page shows */
   /* A new deposit's checks and its intent, under one per-player lock: deposits started at once can no longer all pass
      a limit only one of them fits (each now sees the others). Only one payment may be waiting for approval at a time,
-     and none may start within 10 minutes of a successful deposit. A retried key returns its intent. */
+     while a retried key returns its intent. */
   const MAX_OPEN_PROMPTS = 1;
   async function openIntent(
     userId: string, amount: number, key: string, redirectUrl: string, res: Response, a: DepositAttempt,
@@ -140,13 +140,6 @@ export function paymentsRouter(db: Pool): Router {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["deposit:" + userId]);
       const replay = await client.query(`SELECT 1 FROM payment_intents WHERE idempotency_key = $1 AND user_id = $2`, [key, userId]);
       if (!replay.rowCount) {
-        const wait = await depositWaitSeconds(client, userId);
-        if (wait > 0) {
-          await client.query("ROLLBACK");
-          const e = waitError(wait);
-          await reject(res, e.status, e.code, e.message, a, e.extra);
-          return null;
-        }
         try {
           await checkDeposit(client, userId, amount);
         } catch (e) {

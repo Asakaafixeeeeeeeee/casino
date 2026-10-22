@@ -160,14 +160,8 @@
       amt > DEPOSIT_MAX ? "Maximum deposit is GHS " + DEPOSIT_MAX.toLocaleString() + "." : "";
     const newKey = () => "deposit:" + crypto.randomUUID() + ":" + Date.now();
 
-    /* ---------------- registered number lock and the 10-minute wait (the server enforces both) ---------------- */
-    const guard = { confirmed: null, phone: regLocal, waitUntil: 0, timer: 0, waitOpen: false };
-    const WAIT_TITLE = "DEPOSIT TEMPORARILY UNAVAILABLE";
-    const WAIT_TEXT = "For transaction security, a 10-minute waiting period applies between successful deposits.";
-    const WAIT_AFTER = "Please try again when the countdown expires.";
-    const remaining = () => Math.max(0, Math.ceil((guard.waitUntil - Date.now()) / 1000));
-    const clock = (s) => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
-    const waitBanner = $("depWait");
+    /* ---------------- registered number lock ---------------- */
+    const guard = { confirmed: null, phone: regLocal };
     let closeDialog = null;
 
     function openDialog(title, html, buttons, onClose) {
@@ -204,32 +198,6 @@
       return close;
     }
 
-    function tick() {
-      const s = remaining();
-      document.querySelectorAll("[data-dep-count]").forEach((el) => (el.textContent = clock(s)));
-      if (s > 0) return;
-      clearInterval(guard.timer);
-      guard.timer = 0;
-      if (waitBanner) waitBanner.hidden = true;
-      if (guard.waitOpen && closeDialog) closeDialog();
-    }
-    /* seconds left according to the server; a page refresh or a new login asks it again, so the countdown always matches */
-    function setWait(seconds) {
-      clearInterval(guard.timer);
-      guard.timer = 0;
-      guard.waitUntil = Date.now() + Math.max(0, Number(seconds) || 0) * 1000;
-      if (remaining() > 0) {
-        if (waitBanner) waitBanner.hidden = false;
-        guard.timer = setInterval(tick, 1000);
-      }
-      tick();
-    }
-    function showWait() {
-      guard.waitOpen = true;
-      openDialog(WAIT_TITLE, "<p>" + WAIT_TEXT + "</p><p>" + WAIT_AFTER + "</p><div class='dep-count' data-dep-count>" + clock(remaining()) + "</div>",
-        [{ label: "OK", primary: true, onClick: () => closeDialog() }], () => { guard.waitOpen = false; });
-      tick();
-    }
     function showConfirm() {
       const shown = guard.phone || regLocal;
       openDialog("CONFIRM YOUR REGISTERED PHONE NUMBER",
@@ -260,20 +228,17 @@
       if (!r.ok || !r.data) return;
       guard.confirmed = !!r.data.confirmed;
       if (r.data.phone) guard.phone = U.normalizePhone(r.data.phone);
-      setWait(r.data.retry_after_seconds);
       if (!guard.confirmed && !quiet) showConfirm();
     }
     /* true when a deposit may be sent now; otherwise the matching notice is shown */
     function guardOk() {
       if (guard.confirmed === false) { showConfirm(); return false; }
-      if (remaining() > 0) { showWait(); return false; }
       return true;
     }
-    /* the server's own refusal for the same two checks (another device, or a clock that drifted) */
+    /* The server also checks phone confirmation. */
     function guardRefusal(data) {
       if (!data) return false;
       if (data.error === "phone_not_confirmed") { guard.confirmed = false; showConfirm(); return true; }
-      if (data.error === "deposit_cooldown") { setWait(data.retry_after_seconds); showWait(); return true; }
       return false;
     }
     loadGuard();
