@@ -13,7 +13,7 @@ import {
 import { payWithdrawal, requestWithdrawal, withdrawalView, WithdrawalError } from "../src/services/withdrawals.js";
 import { paymentsRouter, RULES_NOT_ACCEPTED_MESSAGE } from "../src/routes/payments.js";
 import { adminRouter } from "../src/routes/admin.js";
-import { TellerConfigurationError } from "../src/services/teller.js";
+import { PaytellerConfigurationError } from "../src/services/payteller.js";
 import { setupWalletDb } from "./helpers/walletDb.js";
 import { ensureWalletAccount } from "../src/services/accountLink.js";
 
@@ -35,7 +35,7 @@ async function fresh(asMigrated = false) {
   const env = await setupWalletDb();
   await env.db.query("UPDATE users SET phone = $1 WHERE id = $2", [PHONE, env.userId]);
   if (!asMigrated) {
-    await env.db.query(`UPDATE money_rules SET bet_rule_enabled = false, bet_rule_enabled_at = NULL,
+    await env.db.query(`UPDATE money_rules SET min_deposit = 135, bet_rule_enabled = false, bet_rule_enabled_at = NULL,
       withdrawal_deposit_rule_enabled = false, rules_version = 1, updated_by = NULL WHERE id = 1`);
     await env.db.query("DELETE FROM money_rule_changes");
   }
@@ -82,10 +82,10 @@ async function call(router: unknown, method: string, path: string, userId: strin
 
 /* ---------------- settings ---------------- */
 
-test("As migrated: minimum deposit GHS 135, casino staking and withdrawal deposit rules on", async () => {
+test("As migrated: minimum deposit GHS 20, casino staking and withdrawal deposit rules on", async () => {
   const { db } = await fresh(true);
   const r = await getMoneyRules(db, true);
-  assert.equal(r.min_deposit, 135);
+  assert.equal(r.min_deposit, 20);
   assert.equal(r.bet_rule_enabled, true);
   assert.ok(r.bet_rule_enabled_at);
   assert.equal(r.withdraw_rule_enabled, false);
@@ -94,7 +94,7 @@ test("As migrated: minimum deposit GHS 135, casino staking and withdrawal deposi
   assert.equal(r.withdrawal_required_deposits, 3);
   assert.equal(r.withdrawal_deposit_message, DEFAULT_RULES.withdrawal_deposit_message);
   assert.equal(r.policy_deposit_withdrawal, DEFAULT_RULES.policy_deposit_withdrawal);
-  assert.equal(r.rules_version, 3, "everyone accepts the new conditions before their next deposit");
+  assert.equal(r.rules_version, 4, "everyone accepts the new conditions before their next deposit");
   for (const k of ["bet_rule_message", "withdraw_rule_message", "withdraw_info", "policy_heading", "policy_min_deposit", "policy_betting",
     "policy_funds", "policy_withdrawal", "policy_min_withdrawal", "policy_deposit_withdrawal", "policy_notice", "policy_accept"] as const) {
     assert.equal(r[k], DEFAULT_RULES[k], "the migration and the code agree on " + k);
@@ -104,12 +104,41 @@ test("As migrated: minimum deposit GHS 135, casino staking and withdrawal deposi
   assert.equal(items.heading, "BEFORE YOU PROCEED WITH YOUR DEPOSIT");
   assert.deepEqual(items.items.map((i) => i.label), ["Minimum Deposit", "Betting Eligibility", "Your Funds",
     "Withdrawal Deposit Requirement", "Withdrawal Processing", "Minimum Withdrawal", "Important Notice"]);
-  assert.equal(items.items[0]!.text, "The minimum permissible deposit is GHS 135.00 per transaction, subject to a maximum of GHS 50,000.00.");
+  assert.equal(items.items[0]!.text, "The minimum permissible deposit is GHS 20.00 per transaction, subject to a maximum of GHS 50,000.00.");
   assert.match(items.items[3]!.text, /complete 3 qualifying deposits in total/);
   assert.equal(items.items[5]!.text, "GHS 20.00.");
   assert.ok(!/admin/i.test(JSON.stringify(items)), "no reference to administrators on the customer page");
   assert.equal(items.accept, "I Accept Terms & Conditions");
-  assert.equal((await moneyRulesHistory(db)).changes.length, 2, "both migration changes are in the history");
+  assert.equal((await moneyRulesHistory(db)).changes.length, 3, "all migration changes are in the history");
+});
+
+test("Migrated payment routes reject below GHS 20 and allow GHS 20 through amount validation", async () => {
+  const env = await fresh(true);
+  const router = paymentsRouter(env.db);
+  const config = await call(router, "get", "/config", env.userId);
+  assert.equal(config.body!.minDeposit, 20);
+  for (const path of ["/teller/momo", "/teller/checkout"]) {
+    const low = await call(router, "post", path, env.userId, {
+      amount: 19.99, currency: "GHS", idempotency_key: "deposit:" + key(),
+      account_number: "233241234194", network: "MTN",
+    });
+    assert.equal(low.status, 400);
+    assert.match(String(low.body!.message), /GHS 20/);
+    const valid = await call(router, "post", path, env.userId, {
+      amount: 20, currency: "GHS", idempotency_key: "deposit:" + key(),
+      account_number: "233241234194", network: "MTN",
+    });
+    assert.equal(valid.status, 409);
+    assert.equal(valid.body!.error, "rules_not_accepted");
+  }
+  await acceptRules(env.db, env.userId, 4);
+  await env.db.query(`UPDATE users SET deposit_phone = '0241234194', deposit_phone_confirmed_at = now() WHERE id = $1`, [env.userId]);
+  const accepted = await call(router, "post", "/teller/checkout", env.userId, {
+    amount: 20, currency: "GHS", idempotency_key: "deposit:" + key(),
+  });
+  assert.ok(accepted.failed instanceof PaytellerConfigurationError, "GHS 20 reaches the gateway after accepting the rules");
+  await env.runMigration("052_minimum_deposit_20.sql");
+  assert.equal((await getMoneyRules(env.db, true)).rules_version, 4, "reapplying the migration changes nothing");
 });
 
 test("Settings are validated; a refused save changes nothing and leaves no history", async () => {
@@ -220,10 +249,10 @@ test("Deposits: below the live minimum is refused with it; at the minimum only a
   assert.equal(acc.body!.rules_version, 1);
   assert.equal((await call(router, "get", "/rules", env.userId)).body!.accepted, true);
 
-  /* accepted: the amount and acceptance checks pass (this test has no TheTeller account, so it stops there) */
+  /* Without gateway credentials, stop after the amount and acceptance checks. */
   await env.db.query(`UPDATE users SET deposit_phone = '0241234194', deposit_phone_confirmed_at = now() WHERE id = $1`, [env.userId]);
   const ok = await call(router, "post", "/teller/checkout", env.userId, { amount: 135, currency: "GHS", idempotency_key: "deposit:" + key() });
-  assert.ok(ok.failed instanceof TellerConfigurationError, "past the minimum and the rules, on to TheTeller");
+  assert.ok(ok.failed instanceof PaytellerConfigurationError, "past the minimum and the rules, on to Payteller");
 
   /* a material change: accept again; a page still showing the old version is told the rules changed */
   await saveMoneyRules(env.db, ADMIN, { min_deposit: 200 });

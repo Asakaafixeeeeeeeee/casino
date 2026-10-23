@@ -311,7 +311,7 @@
   let rulesFetch = null;
   function minDepositNow() {
     const n = Number(read(MIN_DEP_KEY, 0));
-    return n > 0 ? n : 135;
+    return n > 0 ? n : 20;
   }
   const cedis = (n) => Number(n).toLocaleString("en-GH", { minimumFractionDigits: Number.isInteger(Number(n)) ? 0 : 2, maximumFractionDigits: 2 });
   function moneyRules() {

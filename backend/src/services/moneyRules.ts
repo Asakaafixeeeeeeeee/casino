@@ -2,7 +2,7 @@
 //
 // Admin -> "Betting & withdrawal settings": the site's minimum deposit and its betting and withdrawal rules.
 //
-//   - Minimum deposit: every deposit route and page uses this live value (GHS 135 by default).
+//   - Minimum deposit: every deposit route and page uses this live value (GHS 20 by default).
 //   - Betting sessions (switched on by migration 041): only session funds — deposited money not yet staked — can be
 //     staked (the ledger keeps the winnings part apart in user_balances.withdrawable, and stakes use deposited money
 //     first). Winnings can't be staked; they stay withdrawable. A new deposit adds session funds. It only refuses bets:
@@ -63,7 +63,7 @@ export class MoneyRuleError extends Error {
 }
 
 export const DEFAULT_RULES: MoneyRules = {
-  min_deposit: 135,
+  min_deposit: 20,
   bet_rule_enabled: true,
   bet_rule_days: 30,
   bet_rule_message: "Only deposited funds can be staked. Your session funds: GHS {session}. Your winnings of GHS {winnings} cannot be staked, but remain yours subject to the applicable withdrawal rules. A qualifying deposit (minimum GHS {min}) activates a new betting session.",
