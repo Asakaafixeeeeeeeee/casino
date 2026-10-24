@@ -38,6 +38,7 @@
   /* ---------------- provider switch (shared) ---------------- */
   /* TheTeller's r-switch codes for each network */
   const NETWORK_CODE = { mtn: "MTN", telecel: "VDF", airteltigo: "ATL" };
+  const RETRY_AMOUNT = "vb.deposit.amount.afterLogin";
 
   /* returns a getter for the chosen network; starts on the one that matches the registered number */
   function initProvider() {
@@ -159,6 +160,30 @@
       amt < DEPOSIT_MIN ? "Minimum deposit is GHS " + DEPOSIT_MIN.toFixed(2) + "." :
       amt > DEPOSIT_MAX ? "Maximum deposit is GHS " + DEPOSIT_MAX.toLocaleString() + "." : "";
     const newKey = () => "deposit:" + crypto.randomUUID() + ":" + Date.now();
+    function saveAmountForLogin(amt) {
+      try { sessionStorage.setItem(RETRY_AMOUNT, JSON.stringify({ amount: amt, savedAt: Date.now() })); } catch (e) { /* storage unavailable */ }
+      U.session.clear();
+      location.assign("register.html#login");
+    }
+    function restoreAmountAfterLogin() {
+      let saved;
+      try {
+        saved = JSON.parse(sessionStorage.getItem(RETRY_AMOUNT) || "null");
+        sessionStorage.removeItem(RETRY_AMOUNT);
+      } catch (e) { return; }
+      const amount = Number(saved && saved.amount);
+      const savedAt = Number(saved && saved.savedAt);
+      if (!saved || !Number.isFinite(savedAt) || Date.now() - savedAt < 0 ||
+          Date.now() - savedAt > 15 * 60 * 1000 ||
+          !Number.isFinite(amount) || amount < DEPOSIT_MIN || amount > DEPOSIT_MAX) return;
+      depAmount.value = String(amount);
+      showMsg("info", "Your deposit amount was saved. Review it and tap Top Up Now to continue.");
+    }
+    function expiredSession(result, amt) {
+      if (result.status !== 401) return false;
+      saveAmountForLogin(amt);
+      return true;
+    }
 
     /* ---------------- registered number lock ---------------- */
     const guard = { confirmed: null, phone: regLocal };
@@ -269,7 +294,7 @@
         showMsg("error", "The payment was not approved. No money was taken." + why);
         PayFX.fail({ reason: result && result.reason, onRetry: () => depAmount.focus() });
       } else {
-        showMsg("info", "Still waiting for confirmation. Your balance will update as soon as it's confirmed." + why);
+        showMsg("info", "Payment pending verification. Your balance will update as soon as the payment is confirmed." + why);
         PayFX.pending({});
       }
     }
@@ -340,6 +365,7 @@
       const result = await U.paymentApi("/api/payments/teller/checkout", {
         body: { amount: amt, currency: "GHS", idempotency_key: newKey() }
       });
+      if (expiredSession(result, amt)) return;
       if (isOff(result.data)) {
         btn.disabled = false;
         return paymentsUnavailable();
@@ -347,6 +373,13 @@
       if (guardRefusal(result.data)) {
         btn.disabled = false;
         msg.innerHTML = "";
+        return;
+      }
+      if (result.data.transaction_id && !result.data.checkout_url) {
+        showMsg("info", "Payment pending verification. We’re checking the transaction status; please check your deposit history before trying again.");
+        const outcome = await waitForPayment(result.data.transaction_id);
+        await reportResult(outcome, amt);
+        btn.disabled = false;
         return;
       }
       if (!result.ok || !result.data.checkout_url) {
@@ -359,6 +392,7 @@
 
     /* Payteller collects the selected payment method in its secure hosted checkout. */
     const depAmount = $("depAmount");
+    restoreAmountAfterLogin();
     let waiting = false;
     let paused = false; // on a self-imposed break: deposits are blocked by the server too
     let paymentsOff = false; // payments switched off by the admin, or the gateway isn't set up yet: the server refuses new payments too
@@ -428,6 +462,7 @@
           idempotency_key: newKey()
         }
       });
+      if (expiredSession(result, amt)) return;
       if (guardRefusal(result.data)) {
         waiting = false;
         sync();
@@ -444,19 +479,25 @@
         location.assign(result.data.checkout_url);
         return;
       }
-      if (!result.ok || !result.data.transaction_id) {
+      if (!result.data.transaction_id) {
         waiting = false;
         sync();
         const reason = result.data.message || result.data.error || "Try again in a moment.";
         showMsg("error", "Payment could not start. " + U.esc(reason));
-        PayFX.fail({ reason, onRetry: () => depAmount.focus() });
         return;
       }
       PayFX.waiting({
         amount: amt,
-        text: "Continue in Payteller’s secure checkout to complete your " + U.esc(net.name) + " payment.",
+        text: result.data.checkout_url
+          ? "Continue in Payteller’s secure checkout to complete your " + U.esc(net.name) + " payment."
+          : "Payment pending verification. We’re checking the transaction status; please check your deposit history before trying again.",
         onHide: () => showMsg("info", "Waiting for you to complete the payment in Payteller…")
       });
+      if (result.data.checkout_url) {
+        PayFX.close();
+        location.assign(result.data.checkout_url);
+        return;
+      }
       loadHistory(false);
       const outcome = await waitForPayment(result.data.transaction_id);
       await reportResult(outcome, amt);

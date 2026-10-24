@@ -81,7 +81,12 @@ export async function authenticate(
       headers: { Authorization: `Bearer ${match[1]}` },
     });
     if (!response.ok) {
-      next(Object.assign(new Error("Invalid or expired session"), { status: 401 }));
+      if (response.status === 401) {
+        next(Object.assign(new Error("Invalid or expired session"), { status: 401 }));
+        return;
+      }
+      console.error("[accounts/session/verify] returned HTTP %s", response.status);
+      next(Object.assign(new Error("Account service unavailable"), { status: 503 }));
       return;
     }
     const body = await response.json() as SessionVerifyResponse;
@@ -118,7 +123,8 @@ export async function authenticate(
       return;
     }
     next();
-  } catch {
+  } catch (error) {
+    console.error("[accounts/session/verify] request failed: %s", (error as Error).message);
     next(Object.assign(new Error("Account service unavailable"), { status: 503 }));
   }
 }
