@@ -460,7 +460,8 @@
           network: NETWORK_CODE[net.id],
           account_number: "233" + local.slice(1),
           idempotency_key: newKey()
-        }
+        },
+        timeout: 45000
       });
       if (expiredSession(result, amt)) return;
       if (guardRefusal(result.data)) {
@@ -482,8 +483,14 @@
       if (!result.data.transaction_id) {
         waiting = false;
         sync();
-        const reason = result.data.message || result.data.error || "Try again in a moment.";
+        PayFX.close();
+        const reason = result.status === 0
+          ? "We couldn't get an answer from the payment server. Check your deposit history before trying again."
+          : result.status === 503 && /account service/i.test(result.data.message || "")
+            ? "Our sign-in service is temporarily unavailable, so the payment was not started. Please try again shortly."
+            : result.data.message || result.data.error || "Try again in a moment.";
         showMsg("error", "Payment could not start. " + U.esc(reason));
+        loadHistory(false);
         return;
       }
       PayFX.waiting({
