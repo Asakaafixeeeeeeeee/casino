@@ -11,7 +11,7 @@ import {
   moneyRulesOverview, MoneyRuleError, playthroughOf, saveMoneyRules, withdrawalDepositProgress,
 } from "../src/services/moneyRules.js";
 import { payWithdrawal, requestWithdrawal, withdrawalView, WithdrawalError } from "../src/services/withdrawals.js";
-import { paymentsRouter, RULES_NOT_ACCEPTED_MESSAGE } from "../src/routes/payments.js";
+import { paymentsRouter } from "../src/routes/payments.js";
 import { adminRouter } from "../src/routes/admin.js";
 import { PaytellerConfigurationError } from "../src/services/payteller.js";
 import { setupWalletDb } from "./helpers/walletDb.js";
@@ -94,7 +94,7 @@ test("As migrated: minimum deposit GHS 20, casino staking and withdrawal deposit
   assert.equal(r.withdrawal_required_deposits, 3);
   assert.equal(r.withdrawal_deposit_message, DEFAULT_RULES.withdrawal_deposit_message);
   assert.equal(r.policy_deposit_withdrawal, DEFAULT_RULES.policy_deposit_withdrawal);
-  assert.equal(r.rules_version, 4, "everyone accepts the new conditions before their next deposit");
+  assert.equal(r.rules_version, 4, "the changed settings are versioned for historical acceptance records");
   for (const k of ["bet_rule_message", "withdraw_rule_message", "withdraw_info", "policy_heading", "policy_min_deposit", "policy_betting",
     "policy_funds", "policy_withdrawal", "policy_min_withdrawal", "policy_deposit_withdrawal", "policy_notice", "policy_accept"] as const) {
     assert.equal(r[k], DEFAULT_RULES[k], "the migration and the code agree on " + k);
@@ -128,9 +128,10 @@ test("Migration 053 restores GHS 20 when the saved minimum has drifted", async (
   assert.deepEqual(change?.changes.min_deposit, { before: 135, after: 20 });
 });
 
-test("Migrated payment routes reject below GHS 20 and allow GHS 20 through amount validation", async () => {
+test("Migrated payment routes reject below GHS 20 and allow GHS 20 without rule acceptance", async () => {
   const env = await fresh(true);
   const router = paymentsRouter(env.db);
+  await env.db.query(`UPDATE users SET deposit_phone = '0241234194', deposit_phone_confirmed_at = now() WHERE id = $1`, [env.userId]);
   const config = await call(router, "get", "/config", env.userId);
   assert.equal(config.body!.minDeposit, 20);
   for (const path of ["/teller/momo", "/teller/checkout"]) {
@@ -144,15 +145,8 @@ test("Migrated payment routes reject below GHS 20 and allow GHS 20 through amoun
       amount: 20, currency: "GHS", idempotency_key: "deposit:" + key(),
       account_number: "233241234194", network: "MTN",
     });
-    assert.equal(valid.status, 409);
-    assert.equal(valid.body!.error, "rules_not_accepted");
+    assert.ok(valid.failed instanceof PaytellerConfigurationError, `${path} passed validation and reached the gateway without ticking a box`);
   }
-  await acceptRules(env.db, env.userId, 4);
-  await env.db.query(`UPDATE users SET deposit_phone = '0241234194', deposit_phone_confirmed_at = now() WHERE id = $1`, [env.userId]);
-  const accepted = await call(router, "post", "/teller/checkout", env.userId, {
-    amount: 20, currency: "GHS", idempotency_key: "deposit:" + key(),
-  });
-  assert.ok(accepted.failed instanceof PaytellerConfigurationError, "GHS 20 reaches the gateway after accepting the rules");
   await env.runMigration("052_minimum_deposit_20.sql");
   assert.equal((await getMoneyRules(env.db, true)).rules_version, 4, "reapplying the migration changes nothing");
 });
@@ -224,7 +218,7 @@ test("Each save is audited (history + admin log); material changes bump the vers
   assert.deepEqual(details.changes.min_deposit, { before: 135, after: 150 });
   const o = await moneyRulesOverview(db);
   assert.equal(o.preview.bet_rule.message, "Deposit GHS 150.00 within 14 days to bet.", "players read the message with the values filled in");
-  /* the conditions players accept are material; the heading isn't */
+  /* policy text is material; the heading isn't */
   const v = (await getMoneyRules(db, true)).rules_version;
   assert.equal((await saveMoneyRules(db, ADMIN, { policy_heading: "BEFORE YOU DEPOSIT" })).settings.rules_version, v);
   assert.equal((await saveMoneyRules(db, ADMIN, { policy_betting: "New betting conditions." })).settings.rules_version, v + 1);
@@ -240,24 +234,23 @@ test("Only admins reach the settings: the routes sit behind the admin router's g
   }
 });
 
-/* ---------------- minimum deposit and acceptance ---------------- */
+/* ---------------- minimum deposit and unblocked deposits ---------------- */
 
-test("Deposits: below the live minimum is refused with it; at the minimum only after the rules are accepted", async () => {
+test("Deposits: below the live minimum is refused; valid deposits are not blocked by rule acceptance", async () => {
   const env = await fresh();
   const router = paymentsRouter(env.db);
+  await env.db.query(`UPDATE users SET deposit_phone = '0241234194', deposit_phone_confirmed_at = now() WHERE id = $1`, [env.userId]);
   for (const path of ["/teller/checkout", "/teller/momo"]) {
     const low = await call(router, "post", path, env.userId, { amount: 134, currency: "GHS", idempotency_key: "deposit:" + key(), account_number: "233241234194", network: "MTN" });
     assert.equal(low.status, 400, path);
     assert.equal(low.body!.error, "invalid_amount");
     assert.match(String(low.body!.message), /GHS 135/);
-    /* at the minimum, not accepted yet */
-    const notYet = await call(router, "post", path, env.userId, { amount: 135, currency: "GHS", idempotency_key: "deposit:" + key(), account_number: "233241234194", network: "MTN" });
-    assert.equal(notYet.status, 409, path);
-    assert.deepEqual(notYet.body, { error: "rules_not_accepted", message: RULES_NOT_ACCEPTED_MESSAGE, rules_version: 1 });
+    const valid = await call(router, "post", path, env.userId, { amount: 135, currency: "GHS", idempotency_key: "deposit:" + key(), account_number: "233241234194", network: "MTN" });
+    assert.ok(valid.failed instanceof PaytellerConfigurationError, `${path} reaches the gateway without prior acceptance`);
   }
   assert.equal((await env.db.query(`SELECT count(*)::int AS n FROM payment_intents`)).rows[0].n, 0, "nothing was started");
 
-  /* the rules box: not accepted, then accepted */
+  /* The legacy acceptance record remains readable, but does not gate deposits. */
   const before = await call(router, "get", "/rules", env.userId);
   assert.equal(before.body!.accepted, false);
   const acc = await call(router, "post", "/accept-rules", env.userId, { rules_version: 1, idempotency_key: "accept:" + key() });
@@ -265,17 +258,16 @@ test("Deposits: below the live minimum is refused with it; at the minimum only a
   assert.equal(acc.body!.rules_version, 1);
   assert.equal((await call(router, "get", "/rules", env.userId)).body!.accepted, true);
 
-  /* Without gateway credentials, stop after the amount and acceptance checks. */
+  /* Without gateway credentials, stop after the amount checks. */
   await env.db.query(`UPDATE users SET deposit_phone = '0241234194', deposit_phone_confirmed_at = now() WHERE id = $1`, [env.userId]);
   const ok = await call(router, "post", "/teller/checkout", env.userId, { amount: 135, currency: "GHS", idempotency_key: "deposit:" + key() });
-  assert.ok(ok.failed instanceof PaytellerConfigurationError, "past the minimum and the rules, on to Payteller");
+  assert.ok(ok.failed instanceof PaytellerConfigurationError, "past the minimum, on to Payteller without rule acceptance");
 
-  /* a material change: accept again; a page still showing the old version is told the rules changed */
+  /* A material change updates the minimum, but does not add a new acceptance step. */
   await saveMoneyRules(env.db, ADMIN, { min_deposit: 200 });
   assert.equal(await hasAcceptedRules(env.db, env.userId), false);
   const again = await call(router, "post", "/teller/checkout", env.userId, { amount: 200, currency: "GHS", idempotency_key: "deposit:" + key() });
-  assert.equal(again.status, 409);
-  assert.equal(again.body!.rules_version, 2);
+  assert.ok(again.failed instanceof PaytellerConfigurationError, "a changed rule version does not block a valid deposit");
   const stale = await call(router, "post", "/accept-rules", env.userId, { rules_version: 1, idempotency_key: "accept:" + key() });
   assert.equal(stale.status, 409);
   assert.equal(stale.body!.error, "rules_changed");

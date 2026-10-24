@@ -1,7 +1,7 @@
 /* Money under pressure, through the real stack: double clicks, concurrent requests, bad inputs and refused payments.
    Whatever happens, a balance never goes negative, never changes without a matching record, and agrees with the UI. */
 import { expect, test } from "@playwright/test";
-import { acceptRulesOnPage, API, cents, deposit, fundedPlayer, gatewayRequests, play, register, serverBalance, settle } from "./helpers";
+import { API, cents, deposit, fundedPlayer, gatewayRequests, play, register, serverBalance, settle } from "./helpers";
 
 test("the same bet sent twice at once is one bet, and neither copy fails", async ({ page, request }) => {
   const { token } = await fundedPlayer(page);
@@ -62,8 +62,6 @@ test("a stale cached deposit minimum cannot override the GHS 20 page fallback", 
   await register(page);
   await page.evaluate(() => localStorage.setItem("vb.minDeposit", JSON.stringify(135)));
   await page.route("**/api/payments/config", (route) => route.fulfill({ status: 503, body: "{}" }));
-  await page.route("**/api/payments/rules", (route) => route.fulfill({ status: 503, body: "{}" }));
-
   await page.goto("/wallet.html");
   await settle(page);
   await page.locator("#depAmount").fill("20");
@@ -94,7 +92,6 @@ test("double-clicking Top Up sends one payment prompt", async ({ page, request }
   const { phone, token } = await register(page);
   await page.goto("/wallet.html");
   await settle(page);
-  await acceptRulesOnPage(page);
   await page.locator("#depAmount").fill("100");
   await page.locator("#depSubmit").dblclick();
   await expect(page.locator("#msg")).toContainText("successful", { timeout: 30_000 });

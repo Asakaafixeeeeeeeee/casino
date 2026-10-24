@@ -40,8 +40,6 @@ import {
 } from "../services/depositGuard.js";
 
 /* the minimum deposit is the admin's live setting (Admin -> Betting & withdrawal settings; GHS 20 by default) */
-export const RULES_NOT_ACCEPTED_MESSAGE =
-  "Before depositing, please read and accept the deposit, betting and withdrawal rules shown on the deposit page.";
 const NETWORKS: readonly MomoNetwork[] = ["MTN", "VDF", "ATL", "TGO"];
 
 // Momo prompts TheTeller hasn't answered yet; the status route reports these as pending without asking.
@@ -117,14 +115,6 @@ export function paymentsRouter(db: Pool): Router {
     }
     return amt;
   }
-  /* no deposit until the player has accepted the current deposit, betting and withdrawal rules */
-  async function refuseUntilAccepted(userId: string, res: Response, a: DepositAttempt): Promise<boolean> {
-    const rules = await getMoneyRules(db);
-    if (await hasAcceptedRules(db, userId, rules.rules_version)) return false;
-    await reject(res, 409, "rules_not_accepted", RULES_NOT_ACCEPTED_MESSAGE, a, { rules_version: rules.rules_version });
-    return true;
-  }
-
   /* deposit limits and breaks are enforced here, whatever the page shows */
   /* A new deposit's checks and its intent, under one per-player lock: deposits started at once can no longer all pass
      a limit only one of them fits (each now sees the others). Only one payment may be waiting for approval at a time,
@@ -365,7 +355,6 @@ export function paymentsRouter(db: Pool): Router {
       if (typeof idempotency_key !== "string" || !idempotency_key.trim() || idempotency_key.length > 120) {
         return reject(res, 400, "invalid_idempotency_key", "A 1-120 character idempotency_key is required", attempt);
       }
-      if (await refuseUntilAccepted(user.id, res, attempt)) return;
       if (!(await lockedNumber(db, user.id)).confirmed) {
         return reject(res, 409, "phone_not_confirmed", PHONE_NOT_CONFIRMED_MESSAGE, attempt);
       }
@@ -404,7 +393,6 @@ export function paymentsRouter(db: Pool): Router {
       if (network !== undefined && network !== null && network !== "" && !NETWORKS.includes(network as MomoNetwork)) {
         return reject(res, 400, "invalid_network", "Choose MTN, Telecel or AirtelTigo", attempt);
       }
-      if (await refuseUntilAccepted(user.id, res, attempt)) return;
       let target: Awaited<ReturnType<typeof checkRegisteredNumber>>;
       try {
         target = await checkRegisteredNumber(db, user.id, user.phone);

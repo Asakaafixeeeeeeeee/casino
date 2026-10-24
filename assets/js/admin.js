@@ -3264,7 +3264,7 @@
   /* ================= Betting & withdrawal settings ================= */
   /* The site's minimum deposit, the betting eligibility rule and the withdrawal play-through rule, with the wording
      players see; who each rule affects; and every change. Each save is confirmed, audited and kept in the history.
-     Neither rule ever deducts money; a material change asks players to accept the rules again before depositing. */
+     Neither rule ever deducts money; material changes apply to future activity without a deposit-page checkbox. */
   const mr = { data: null, affected: null, history: null, q: "", timer: 0, saving: false };
   const MR_LABEL = {
     min_deposit: "Minimum deposit", bet_rule_enabled: "Betting rule", bet_rule_days: "Betting rule window",
@@ -3277,16 +3277,15 @@
     policy_heading: "Deposit page heading", policy_min_deposit: "Minimum deposit text", policy_betting: "Betting eligibility text",
     policy_funds: "Your funds text", policy_withdrawal: "Withdrawal processing text", policy_min_withdrawal: "Minimum withdrawal text",
     policy_deposit_withdrawal: "Withdrawal deposit requirement terms",
-    policy_notice: "Important notice", policy_accept: "Acceptance checkbox text",
+    policy_notice: "Important notice",
   };
   const MR_POLICY = [["policy_heading", "Heading"], ["policy_min_deposit", "Minimum Deposit"], ["policy_betting", "Betting Eligibility"],
     ["policy_funds", "Your Funds"], ["policy_withdrawal", "Withdrawal Processing"], ["policy_min_withdrawal", "Minimum Withdrawal"],
-    ["policy_deposit_withdrawal", "Withdrawal deposit requirement"], ["policy_notice", "Important Notice"],
-    ["policy_accept", "Acceptance checkbox"]];
+    ["policy_deposit_withdrawal", "Withdrawal deposit requirement"], ["policy_notice", "Important Notice"]];
   const MR_TEXT = ["bet_rule_message", "withdraw_rule_message", "withdrawal_deposit_message", "withdraw_info"].concat(MR_POLICY.map((x) => x[0]));
   const MR_MATERIAL = ["min_deposit", "bet_rule_enabled", "bet_rule_days", "withdraw_rule_enabled", "withdraw_rule_multiple",
     "withdrawal_deposit_rule_enabled", "withdrawal_required_deposits", "policy_min_deposit", "policy_betting", "policy_funds",
-    "policy_withdrawal", "policy_min_withdrawal", "policy_deposit_withdrawal", "policy_accept"];
+    "policy_withdrawal", "policy_min_withdrawal", "policy_deposit_withdrawal"];
   const mrValue = (k, v) => {
     if (v === true) return "ON";
     if (v === false) return "OFF";
@@ -3347,9 +3346,9 @@
         mrField("mrWdDepositMsg", "Message shown when withdrawal is restricted", mrArea("mrWdDepositMsg", s.withdrawal_deposit_message), "Plain text, up to 1,000 characters. {min}, {required}, {completed} and {remaining} are filled in automatically.") +
         '<div class="adm-tp-notice mr-preview"><span>Players read</span><p>' + esc(p.withdrawal_deposit_rule.message) + "</p></div>" +
       "</section>" +
-      /* the deposit page's "Before you proceed" box: every line players read and accept */
-      '<section class="adm-card mr-card"><h3 class="adm-h">' + U.icon("shield") + "Deposit page conditions (what players accept)</h3>" +
-        '<p class="adm-note">Shown when a player starts a deposit and after any change. {min} and {max} become the minimum and maximum deposit. ' +
+      /* policy wording used by the legacy rules API and reflected in the terms page */
+      '<section class="adm-card mr-card"><h3 class="adm-h">' + U.icon("shield") + "Deposit policy wording</h3>" +
+        '<p class="adm-note">These settings describe the deposit, betting and withdrawal policy. {min} and {max} become the minimum and maximum deposit. ' +
           "Betting Eligibility and Your Funds only show while the new-deposit requirement is ON.</p>" +
         MR_POLICY.map(([k, label]) => mrField("mr_" + k, label, mrArea("mr_" + k, s[k]), "")).join("") +
       "</section>" +
@@ -3358,9 +3357,9 @@
         mrField("mrInfo", "Shown on the withdraw page, the deposit page's rules box and the terms", mrArea("mrInfo", s.withdraw_info), "Plain text, up to 1,000 characters.") +
       "</section>" +
       '<div class="mr-save"><button class="btn btn-primary btn-lg" type="submit"' + (mr.saving ? " disabled" : "") + ">Save settings</button>" +
-        '<p class="adm-note">Rules version <b>' + s.rules_version + "</b> · " + count(d.accepted_current) + " player(s) accepted it · " +
+        '<p class="adm-note">Rules version <b>' + s.rules_version + "</b> · " + count(d.accepted_current) + " historical acceptance(s) · " +
         (s.updated_by ? "last changed " + when(s.updated_at) + " by " + esc(s.updated_by) : "never changed (defaults)") +
-        ". Changing the minimum, a switch, the multiple or the conditions text asks players to accept again before their next deposit.</p></div>" +
+        ". Changes apply to deposit amounts, betting eligibility or withdrawal rules as configured.</p></div>" +
       "</form>" +
       '<section class="adm-card mr-card" id="mrAffected">' + loading + "</section>" +
       '<section class="adm-card mr-card" id="mrHistory">' + loading + "</section>";
@@ -3472,8 +3471,8 @@
     const ok = await ask({
       title: "Save these changes?",
       text: lines.join("<br>") + "<br><br>" + (material
-        ? "Players will be asked to accept the updated rules before their next deposit. "
-        : "Wording only: players are not asked to accept again. ") +
+        ? "These settings apply immediately to new deposits and future activity. "
+        : "Only the saved wording changes. ") +
         "No balance is ever deducted by these rules.",
       yes: "Save",
       danger: next.bet_rule_enabled && !cur.bet_rule_enabled,
@@ -3485,7 +3484,7 @@
     const r = await api("/money-rules", body);
     mr.saving = false;
     if (!r.ok) return flash("error", errText(r, "Couldn't save the settings."));
-    flash("ok", "Betting &amp; withdrawal settings saved" + (r.data.version_bumped ? " (rules version " + r.data.settings.rules_version + ": players accept again before depositing)." : "."));
+    flash("ok", "Betting &amp; withdrawal settings saved" + (r.data.version_bumped ? " (rules version " + r.data.settings.rules_version + ")." : "."));
     loadMoneyRules(false);
   }
 

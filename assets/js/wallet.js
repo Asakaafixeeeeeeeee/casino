@@ -243,100 +243,6 @@
     }
     loadGuard();
 
-    /* ---------------- "Before you deposit": the rules, accepted once per version ---------------- */
-    const rulesBox = $("depRules");
-    const rulesAccept = $("depRulesAccept");
-    const rulesErr = $("depRulesErr");
-    const rs = { rules: null, accepted: false, sending: false, funds: null, prompt: false };
-    const ruleItem = (label, text) => "<li><b>" + U.esc(label) + "</b> " + U.esc(text) + "</li>";
-    function rulesHtml(r) {
-      const items = (r.policy ? r.policy.items : []).map((it) => ruleItem(it.label + ":", it.text));
-      if (r.withdraw_rule.enabled) {
-        items.push(ruleItem("Deposit Play-Through:", "money you deposit while this rule is on has to be staked " + r.withdraw_rule.multiple +
-          " time(s) before that deposited money can be withdrawn. Winnings are never held, and nothing is ever deducted from your balance."));
-      }
-      return items.join("");
-    }
-    /* the player's balance in its two parts, so they can see what can be staked and what can be withdrawn */
-    function fundsHtml(f, r) {
-      if (!f || !r.bet_rule.enabled) return "";
-      return '<div class="dep-funds"><div><span>Session funds <small>(can be staked)</small></span><b>GHS ' + fixed(f.session) + "</b></div>" +
-        '<div><span>Winnings <small>(withdrawable, can\u2019t be staked)</small></span><b>GHS ' + fixed(f.winnings) + "</b></div></div>";
-    }
-    function renderRules() {
-      const r = rs.rules;
-      if (!r || !rulesBox) return;
-      $("depRulesList").innerHTML = rulesHtml(r);
-      if (r.policy) {
-        $("depRulesHeading").textContent = r.policy.heading;
-        $("depRulesAcceptText").textContent = r.policy.accept;
-      }
-      $("depFunds").innerHTML = fundsHtml(rs.funds, r);
-      rulesAccept.checked = rs.accepted;
-      rulesAccept.disabled = rs.sending;
-      rulesBox.hidden = !rs.prompt;
-      rulesBox.classList.toggle("accepted", rs.accepted);
-    }
-    function rulesError(text) {
-      if (!rulesErr) return;
-      rulesErr.textContent = text || "";
-      rulesErr.hidden = !text;
-    }
-    async function loadRules() {
-      const r = await U.paymentApi("/api/payments/rules");
-      if (!r.ok || !r.data || !r.data.rules) return;
-      rs.rules = r.data.rules;
-      rs.accepted = !!r.data.accepted;
-      rs.funds = r.data.funds || null;
-      applyMinimum(rs.rules);
-      renderRules();
-    }
-    /* asks the player to tick the box first (the server refuses a deposit until the current rules are accepted) */
-    function needAcceptance(text) {
-      if (!rs.rules) loadRules(); /* the rules didn't arrive earlier: ask again */
-      rs.accepted = false;
-      rs.prompt = true;
-      renderRules();
-      rulesError(text || "Please read the rules above and tick the box to accept them before depositing.");
-      if (rulesBox) {
-        rulesBox.hidden = false;
-        rulesBox.scrollIntoView({ block: "center", behavior: "smooth" });
-        rulesAccept.focus({ preventScroll: true });
-      }
-      return false;
-    }
-    const rulesOk = () => (rs.accepted ? true : needAcceptance());
-    if (rulesAccept) {
-      rulesAccept.addEventListener("change", async () => {
-        if (!rulesAccept.checked || !rs.rules) { rulesAccept.checked = rs.accepted; return; }
-        rs.sending = true;
-        rulesError("");
-        renderRules();
-        rulesAccept.checked = true;
-        const r = await U.paymentApi("/api/payments/accept-rules", {
-          body: { rules_version: rs.rules.rules_version, idempotency_key: "accept-rules:" + crypto.randomUUID() }
-        });
-        rs.sending = false;
-        if (r.data && r.data.rules) rs.rules = r.data.rules;
-        if (!r.ok) {
-          rs.accepted = false;
-          applyMinimum(rs.rules);
-          renderRules();
-          rulesError((r.data && r.data.message) || "Couldn't save your acceptance. Try again in a moment.");
-          return;
-        }
-        rs.accepted = true;
-        rs.prompt = false;
-        applyMinimum(rs.rules);
-        renderRules();
-        U.toast("Rules accepted", "ok");
-      });
-    }
-    loadRules();
-    /* the balance changed (a deposit landed, a bet, a withdrawal): show the session funds and winnings as they are now */
-    let fundsTimer = 0;
-    document.addEventListener("vb:balance", () => { clearTimeout(fundsTimer); fundsTimer = setTimeout(loadRules, 400); });
-
     /* asks our server every 4 s for up to 4 minutes; leaving the page doesn't cancel the payment */
     async function waitForPayment(txId) {
       let last = { status: "pending", reason: null };
@@ -429,7 +335,6 @@
       if (paused) return showPaused();
       if (paymentsOff) return paymentsUnavailable();
       if (!guardOk()) return;
-      if (!rulesOk()) return;
       btn.disabled = true;
       showMsg("info", "Starting secure payment…");
       const result = await U.paymentApi("/api/payments/teller/checkout", {
@@ -442,12 +347,6 @@
       if (guardRefusal(result.data)) {
         btn.disabled = false;
         msg.innerHTML = "";
-        return;
-      }
-      if (result.data && result.data.error === "rules_not_accepted") {
-        btn.disabled = false;
-        msg.innerHTML = "";
-        loadRules().then(() => needAcceptance(result.data.message));
         return;
       }
       if (!result.ok || !result.data.checkout_url) {
@@ -515,7 +414,6 @@
         return;
       }
       if (!guardOk()) return;
-      if (!rulesOk()) return;
 
       waiting = true;
       sync();
@@ -540,13 +438,6 @@
         waiting = false;
         PayFX.close();
         return paymentsUnavailable();
-      }
-      if (result.data && result.data.error === "rules_not_accepted") {
-        waiting = false;
-        sync();
-        PayFX.close();
-        loadRules().then(() => needAcceptance(result.data.message));
-        return;
       }
       if (result.ok && result.data.checkout_url) {
         PayFX.close();

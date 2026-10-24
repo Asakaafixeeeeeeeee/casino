@@ -1,6 +1,5 @@
 /* Admin -> Betting & withdrawal settings, end to end: the admin raises the minimum deposit to GHS 135 and switches the
-   betting rule ON (confirmed, saved, in the history); a player's deposit page shows "Before you deposit" with the live
-   minimum and the rule, refuses to deposit until the rules are accepted, then collapses to a summary and deposits;
+   betting rule ON (confirmed, saved, in the history); a player deposits without an extra acceptance checkbox;
    a player whose money came from an admin credit (no deposit) is refused a bet with the admin's message, sees it in
    the game, keeps their balance, and is listed under "Affected players". The stack's settings are put back after. */
 import { expect, test } from "@playwright/test";
@@ -9,7 +8,7 @@ import { adminSession, adminTab, API, register, serverBalance, settle, trackErro
 const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 const SHOTS = process.env.E2E_SHOTS;
 
-test("betting & withdrawal settings: admin page, deposit disclosure and acceptance, betting rule", async ({ browser, request }) => {
+test("betting & withdrawal settings: admin page, simple deposit flow, betting rule", async ({ browser, request }) => {
   test.setTimeout(300_000);
   const adminToken = await adminSession(request);
   const before = (await (await request.get(`${API}/api/admin/money-rules`, { headers: auth(adminToken) })).json()).settings;
@@ -38,7 +37,7 @@ test("betting & withdrawal settings: admin page, deposit disclosure and acceptan
     const dialog = a.locator(".me-dialog");
     await expect(dialog).toContainText("Minimum deposit");
     await expect(dialog).toContainText("Betting rule");
-    await expect(dialog).toContainText("accept the updated rules");
+    await expect(dialog).toContainText("apply immediately");
     await dialog.locator("[data-yes]").click();
     await expect(a.locator("#msg")).toContainText("settings saved");
     await expect(panel).toContainText("New-deposit betting requirement");
@@ -51,50 +50,23 @@ test("betting & withdrawal settings: admin page, deposit disclosure and acceptan
     const saved = (await (await request.get(`${API}/api/admin/money-rules`, { headers: auth(adminToken) })).json()).settings;
     expect([saved.min_deposit, saved.bet_rule_enabled]).toEqual([135, true]);
 
-    /* 2. the deposit page: the box with the live minimum and the rule; no deposit until accepted */
+    /* 2. the deposit page has no extra acceptance step; the full terms remain linked. */
     await p.goto("/wallet.html");
     await settle(p);
-    const box = p.locator("#depRules");
-    await expect(box).toBeVisible();
-    await expect(box).toContainText("BEFORE YOU PROCEED WITH YOUR DEPOSIT");
-    await expect(box).toContainText("The minimum permissible deposit is GHS 135.00 per transaction, subject to a maximum of GHS 50,000.00.");
-    await expect(box).toContainText("A qualifying deposit is required to activate a new betting session.");
-    await expect(box).toContainText("Payments Team");
-    await expect(box).toContainText("Minimum Withdrawal: GHS 20.00.");
-    await expect(box).not.toContainText("whole balance");
-    await expect(box).not.toContainText(/admin/i);
-    await expect(box).toContainText("I acknowledge that I have carefully reviewed, understood and accepted the applicable deposit, betting and withdrawal conditions.");
-    await expect(p.locator("#depFunds")).toContainText("Session funds");
+    await expect(p.locator("#depRulesAccept")).toHaveCount(0);
+    await expect(p.locator('.pay-note-extra a[href="terms.html#money-rules"]')).toBeVisible();
     await expect(p.locator(".pay-min").first()).toContainText("135.00");
     await expect(p.locator("#depAmount")).toHaveAttribute("min", "135");
-    if (SHOTS) await p.screenshot({ path: `${SHOTS}/wallet-rules-box.png`, fullPage: true });
     await p.locator("#depAmount").fill("100");
     await expect(p.locator("#depSubmit")).toBeDisabled();
     await p.locator("#depAmount").fill("135");
     await p.locator("#depSubmit").click();
-    await expect(p.locator("#depRulesErr")).toContainText("tick the box");
-    /* the server refuses it too */
-    const refused = await request.post(`${API}/api/payments/teller/momo`, { headers: auth(player.token),
-      data: { amount: 135, currency: "GHS", network: "MTN", account_number: "233" + player.phone.slice(1), idempotency_key: "deposit:e2e-rules-" + Date.now() } });
-    expect(refused.status()).toBe(409);
-    expect((await refused.json()).error).toBe("rules_not_accepted");
-    await p.locator("#depRulesAccept").check();
-    await expect(p.locator("#depRulesSummary")).toBeVisible();
-    await expect(p.locator("#depRulesSummary")).toContainText("Conditions accepted");
-    await expect(box).toBeHidden();
-    if (SHOTS) await p.screenshot({ path: `${SHOTS}/wallet-rules-accepted.png` });
-    await p.locator("#depSubmit").click();
     await expect(p.locator("#msg")).toContainText("successful", { timeout: 30_000 });
     expect(await serverBalance(request, player.token)).toBe(135);
     /* a qualifying deposit: this player may stake it */
-    await expect(p.locator("#depFunds")).toContainText("135.00");
     const ok = await request.post(`${API}/api/games/volta-coin/play`, { headers: auth(player.token),
       data: { stake: 2, choice: { pick: "HEADS" }, idempotency_key: "round:e2e-rules-ok-" + Date.now() } });
     expect(ok.status()).toBe(200);
-    /* the box stays collapsed on the next visit */
-    await p.reload();
-    await settle(p);
-    await expect(p.locator("#depRulesSummary")).toBeVisible();
 
     /* 3. a player left with only winnings: winnings can't be staked (message, balance untouched), and stay theirs */
     const c = await (await browser.newContext()).newPage();

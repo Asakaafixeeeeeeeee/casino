@@ -4,11 +4,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Response } from "express";
-import { acceptRules, clearMoneyRulesCache } from "../src/services/moneyRules.js";
+import { clearMoneyRulesCache } from "../src/services/moneyRules.js";
 import { setPaymentsEnabled } from "../src/services/paymentSettings.js";
 import { recentDeposits } from "../src/services/risk.js";
 import { paymentsRouter } from "../src/routes/payments.js";
-import { TellerConfigurationError } from "../src/services/teller.js";
+import { PaytellerConfigurationError } from "../src/services/payteller.js";
 import { setupWalletDb } from "./helpers/walletDb.js";
 
 const PHONE = "0241234195";
@@ -29,6 +29,8 @@ test("Invalid deposit requests are refused and recorded, and never reach TheTell
   clearMoneyRulesCache();
   const { db, userId } = await setupWalletDb();
   await db.query("UPDATE users SET phone = $1, full_name = 'Ama Mensah' WHERE id = $2", [PHONE, userId]);
+  await db.query("UPDATE money_rules SET min_deposit = 135 WHERE id = 1");
+  clearMoneyRulesCache();
   const router = paymentsRouter(db);
   const momo = (body: Record<string, unknown>) => call(router, "/teller/momo", userId, { currency: "GHS", network: "MTN", account_number: "233241234195", ...body });
   const card = (body: Record<string, unknown>) => call(router, "/teller/checkout", userId, { currency: "GHS", ...body });
@@ -41,9 +43,9 @@ test("Invalid deposit requests are refused and recorded, and never reach TheTell
     [() => momo({ amount: 150 }), 400, "invalid_idempotency_key"],
     [() => momo({ amount: 150, idempotency_key: key(), account_number: "12345" }), 400, "invalid_account"],
     [() => momo({ amount: 150, idempotency_key: key(), network: "XYZ" }), 400, "invalid_network"],
-    [() => momo({ amount: 150, idempotency_key: key() }), 409, "rules_not_accepted"],
+    [() => momo({ amount: 150, idempotency_key: key() }), 409, "phone_not_confirmed"],
     [() => card({ amount: 10, idempotency_key: key() }), 400, "invalid_amount"],
-    [() => card({ amount: 150, idempotency_key: key() }), 409, "rules_not_accepted"],
+    [() => card({ amount: 150, idempotency_key: key() }), 409, "phone_not_confirmed"],
     [() => momo({ amount: 150.005, idempotency_key: key() }), 400, "invalid_amount"],
     [() => momo({ amount: true, idempotency_key: key() }), 400, "invalid_amount"],
     [() => momo({ amount: [150], idempotency_key: key() }), 400, "invalid_amount"],
@@ -97,20 +99,19 @@ test("A valid request goes on to TheTeller; a duplicate of one already sent is r
   clearMoneyRulesCache();
   const { db, userId } = await setupWalletDb();
   const router = paymentsRouter(db);
-  await acceptRules(db, userId);
   await db.query(`UPDATE users SET deposit_phone = $2, deposit_phone_confirmed_at = now() WHERE id = $1`, [userId, PHONE]);
   /* valid: it passes every check and goes to TheTeller (not configured in tests, so it stops right there) */
   const ok = await call(router, "/teller/checkout", userId, { amount: 150, currency: "GHS", idempotency_key: key() });
-  assert.ok(ok.failed instanceof TellerConfigurationError, "a valid request reaches the gateway step");
+  assert.ok(ok.failed instanceof PaytellerConfigurationError, "a valid request reaches the gateway step");
   assert.equal((await db.query(`SELECT count(*)::int AS n FROM deposit_rejections`)).rows[0].n, 0, "a valid request isn't recorded as refused");
 
-  /* a payment already sent to TheTeller under this key: the same key again is refused, not sent twice */
+  /* a payment already completed under this key: the same key again is refused, not sent twice */
   const env = { ...process.env };
-  Object.assign(process.env, { TELLER_MERCHANT_ID: "TTM-00000001", TELLER_API_USERNAME: "user", TELLER_API_KEY: "key", TELLER_MODE: "test" });
+  Object.assign(process.env, { PAYTELLER_MERCHANT_ID: "TTM-00000001", PAYTELLER_USERNAME: "user", PAYTELLER_API_KEY: "key" });
   try {
     const k = key();
-    await db.query(`INSERT INTO payment_intents (user_id, amount, currency, idempotency_key, status, transaction_id, redirect_url)
-                    VALUES ($1, 150, 'GHS', $2, 'PENDING', '000000000123', 'http://localhost/wallet.html')`, [userId, k]);
+    await db.query(`INSERT INTO payment_intents (user_id, amount, currency, idempotency_key, status, transaction_id, redirect_url, gateway)
+                    VALUES ($1, 150, 'GHS', $2, 'CONFIRMED', '000000000123', 'http://localhost/wallet.html', 'payteller')`, [userId, k]);
     const dup = await call(router, "/teller/checkout", userId, { amount: 150, currency: "GHS", idempotency_key: k });
     assert.equal(dup.failed, undefined);
     assert.equal(dup.status, 409);
@@ -118,7 +119,7 @@ test("A valid request goes on to TheTeller; a duplicate of one already sent is r
     assert.equal((await db.query(`SELECT reason_code FROM deposit_rejections`)).rows[0].reason_code, "already_processed");
     assert.equal((await db.query(`SELECT count(*)::int AS n FROM payment_intents`)).rows[0].n, 1, "no second payment was started");
   } finally {
-    for (const k of ["TELLER_MERCHANT_ID", "TELLER_API_USERNAME", "TELLER_API_KEY", "TELLER_MODE"]) {
+    for (const k of ["PAYTELLER_MERCHANT_ID", "PAYTELLER_USERNAME", "PAYTELLER_API_KEY"]) {
       if (env[k] === undefined) delete process.env[k]; else process.env[k] = env[k];
     }
   }
@@ -127,13 +128,12 @@ test("A valid request goes on to TheTeller; a duplicate of one already sent is r
 test("Gateway not set up: a valid Mobile Money deposit gets a plain 'unavailable' answer and nothing is started", async () => {
   clearMoneyRulesCache();
   const { db, userId } = await setupWalletDb();
-  await acceptRules(db, userId);
   await db.query(`UPDATE users SET phone = $2, deposit_phone = $2, deposit_phone_confirmed_at = now() WHERE id = $1`, [userId, PHONE]);
   const r = await call(paymentsRouter(db), "/teller/momo", userId,
     { amount: 150, currency: "GHS", network: "MTN", account_number: "233241234195", idempotency_key: key() });
-  assert.ok(r.failed instanceof TellerConfigurationError, "TheTeller credentials are missing in tests");
+  assert.ok(r.failed instanceof PaytellerConfigurationError, "Payteller credentials are missing in tests");
 
-  /* the app's error handler turns it into the notice the deposit page shows, without naming any server settings */
+  /* the app's error handler turns it into a plain notice without naming any server settings */
   const { createApp } = await import("../src/app.js");
   const app = createApp(db) as unknown as { _router: { stack: { handle: Function }[] } };
   const layers = app._router.stack;
@@ -146,7 +146,7 @@ test("Gateway not set up: a valid Mobile Money deposit gets a plain 'unavailable
   assert.equal(out.status, 503);
   assert.equal(out.body!.error, "payments_unavailable");
   assert.match(String(out.body!.message), /currently being configured/);
-  assert.doesNotMatch(String(out.body!.message), /TELLER_/);
+  assert.doesNotMatch(String(out.body!.message), /PAYTELLER_|TELLER_/);
 
   /* no payment, no money moved */
   assert.equal((await db.query(`SELECT count(*)::int AS n FROM payment_intents`)).rows[0].n, 0);
@@ -156,7 +156,6 @@ test("Gateway not set up: a valid Mobile Money deposit gets a plain 'unavailable
 test("The registered number stays enforced: a deposit from any other number is refused", async () => {
   clearMoneyRulesCache();
   const { db, userId } = await setupWalletDb();
-  await acceptRules(db, userId);
   await db.query(`UPDATE users SET phone = $2 WHERE id = $1`, [userId, PHONE]);
   const r = await call(paymentsRouter(db), "/teller/momo", userId,
     { amount: 150, currency: "GHS", network: "MTN", account_number: "233249999999", idempotency_key: key() });

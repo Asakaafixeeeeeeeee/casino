@@ -16,7 +16,7 @@
 //     recent paid withdrawal, so it is never retroactive, it resets after a withdrawal, and it can never hold
 //     winnings (the hold is capped by the deposited part of the balance). Nothing is ever deducted.
 //
-// Players accept the current rules (rules_version) before depositing; a material change bumps the version.
+// Material changes bump rules_version for audit/history; deposit creation does not require a separate acceptance.
 
 import type { Pool, PoolClient } from "pg";
 import { AdminError, logAction } from "./admin.js";
@@ -361,13 +361,13 @@ export async function playthroughOf(db: Db, userId: string, rules?: MoneyRules):
 export const playthroughMessage = (r: MoneyRules, p: Playthrough) =>
   fillMessage(r.withdraw_rule_message, { min: r.min_deposit, days: String(r.bet_rule_days), multiple: r.withdraw_rule_multiple, held: p.held, to_bet: p.to_bet });
 
-/* ---------------- acceptance before depositing ---------------- */
+/* ---------------- legacy rule-acceptance records ---------------- */
 export async function hasAcceptedRules(db: Db, userId: string, version?: number): Promise<boolean> {
   const v = version ?? (await getMoneyRules(db)).rules_version;
   return (await db.query(`SELECT 1 FROM money_rules_acceptance WHERE user_id = $1 AND rules_version = $2`, [userId, v])).rows.length > 0;
 }
 
-/** Records that a player accepted the current rules. A page showing an older version is told the rules changed. */
+/** Records a legacy rules acceptance. This record no longer gates deposits. */
 export async function acceptRules(db: Db, userId: string, shownVersion?: unknown): Promise<{ rules_version: number; accepted_at: string }> {
   const rules = await getMoneyRules(db, true);
   if (shownVersion !== undefined && shownVersion !== null && Number(shownVersion) !== rules.rules_version) {
@@ -388,7 +388,7 @@ const FIELDS = ["min_deposit", "bet_rule_enabled", "bet_rule_days", "bet_rule_me
   "withdraw_rule_multiple", "withdraw_rule_message", "withdrawal_deposit_rule_enabled", "withdrawal_required_deposits",
   "withdrawal_deposit_message", "withdraw_info", ...POLICY] as const;
 type Field = typeof FIELDS[number];
-/* a change to one of these is material: players accept the rules again (the policy wording is what they accept) */
+/* a change to one of these is material and bumps the auditable rules version */
 const MATERIAL: readonly Field[] = ["min_deposit", "bet_rule_enabled", "bet_rule_days", "withdraw_rule_enabled", "withdraw_rule_multiple",
   "withdrawal_deposit_rule_enabled", "withdrawal_required_deposits", "policy_min_deposit", "policy_betting", "policy_funds",
   "policy_withdrawal", "policy_min_withdrawal", "policy_deposit_withdrawal", "policy_accept"];
@@ -443,8 +443,8 @@ function readInput(cur: MoneyRules, input: Record<string, unknown>) {
   return next;
 }
 
-/** Saves an admin's changes in one transaction: the settings row, a history entry and the admin log. A material change
- *  (the minimum deposit, either switch, the days or the multiple) bumps rules_version so players accept again. */
+/** Saves an admin's changes in one transaction: the settings row, a history entry and the admin log. Material changes
+ *  (the minimum deposit, either switch, the days or the multiple) bump the auditable rules_version. */
 export async function saveMoneyRules(db: Pool, admin: string, input: Record<string, unknown>) {
   const client = await db.connect();
   let changed: Field[] = [];

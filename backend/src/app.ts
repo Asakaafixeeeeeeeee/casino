@@ -102,12 +102,13 @@ export function createApp(db: Pool): express.Express {
         : err.name === "CurrencyError"
         ? 400
         : err.name === "TellerConfigurationError"
+        || err.name === "PaytellerConfigurationError"
         ? 503
         : status;
 
-    // The gateway isn't set up (missing TheTeller credentials): nothing was started; the player gets a plain notice,
+    // The gateway isn't set up: nothing was started; the player gets a plain notice,
     // the server log keeps the real reason.
-    if (err.name === "TellerConfigurationError") {
+    if (err.name === "TellerConfigurationError" || err.name === "PaytellerConfigurationError") {
       console.error("[payments] %s", err.message);
       res.status(503).json({
         error: "payments_unavailable",
