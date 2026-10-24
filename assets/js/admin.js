@@ -3424,7 +3424,7 @@
             Object.keys(c.changes).map((k) => "<div><b>" + esc(MR_LABEL[k] || k) + ":</b> " +
               (MR_TEXT.includes(k) ? "edited " + mrValue(k, c.changes[k].after) : mrValue(k, c.changes[k].before) + " → " + mrValue(k, c.changes[k].after)) + "</div>").join("") +
             "</td></tr>"))
-        : '<p class="me-sheet-note">No changes yet: the defaults are in force (minimum deposit GHS 135, both rules OFF).</p>');
+        : '<p class="me-sheet-note">No changes yet: the default minimum deposit is GHS 20. Review the current rules below.</p>');
   }
 
   async function loadMoneyRules(fresh) {

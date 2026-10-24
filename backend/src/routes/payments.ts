@@ -39,7 +39,7 @@ import {
   PHONE_NOT_CONFIRMED_MESSAGE,
 } from "../services/depositGuard.js";
 
-/* the minimum deposit is the admin's live setting (Admin -> Betting & withdrawal settings; GHS 135 by default) */
+/* the minimum deposit is the admin's live setting (Admin -> Betting & withdrawal settings; GHS 20 by default) */
 export const RULES_NOT_ACCEPTED_MESSAGE =
   "Before depositing, please read and accept the deposit, betting and withdrawal rules shown on the deposit page.";
 const NETWORKS: readonly MomoNetwork[] = ["MTN", "VDF", "ATL", "TGO"];

@@ -6,8 +6,8 @@
   const payments = (window.VB && window.VB.payments) || [];
   const MOMO = payments.filter((m) => m.type === "momo");
 
-  /* the live minimum (Admin -> Betting & withdrawal settings) replaces this as soon as the rules arrive */
-  let DEPOSIT_MIN = (U.minDeposit && U.minDeposit()) || 20;
+  /* Match the page's GHS 20 fallback until the live server rule arrives; a cached value can be stale. */
+  let DEPOSIT_MIN = 20;
   let DEPOSIT_MAX = 50000;
   const WITHDRAW_MIN = 20;
 

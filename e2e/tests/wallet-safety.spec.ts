@@ -58,6 +58,19 @@ test("a declined payment credits nothing and tells the player why", async ({ pag
   expect(await serverBalance(request, token)).toBe(0);
 });
 
+test("a stale cached deposit minimum cannot override the GHS 20 page fallback", async ({ page }) => {
+  await register(page);
+  await page.evaluate(() => localStorage.setItem("vb.minDeposit", JSON.stringify(135)));
+  await page.route("**/api/payments/config", (route) => route.fulfill({ status: 503, body: "{}" }));
+  await page.route("**/api/payments/rules", (route) => route.fulfill({ status: 503, body: "{}" }));
+
+  await page.goto("/wallet.html");
+  await settle(page);
+  await page.locator("#depAmount").fill("20");
+  await expect(page.locator("#depAmountErr")).toBeEmpty();
+  await expect(page.locator("#depSubmit")).toBeEnabled();
+});
+
 test("a deposit under the minimum never reaches the gateway", async ({ page, request }) => {
   const { phone } = await register(page);
   await page.goto("/wallet.html");

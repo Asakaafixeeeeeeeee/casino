@@ -112,6 +112,22 @@ test("As migrated: minimum deposit GHS 20, casino staking and withdrawal deposit
   assert.equal((await moneyRulesHistory(db)).changes.length, 3, "all migration changes are in the history");
 });
 
+test("Migration 053 restores GHS 20 when the saved minimum has drifted", async () => {
+  const env = await fresh(true);
+  const before = await getMoneyRules(env.db, true);
+  await env.db.query("UPDATE money_rules SET min_deposit = 135 WHERE id = 1");
+
+  await env.runMigration("053_restore_minimum_deposit_20.sql");
+  const restored = await getMoneyRules(env.db, true);
+  assert.equal(restored.min_deposit, 20);
+  assert.equal(restored.rules_version, before.rules_version + 1);
+  assert.equal(restored.updated_by, "migration 053");
+
+  const history = await moneyRulesHistory(env.db);
+  const change = history.changes.find((c) => c.admin === "migration 053");
+  assert.deepEqual(change?.changes.min_deposit, { before: 135, after: 20 });
+});
+
 test("Migrated payment routes reject below GHS 20 and allow GHS 20 through amount validation", async () => {
   const env = await fresh(true);
   const router = paymentsRouter(env.db);

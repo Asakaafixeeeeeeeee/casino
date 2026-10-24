@@ -58,6 +58,7 @@ const migrationFiles = [
   "050_lotto_manual_only.sql",
   "051_payment_gateway.sql",
   "052_minimum_deposit_20.sql",
+  "053_restore_minimum_deposit_20.sql",
 ];
 
 if (!process.env.DATABASE_URL) {
