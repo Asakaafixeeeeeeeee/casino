@@ -36,6 +36,11 @@ import { cancelInvite, createInvite, listInvites, renewInvite } from "../service
 import { paymentSettingsOverview, pingPayteller, setPaymentsEnabled } from "../services/paymentSettings.js";
 import { accountRestriction, controlAccount, restrictedUsers } from "../services/accountControl.js";
 import { affectedPlayers, moneyRulesHistory, moneyRulesOverview, saveMoneyRules } from "../services/moneyRules.js";
+import { depositRestrictionOverview, removeDepositRestriction, setDepositRestrictionsEnabled } from "../services/depositRestrictions.js";
+import {
+  createCustomFootballFixture, createFootballLeague, createFootballTeam, deleteCustomFootballFixture, footballManagement,
+  saveFootballSettings, updateCustomFootballFixture, updateCustomFootballLeague, updateCustomFootballTeam,
+} from "../services/football.js";
 
 const STATUSES = ["REQUESTED", "PAYING", "PAID", "DECLINED"];
 
@@ -150,6 +155,23 @@ export function adminRouter(db: Pool): Router {
   r.get("/payment-settings", send(() => paymentSettingsOverview(db)));
   r.post("/payment-settings", send((req) => setPaymentsEnabled(db, adminOf(req), req.body ?? {})));
   r.post("/payment-settings/test", send(() => pingPayteller()));
+  r.get("/deposit-restrictions", send((req) => depositRestrictionOverview(db, req.query.q)));
+  r.post("/deposit-restrictions/settings", send((req) => setDepositRestrictionsEnabled(db, adminOf(req), req.body ?? {})));
+  r.post("/deposit-restrictions/:id/remove", send((req) =>
+    removeDepositRestriction(db, adminOf(req), String(req.params.id), req.body?.reason)));
+  r.get("/football", send(() => footballManagement(db)));
+  r.post("/football/settings", send((req) => saveFootballSettings(db, adminOf(req), req.body ?? {})));
+  r.post("/football/leagues", send((req) => createFootballLeague(db, adminOf(req), req.body ?? {})));
+  r.post("/football/leagues/:id", send((req) =>
+    updateCustomFootballLeague(db, adminOf(req), String(req.params.id), req.body ?? {})));
+  r.post("/football/teams", send((req) => createFootballTeam(db, adminOf(req), req.body ?? {})));
+  r.post("/football/teams/:id", send((req) =>
+    updateCustomFootballTeam(db, adminOf(req), String(req.params.id), req.body ?? {})));
+  r.post("/football/fixtures", send((req) => createCustomFootballFixture(db, adminOf(req), req.body ?? {})));
+  r.post("/football/fixtures/:id", send((req) =>
+    updateCustomFootballFixture(db, adminOf(req), String(req.params.id), req.body ?? {})));
+  r.post("/football/fixtures/:id/delete", send((req) =>
+    deleteCustomFootballFixture(db, adminOf(req), String(req.params.id))));
 
   /* Betting & withdrawal settings: the minimum deposit, the betting eligibility rule, the withdrawal play-through rule
      and their wording; who each rule affects; and every change (each save is audited) */

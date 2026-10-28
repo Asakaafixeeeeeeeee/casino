@@ -187,6 +187,8 @@
 
     /* ---------------- registered number lock ---------------- */
     const guard = { confirmed: null, phone: regLocal };
+    const depositRestriction = { expiresAt: null, remainingSeconds: 0, shownExpiry: null, timer: null, sync: null };
+    let restrictionDialogOpen = false;
     let closeDialog = null;
 
     function openDialog(title, html, buttons, onClose) {
@@ -253,7 +255,53 @@
       if (!r.ok || !r.data) return;
       guard.confirmed = !!r.data.confirmed;
       if (r.data.phone) guard.phone = U.normalizePhone(r.data.phone);
+      const previousExpiry = depositRestriction.expiresAt;
+      depositRestriction.expiresAt = r.data.available_at && Date.parse(r.data.available_at) > Date.now()
+        ? r.data.available_at : null;
+      depositRestriction.remainingSeconds = depositRestriction.expiresAt
+        ? Math.max(0, Number(r.data.retry_after_seconds) || 0) : 0;
+      if (depositRestriction.expiresAt) {
+        if (depositRestriction.expiresAt !== previousExpiry ||
+            depositRestriction.shownExpiry !== depositRestriction.expiresAt) showDepositRestriction();
+      } else if (depositRestriction.timer) {
+        clearInterval(depositRestriction.timer);
+        depositRestriction.timer = null;
+      }
+      if (!depositRestriction.expiresAt && restrictionDialogOpen) closeDialog();
+      if (!depositRestriction.expiresAt) depositRestriction.shownExpiry = null;
+      if (depositRestriction.sync) depositRestriction.sync();
       if (!guard.confirmed && !quiet) showConfirm();
+    }
+    function restrictionTimeLeft() {
+      const seconds = Math.max(0, depositRestriction.remainingSeconds);
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const remainder = seconds % 60;
+      return hours + "h " + String(minutes).padStart(2, "0") + "m " + String(remainder).padStart(2, "0") + "s";
+    }
+    function showDepositRestriction() {
+      if (!depositRestriction.expiresAt) return;
+      const body = "<p>Your previous deposit attempt was unsuccessful.</p>" +
+        "<p>For payment security, another deposit attempt will be available after 30 hours.</p>" +
+        "<p><strong>Time remaining: <span id='depRestrictionRemaining'>" + restrictionTimeLeft() + "</span></strong></p>" +
+        "<p>Please try again when the restriction expires.</p>";
+      openDialog("⚠️ DEPOSIT TEMPORARILY RESTRICTED", body,
+        [{ label: "OK, UNDERSTOOD", primary: true, onClick: () => closeDialog() }], () => { restrictionDialogOpen = false; });
+      restrictionDialogOpen = true;
+      depositRestriction.shownExpiry = depositRestriction.expiresAt;
+      if (depositRestriction.timer) clearInterval(depositRestriction.timer);
+      depositRestriction.timer = setInterval(() => {
+        depositRestriction.remainingSeconds = Math.max(0, depositRestriction.remainingSeconds - 1);
+        const remaining = document.getElementById("depRestrictionRemaining");
+        if (remaining) remaining.textContent = restrictionTimeLeft();
+        if (depositRestriction.remainingSeconds <= 0) {
+          clearInterval(depositRestriction.timer);
+          depositRestriction.timer = null;
+          depositRestriction.expiresAt = null;
+          if (depositRestriction.sync) depositRestriction.sync();
+          loadGuard(true);
+        }
+      }, 1000);
     }
     /* true when a deposit may be sent now; otherwise the matching notice is shown */
     function guardOk() {
@@ -264,9 +312,18 @@
     function guardRefusal(data) {
       if (!data) return false;
       if (data.error === "phone_not_confirmed") { guard.confirmed = false; showConfirm(); return true; }
+      if (data.error === "deposit_restricted" && data.available_at) {
+        const changed = depositRestriction.expiresAt !== data.available_at;
+        depositRestriction.expiresAt = data.available_at;
+        depositRestriction.remainingSeconds = Math.max(0, Number(data.retry_after_seconds) || 0);
+        if (depositRestriction.sync) depositRestriction.sync();
+        if (changed || depositRestriction.shownExpiry !== depositRestriction.expiresAt) showDepositRestriction();
+        return true;
+      }
       return false;
     }
     loadGuard();
+    setInterval(() => loadGuard(true), 30000);
 
     /* asks our server every 4 s for up to 4 minutes; leaving the page doesn't cancel the payment */
     async function waitForPayment(txId) {
@@ -291,6 +348,7 @@
         showMsg("ok", "Deposit of " + U.money(amount) + " successful. Your balance has been updated.");
         PayFX.success({ amount, balance });
       } else if (status === "declined") {
+        await loadGuard(true);
         showMsg("error", "The payment was not approved. No money was taken." + why);
         PayFX.fail({ reason: result && result.reason, onRetry: () => depAmount.focus() });
       } else {
@@ -402,7 +460,9 @@
       const amt = Number(depAmount.value);
       showError("depAmountErr", depAmount.value === "" ? "" : amountError(amt));
       submit.disabled = waiting || !(amt >= DEPOSIT_MIN && amt <= DEPOSIT_MAX);
+      if (depositRestriction.expiresAt && Date.parse(depositRestriction.expiresAt) > Date.now()) submit.disabled = true;
     };
+    depositRestriction.sync = sync;
     resync = sync;
     const OFF_TITLE = "💳 PAYMENT SERVICE UNAVAILABLE";
     const OFF_TEXT = "Mobile Money deposits are currently being configured. Please try again when our payment service becomes available.";

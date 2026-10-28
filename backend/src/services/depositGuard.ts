@@ -3,6 +3,7 @@
    supported network. A gateway's real answer is never touched here. */
 import type { Pool, PoolClient } from "pg";
 import { canonicalTellerSubscriberNumber, networkForPhone, type MomoNetwork } from "./teller.js";
+import { activeDepositRestriction } from "./depositRestrictions.js";
 
 type Queryable = Pick<Pool | PoolClient, "query">;
 
@@ -50,12 +51,14 @@ export async function checkRegisteredNumber(db: Queryable, userId: string, sessi
 export async function depositState(db: Queryable, userId: string, sessionPhone: string) {
   const local = localNumber(sessionPhone);
   const locked = await lockedNumber(db, userId);
+  const restriction = await activeDepositRestriction(db, userId);
   return {
     phone: local ?? (sessionPhone || null),
     network: local ? networkForPhone(local) : null,
     confirmed: locked.confirmed,
-    retry_after_seconds: 0,
-    available_at: null,
+    retry_after_seconds: restriction?.retry_after_seconds ?? 0,
+    available_at: restriction?.expires_at ?? null,
+    restriction,
   };
 }
 

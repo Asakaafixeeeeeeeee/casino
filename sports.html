@@ -8,9 +8,10 @@
 <link rel="preconnect" href="https://asakaa-balance.onrender.com" crossorigin>
 <link rel="preconnect" href="https://asakaa-accounts.onrender.com" crossorigin>
 <meta name="theme-color" content="#121212">
-<title>Sports — WIN B WIN</title>
-<meta name="description" content="The WIN B casino sportsbook is coming soon. The casino lobby is open in the meantime.">
+<title>Football — WIN B WIN</title>
+<meta name="description" content="WIN B Football — fixtures, scores and football information. Real-money betting is not enabled.">
 <link rel="stylesheet" href="assets/css/styles.css?v=43">
+<link rel="stylesheet" href="assets/css/football.css?v=3">
 <link rel="icon" href="assets/img/winb-mark.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="assets/img/app/w-apple-touch-icon-180.png">
@@ -31,14 +32,58 @@
   <nav class="cat-bar" data-shell="categories" aria-label="Game categories"></nav>
 
   <div class="container">
-    <section class="coming-soon">
-      <i data-icon="ball"></i>
-      <span class="eyebrow">Sportsbook</span>
-      <h1>Sports betting is coming soon</h1>
-      <p>Football, basketball and more are on the way. Until then the casino lobby is open — crash games are the closest thing to a match-day rush.</p>
-      <div class="row-wrap" style="justify-content:center">
-        <a class="btn btn-primary" href="games.html?category=Live%20Casino">Play live casino games</a>
-        <a class="btn btn-ghost" href="games.html">Browse the casino</a>
+    <section class="fb-page" aria-labelledby="fbTitle">
+      <header class="fb-page-heading">
+        <div><span class="eyebrow">WIN B SPORTS</span><h1 id="fbTitle">Football</h1></div>
+        <span class="fb-disabled-note">Fixtures and scores · Betting unavailable</span>
+      </header>
+      <section class="fb-banner" aria-label="Football highlights">
+        <article class="fb-banner-slide active" data-banner="0" aria-hidden="false">
+          <img src="assets/img/football/stadium-photo.jpg" alt="Volksparkstadion in Hamburg during a football match" class="fb-banner-art">
+          <div class="fb-banner-copy">
+            <span class="fb-banner-kicker">FOOTBALL, FRONT AND CENTRE</span>
+            <h2>Make room for matchday.</h2>
+            <p>Follow fixtures and scores from approved data sources, all in one place.</p>
+            <a class="btn btn-primary" href="#fbMatches">Browse fixtures</a>
+          </div>
+          <span class="fb-banner-index">01 <i>/ 02</i></span>
+          <a class="fb-photo-credit" href="https://commons.wikimedia.org/wiki/File:Well_lit_soccer_stadium_(Unsplash).jpg" target="_blank" rel="noopener noreferrer">Volksparkstadion · Mario Klassen · CC0</a>
+        </article>
+        <article class="fb-banner-slide" data-banner="1" aria-hidden="true" inert>
+          <img src="assets/img/football/stadium-photo.jpg" alt="Football crowd at Volksparkstadion in Hamburg" class="fb-banner-art">
+          <div class="fb-banner-copy">
+            <span class="fb-banner-kicker">THE BEAUTIFUL GAME</span>
+            <h2>Every fixture has a story.</h2>
+            <p>Check upcoming kickoffs, follow results and explore the competitions.</p>
+            <a class="btn btn-primary" href="#fbMatches">Explore football</a>
+          </div>
+          <span class="fb-banner-index">02 <i>/ 02</i></span>
+          <a class="fb-photo-credit" href="https://commons.wikimedia.org/wiki/File:Well_lit_soccer_stadium_(Unsplash).jpg" target="_blank" rel="noopener noreferrer">Volksparkstadion · Mario Klassen · CC0</a>
+        </article>
+        <div class="fb-banner-controls" aria-label="Choose football banner">
+          <button type="button" class="fb-banner-dot active" data-banner-to="0" aria-label="Show banner 1" aria-current="true"></button>
+          <button type="button" class="fb-banner-dot" data-banner-to="1" aria-label="Show banner 2" aria-current="false"></button>
+          <button type="button" class="fb-banner-next" aria-label="Show next banner">›</button>
+        </div>
+        <span class="fb-banner-disclaimer">No odds or betting are available.</span>
+      </section>
+      <div class="fb-status" id="fbStatus" role="status" aria-live="polite">Loading football data…</div>
+      <nav class="fb-tabs" aria-label="Football match views">
+        <button type="button" data-view="live">Live</button>
+        <button type="button" data-view="today" class="active">Today</button>
+        <button type="button" data-view="tomorrow">Tomorrow</button>
+        <button type="button" data-view="upcoming">Upcoming</button>
+        <button type="button" data-view="leagues">Leagues</button>
+        <button type="button" data-view="results">Results</button>
+      </nav>
+      <div class="fb-tools">
+        <label class="fb-search"><span class="sr-only">Search teams or leagues</span><input id="fbSearch" type="search" placeholder="Search teams or leagues"></label>
+        <label class="fb-country">Country <select id="fbCountry"><option value="">All countries</option></select></label>
+        <button type="button" class="btn btn-ghost" id="fbRefresh">Refresh</button>
+      </div>
+      <div class="fb-layout">
+        <aside class="fb-leagues" aria-label="Leagues"><h2>Competitions</h2><div id="fbLeagueList"></div></aside>
+        <div class="fb-content" id="fbMatches" aria-live="polite"></div>
       </div>
     </section>
   </div>
@@ -47,6 +92,7 @@
 <footer class="site-footer" data-shell="footer"></footer>
 
 <script src="assets/js/data.js?v=58"></script>
-<script src="assets/js/site.js?v=58"></script>
+<script src="assets/js/site.js?v=60"></script>
+<script src="assets/js/football.js?v=3"></script>
 </body>
 </html>

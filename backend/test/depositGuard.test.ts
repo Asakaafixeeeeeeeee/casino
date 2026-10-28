@@ -157,3 +157,70 @@ test("Only one payment may wait for approval at a time, and failed or declined p
   });
   await settleIntent(db, "000000000301", "declined", null, "Declined by customer");
 });
+
+test("A provider-confirmed final decline starts one exact 30-hour restriction and blocks new deposit requests", async () => {
+  clearMoneyRulesCache();
+  const { db, userId } = await setupWalletDb();
+  const router = paymentsRouter(db);
+  await acceptRules(db, userId);
+  await call(router, "post", "/confirm-phone", userId, {});
+  await db.query(`INSERT INTO payment_intents (user_id, amount, currency, idempotency_key, status, transaction_id, redirect_url)
+                  VALUES ($1, 150, 'GHS', 'deposit:verified-failure', 'PENDING', '000000000401', 'http://localhost/wallet.html')`, [userId]);
+
+  await settleIntent(db, "000000000401", "declined", null, "Provider confirmed failure");
+  const restriction = (await db.query(
+    `SELECT started_at, expires_at FROM deposit_restrictions WHERE user_id = $1`, [userId]
+  )).rows[0];
+  assert.equal(Date.parse(restriction.expires_at) - Date.parse(restriction.started_at), 30 * 60 * 60 * 1000);
+
+  const state = await call(router, "get", "/deposit-status", userId);
+  assert.ok(Number(state.body!.retry_after_seconds) > 0);
+  const availableAt = String(state.body!.available_at);
+  assert.equal(availableAt, new Date(restriction.expires_at).toISOString());
+
+  await withTeller(async () => {
+    const originalFetch = globalThis.fetch;
+    let contacted = false;
+    globalThis.fetch = async () => { contacted = true; return new Response("{}", { status: 201 }); };
+    try {
+      const blocked = await momo(router, userId);
+      assert.deepEqual([blocked.status, blocked.body!.error], [429, "deposit_restricted"]);
+      assert.equal(blocked.body!.available_at, availableAt);
+      assert.equal(contacted, false, "the restricted request must not reach the provider");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+test("Unstarted or manually marked failed intents do not create a restriction; disabled setting prevents new ones", async () => {
+  clearMoneyRulesCache();
+  const { db, userId } = await setupWalletDb();
+  const router = paymentsRouter(db);
+  await acceptRules(db, userId);
+  await call(router, "post", "/confirm-phone", userId, {});
+  await db.query(`INSERT INTO payment_intents (user_id, amount, currency, idempotency_key, status, redirect_url)
+                  VALUES ($1, 150, 'GHS', 'deposit:never-sent', 'PENDING', 'http://localhost/wallet.html')`, [userId]);
+  await db.query(`UPDATE payment_intents SET status = 'FAILED' WHERE idempotency_key = 'deposit:never-sent'`);
+  assert.equal((await call(router, "get", "/deposit-status", userId)).body!.available_at, null);
+
+  await db.query(`UPDATE deposit_restriction_settings SET enabled = false WHERE id = 1`);
+  await db.query(`INSERT INTO payment_intents (user_id, amount, currency, idempotency_key, status, transaction_id, redirect_url)
+                  VALUES ($1, 150, 'GHS', 'deposit:disabled-lock', 'PENDING', '000000000402', 'http://localhost/wallet.html')`, [userId]);
+  await settleIntent(db, "000000000402", "declined", null, "Final provider decline");
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM deposit_restrictions WHERE user_id = $1`, [userId])).rows[0].n, 0);
+});
+
+test("A later provider-confirmed approval clears the restriction created by that same transaction", async () => {
+  const { db, userId } = await setupWalletDb();
+  await db.query(`INSERT INTO payment_intents (user_id, amount, currency, idempotency_key, status, transaction_id, redirect_url)
+                  VALUES ($1, 150, 'GHS', 'deposit:reconciled', 'PENDING', '000000000403', 'http://localhost/wallet.html')`, [userId]);
+  await settleIntent(db, "000000000403", "declined", null, "Initial decline");
+  assert.ok((await db.query(`SELECT id FROM deposit_restrictions WHERE user_id = $1 AND removed_at IS NULL`, [userId])).rows[0]);
+
+  await db.query(`UPDATE payment_intents SET status = 'PENDING' WHERE transaction_id = '000000000403'`);
+  await settleIntent(db, "000000000403", "approved", 15000, "Provider reconciliation");
+  const row = (await db.query(`SELECT removed_at, removal_reason FROM deposit_restrictions WHERE user_id = $1`, [userId])).rows[0];
+  assert.ok(row.removed_at);
+  assert.equal(row.removal_reason, "Provider later confirmed this deposit");
+});

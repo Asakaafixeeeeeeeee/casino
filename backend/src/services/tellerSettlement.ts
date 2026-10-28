@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { deposit } from "./balanceService.js";
+import { recordVerifiedDepositFailure } from "./depositRestrictions.js";
 
 export interface Settlement {
   userId: string;
@@ -22,7 +23,7 @@ export async function settleIntent(
   const client = await db.connect();
   try {
     await client.query("BEGIN");
-    const { rows } = await client.query<{ user_id: string; currency: string; amount: string }>(
+    const { rows } = await client.query<{ id: string; user_id: string; currency: string; amount: string }>(
       `UPDATE payment_intents
           SET status = $2, external_ref = $1, gateway_note = left(CASE
             WHEN NULLIF($3::text, '') IS NULL THEN gateway_note
@@ -32,7 +33,7 @@ export async function settleIntent(
               confirmed_at = CASE WHEN $2::text = 'CONFIRMED' THEN now() ELSE confirmed_at END,
               updated_at = now()
         WHERE transaction_id = $1 AND status = 'PENDING'
-        RETURNING user_id, currency, amount`,
+        RETURNING id, user_id, currency, amount`,
       [transactionId, outcome === "approved" ? "CONFIRMED" : "FAILED", note ?? null]
     );
     const intent = rows[0];
@@ -52,6 +53,22 @@ export async function settleIntent(
       if (creditedMinor > 0) {
         await deposit(client, intent.user_id, intent.currency, creditedMinor / 100, `teller:${transactionId}`, transactionId);
       }
+      const lifted = await client.query<{ id: string }>(
+        `UPDATE deposit_restrictions SET removed_at = now(), removed_by = 'payment-provider',
+                removal_reason = 'Provider later confirmed this deposit'
+          WHERE failed_intent_id = $1 AND removed_at IS NULL AND expires_at > now()
+          RETURNING id`,
+        [intent.id]
+      );
+      for (const restriction of lifted.rows) {
+        await client.query(
+          `INSERT INTO deposit_restriction_events (restriction_id, user_id, actor, action, details)
+           VALUES ($1, $2, 'payment-provider', 'restriction.cleared_after_reconciliation', $3::jsonb)`,
+          [restriction.id, intent.user_id, JSON.stringify({ transaction_id: transactionId })]
+        );
+      }
+    } else {
+      await recordVerifiedDepositFailure(client, intent.user_id, intent.id);
     }
     await client.query("COMMIT");
     return {

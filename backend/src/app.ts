@@ -12,6 +12,7 @@ import { adminRouter } from "./routes/admin.js";
 import { gamesRouter } from "./routes/games.js";
 import { partnersRouter } from "./routes/partners.js";
 import { supportRouter } from "./routes/support.js";
+import { footballRouter } from "./routes/football.js";
 import { authenticate } from "./middleware/authenticate.js";
 
 // Minimal error shape used below.
@@ -46,6 +47,7 @@ export function createApp(db: Pool): express.Express {
   app.use("/api/admin/money-rules", express.json({ limit: "16kb" }));
   // promotional images an admin uploads (as data: URLs, up to 2 MB of image), and the partner forms and campaigns
   app.use("/api/admin/flyer-assets", express.json({ limit: "3mb" }));
+  app.use("/api/admin/football/teams", express.json({ limit: "768kb" }));
   app.use(["/api/admin/partners", "/api/admin/partner-permissions", "/api/admin/partner-invites", "/api/partners/invite", "/api/admin/flyer-templates", "/api/admin/flyer-campaigns",
     "/api/partners/flyers"], express.json({ limit: "8kb" }));
   app.use(express.json({ limit: "1kb" })); // we never take bulk bodies here
@@ -80,6 +82,7 @@ export function createApp(db: Pool): express.Express {
   app.use("/api/games", gamesRouter(db));
   app.use("/api/partners", partnersRouter(db));
   app.use("/api/support", supportRouter(db));
+  app.use("/api/football", footballRouter(db));
 
   // A health check that also proves the DB connection still works.
   app.get("/_health", async (_req, res) => {

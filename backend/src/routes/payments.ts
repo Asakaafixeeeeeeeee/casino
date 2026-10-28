@@ -38,6 +38,7 @@ import {
   checkRegisteredNumber, confirmDepositPhone, DepositGuardError, depositState, localNumber, lockedNumber,
   PHONE_NOT_CONFIRMED_MESSAGE,
 } from "../services/depositGuard.js";
+import { activeDepositRestriction } from "../services/depositRestrictions.js";
 
 /* the minimum deposit is the admin's live setting (Admin -> Betting & withdrawal settings; GHS 20 by default) */
 const NETWORKS: readonly MomoNetwork[] = ["MTN", "VDF", "ATL", "TGO"];
@@ -130,6 +131,14 @@ export function paymentsRouter(db: Pool): Router {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["deposit:" + userId]);
       const replay = await client.query(`SELECT 1 FROM payment_intents WHERE idempotency_key = $1 AND user_id = $2`, [key, userId]);
       if (!replay.rowCount) {
+        const restriction = await activeDepositRestriction(client, userId);
+        if (restriction) {
+          await client.query("ROLLBACK");
+          await reject(res, 429, "deposit_restricted",
+            "Your previous deposit attempt was unsuccessful. For payment security, another deposit attempt will be available after 30 hours.",
+            a, { available_at: restriction.expires_at, retry_after_seconds: restriction.retry_after_seconds });
+          return null;
+        }
         try {
           await checkDeposit(client, userId, amount);
         } catch (e) {

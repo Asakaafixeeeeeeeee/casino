@@ -620,7 +620,7 @@
     { label: "Home", href: "index.html" },
     { label: "Casino", href: "games.html" },
     { label: "Promotions", href: "promotions.html" },
-    { label: "Sports", href: "sports.html" },
+    { label: "Sports Betting", href: "sports.html" },
     { label: "Wallet", href: "wallet.html" }
   ];
 
@@ -636,7 +636,7 @@
     { id: "home", label: "Home", icon: "home", href: "index.html" },
     { id: "hot", label: "Hot", icon: "flame", href: "games.html?tag=hot" },
     { id: "live", label: "Live Casino", icon: "live", category: "Live Casino" },
-    { id: "sports", label: "Sports", icon: "ball", href: "sports.html" },
+    { id: "sports", label: "Sports Betting", icon: "ball", href: "sports.html" },
     { id: "mine", label: "My Games", icon: "heart", href: "games.html?fav=1" },
     { id: "slots", label: "Slots", icon: "slots", category: "Slots" },
     { id: "jackpots", label: "Jackpots", icon: "crown", category: "Jackpots" },

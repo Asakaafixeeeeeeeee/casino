@@ -59,6 +59,9 @@ const migrationFiles = [
   "051_payment_gateway.sql",
   "052_minimum_deposit_20.sql",
   "053_restore_minimum_deposit_20.sql",
+  "054_deposit_failure_restrictions.sql",
+  "055_football_foundation.sql",
+  "056_football_team_logos.sql",
 ];
 
 if (!process.env.DATABASE_URL) {

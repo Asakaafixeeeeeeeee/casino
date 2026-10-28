@@ -3261,6 +3261,353 @@
     if (tp.last) renderPaymentSettings(tp.last);
   }
 
+  /* ================= Failed-deposit restrictions ================= */
+  let depositRestrictionTimer = 0;
+  let depositRestrictionSearch = "";
+  async function loadDepositRestrictions(search = depositRestrictionSearch) {
+    depositRestrictionSearch = search;
+    const panel = panelOf("depositrestrictions");
+    panel.innerHTML = loading;
+    const r = await api("/deposit-restrictions" + (search ? "?q=" + encodeURIComponent(search) : ""));
+    if (state.tab !== "depositrestrictions") return;
+    if (!r.ok) {
+      panel.innerHTML = "";
+      return flash("error", errText(r, "Couldn't load deposit restrictions."));
+    }
+    const data = r.data;
+    const rows = data.restrictions || [];
+    const active = rows.filter((x) => x.active);
+    panel.innerHTML =
+      '<section class="adm-card"><div class="adm-studio-head"><div><strong>30-hour failed-deposit restriction</strong>' +
+        '<small>' + (data.settings.enabled ? "ON — provider-confirmed final declines activate a restriction." : "OFF — new failures will not start restrictions.") + "</small></div>" +
+        '<label class="adm-switch"><input type="checkbox" data-deposit-restrictions-toggle' + (data.settings.enabled ? " checked" : "") +
+          ' aria-label="Enable or disable failed-deposit restrictions"><span aria-hidden="true"></span></label></div>' +
+        '<p class="adm-note">Only a final failure confirmed by the payment provider starts the 30-hour timer. Network errors, unstarted requests, pending payments and unknown statuses never do. Disabling this setting stops new restrictions; existing restrictions remain active until expiry or manual removal.</p>' +
+        (data.settings.updated_at ? '<p class="adm-note">Last changed ' + when(data.settings.updated_at) + " by " + esc(data.settings.updated_by || "admin") + ".</p>" : "") +
+      "</section>" +
+      '<form class="fb-admin-form" data-deposit-restriction-search><label>Search user, phone, transaction or failure response<input name="q" value="' + esc(search) + '" maxlength="80"></label><button class="btn btn-ghost btn-sm">Search history</button></form>' +
+      '<section class="adm-card"><h3 class="adm-h">Currently restricted (' + count(active.length) + ')</h3>' +
+        (active.length ? table(["Player", "Failed transaction", "Amount", "Failure reason", "Started", "Expires", "Time remaining", "Action"], active.map((x) =>
+          '<tr><td>' + esc(x.username || "Player") + "<small>" + esc(x.phone || "") + "</small></td><td>" + esc(x.transaction_id || "—") +
+            "</td><td>" + money(x.amount) + "</td><td class=\"adm-wrapcell\">" + esc(x.gateway_note || "Provider confirmed failure") + "</td><td>" + when(x.started_at) +
+            "</td><td>" + when(x.expires_at) + '</td><td class="dep-rest-time" data-seconds="' + count(x.retry_after_seconds) + '">' +
+            remaining(x.retry_after_seconds) + "</td>" +
+            '<td><button class="btn btn-ghost btn-sm" type="button" data-remove-deposit-restriction="' + esc(String(x.id)) + '">Remove</button></td></tr>'))
+          : '<p class="me-sheet-note">No players are currently restricted.</p>') +
+      "</section>" +
+      '<section class="adm-card"><h3 class="adm-h">Restriction history</h3>' +
+        (rows.length ? table(["Player", "Transaction", "Amount", "Failure reason", "Started", "Expires", "Status", "Admin action"], rows.map((x) =>
+          "<tr><td>" + esc(x.username || "Player") + "<small>" + esc(x.phone || "") + "</small></td><td>" + esc(x.transaction_id || "—") +
+            "</td><td>" + money(x.amount) + "</td><td class=\"adm-wrapcell\">" + esc(x.gateway_note || "Provider confirmed failure") + "</td><td>" + when(x.started_at) +
+            "</td><td>" + when(x.expires_at) + "</td><td>" + pill(x.active ? "Active" : x.removed_at ? "Removed" : "Expired", x.active ? "warn" : x.removed_at ? "bad" : "") +
+            "</td><td>" + (x.removed_at ? esc(x.removal_reason || "Removed") + "<small>by " + esc(x.removed_by || "admin") + "</small>" : "—") + "</td></tr>"))
+          : '<p class="me-sheet-note">No restriction history yet.</p>') +
+      "</section>";
+    function remaining(seconds) {
+      const s = Math.max(0, Number(seconds) || 0);
+      return Math.floor(s / 3600) + "h " + String(Math.floor(s % 3600 / 60)).padStart(2, "0") + "m " + String(s % 60).padStart(2, "0") + "s";
+    }
+    clearInterval(depositRestrictionTimer);
+    depositRestrictionTimer = setInterval(() => panel.querySelectorAll(".dep-rest-time").forEach((el) => {
+      const seconds = Math.max(0, Number(el.dataset.seconds) - 1);
+      el.dataset.seconds = String(seconds);
+      el.textContent = remaining(seconds);
+    }), 1000);
+    panel.onchange = async (e) => {
+      const input = e.target.closest("[data-deposit-restrictions-toggle]");
+      if (!input) return;
+      const enabled = input.checked;
+      const ok = await ask({
+        title: enabled ? "Enable 30-hour restrictions?" : "Disable new restrictions?",
+        text: enabled
+          ? "Each provider-confirmed final failed deposit will start a 30-hour restriction. Existing restrictions are not changed."
+          : "New failed payments will not start restrictions. Existing restrictions remain active until expiry or manual removal.",
+        yes: enabled ? "Enable" : "Disable",
+        danger: !enabled,
+      });
+      if (ok === null) { input.checked = !enabled; return; }
+      input.disabled = true;
+      const saved = await api("/deposit-restrictions/settings", { enabled });
+      if (!saved.ok) {
+        input.checked = !enabled;
+        input.disabled = false;
+        return flash("error", errText(saved, "Couldn't update the restriction setting."));
+      }
+      flash("ok", "New failed-deposit restrictions are now <b>" + (enabled ? "ON" : "OFF") + "</b>.");
+      loadDepositRestrictions();
+    };
+    panel.onclick = async (e) => {
+      const button = e.target.closest("[data-remove-deposit-restriction]");
+      if (!button) return;
+      const reason = await ask({
+        title: "Remove this deposit restriction?",
+        text: "The player can start another deposit immediately. This override will be recorded in the admin audit log.",
+        yes: "Remove restriction",
+        danger: true,
+        input: true,
+        placeholder: "Reason for removal",
+        required: 4,
+      });
+      if (reason === null) return;
+      button.disabled = true;
+      const removed = await api("/deposit-restrictions/" + encodeURIComponent(button.dataset.removeDepositRestriction) + "/remove", { reason });
+      if (!removed.ok) return flash("error", errText(removed, "Couldn't remove the restriction."));
+      flash("ok", "Deposit restriction removed.");
+      loadDepositRestrictions();
+    };
+    panel.onsubmit = (e) => {
+      const form = e.target.closest("form[data-deposit-restriction-search]");
+      if (!form) return;
+      e.preventDefault();
+      loadDepositRestrictions(form.querySelector("[name=q]").value.trim());
+    };
+  }
+
+  /* ================= Football management ================= */
+  async function loadFootballManagement() {
+    const panel = panelOf("football");
+    panel.innerHTML = loading;
+    const r = await api("/football");
+    if (state.tab !== "football") return;
+    if (!r.ok) {
+      panel.innerHTML = "";
+      return flash("error", errText(r, "Couldn't load football management."));
+    }
+    const d = r.data;
+    const leagues = d.leagues || [];
+    const teams = d.teams || [];
+    const fixtures = d.fixtures || [];
+    const provider = d.provider || {};
+    const pendingLogos = new WeakMap();
+    const readLogoFile = (file) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Could not read the logo file."));
+      reader.onerror = () => reject(new Error("Could not read the logo file."));
+      reader.readAsDataURL(file);
+    });
+    const statuses = ["DRAFT", "SCHEDULED", "LIVE", "HALF_TIME", "FINISHED", "POSTPONED", "CANCELLED"];
+    const option = (items, key, label) => items.map((item) =>
+      '<option value="' + esc(item.id) + '">' + esc(item[key]) + (label ? " · " + esc(item[label]) : "") + "</option>").join("");
+    panel.innerHTML =
+      '<section class="adm-card"><div class="adm-studio-head"><div><strong>Football section</strong><small>Wagering is locked OFF in the database. No market prices or real-money bets are accepted.</small></div>' +
+        '<label class="adm-switch"><input type="checkbox" data-football-enabled' + (d.settings.enabled ? " checked" : "") +
+          ' aria-label="Enable football information"><span aria-hidden="true"></span></label></div>' +
+        '<div class="adm-mines-meta"><div><b>Fixture provider</b><span>' + esc(provider.id || "Not configured") + "</span></div>" +
+          '<div><b>API credentials</b><span>' + (provider.api_key_configured ? "Configured" : "Missing") + "</span></div>" +
+          '<div><b>Commercial rights</b><span>' + (provider.commercial_rights_confirmed ? "Confirmed" : "Not confirmed") + "</span></div>" +
+          '<div><b>Odds feed</b><span>' + (provider.odds_provider_configured ? "Configured" : "Not configured") + "</span></div></div>" +
+        '<p class="adm-note">External fixtures are requested only after the backend environment confirms commercial data rights and a server-side provider key. Credentials are never sent to this page. Custom events are labeled as custom on the public football page.</p>' +
+      "</section>" +
+      '<section class="adm-card"><h3 class="adm-h">Create custom league and teams</h3>' +
+        '<div class="agm-cols"><form class="fb-admin-form" data-football-form="league"><label>League name<input name="name" maxlength="100" required></label><label>Country<input name="country" maxlength="100" required></label><button class="btn btn-primary btn-sm">Add custom league</button></form>' +
+        '<form class="fb-admin-form" data-football-form="team"><label>Team name<input name="name" maxlength="100" required></label><label>Country<input name="country" maxlength="100" required></label>' +
+        '<label>Team logo (PNG, JPEG or WebP, max 512 KB)<input type="file" name="logo_file" accept="image/png,image/jpeg,image/webp"></label>' +
+        '<button class="btn btn-primary btn-sm">Add custom team</button></form></div>' +
+      "</section>" +
+      '<section class="adm-card"><h3 class="adm-h">Custom leagues</h3>' +
+        (leagues.length ? table(["League", "Country", "Status"], leagues.map((l) =>
+          "<tr><td>" + esc(l.name) + "</td><td>" + esc(l.country) + '</td><td><label class="adm-switch"><input type="checkbox" data-league-enabled="' + esc(l.id) + '"' +
+          (l.enabled ? " checked" : "") + ' aria-label="Enable ' + esc(l.name) + '"><span aria-hidden="true"></span></label></td></tr>')) : '<p class="me-sheet-note">No custom leagues have been created.</p>') +
+      "</section>" +
+      '<section class="adm-card"><h3 class="adm-h">Manage custom teams</h3>' +
+        (teams.length ? table(["Team name", "Country", "Logo", "Action"], teams.map((t) =>
+          '<tr data-team-row="' + esc(t.id) + '"><td><input type="text" maxlength="100" value="' + esc(t.name) + '" aria-label="Team name" data-team-name></td>' +
+          '<td><input type="text" maxlength="100" value="' + esc(t.country) + '" aria-label="Team country" data-team-country></td>' +
+          '<td class="fb-admin-logo-cell"><img data-team-preview alt=""' + (t.has_logo ? ' src="' + esc(U.paymentBase + "/api/football/teams/" + encodeURIComponent(t.id) + "/logo") + '"' : " hidden") + '>' +
+          '<input type="file" data-team-logo accept="image/png,image/jpeg,image/webp" aria-label="Upload team logo"><small>PNG, JPEG or WebP · max 512 KB</small>' +
+          '<button class="link-btn" type="button" data-team-logo-clear>Remove logo</button></td>' +
+          '<td><button class="btn btn-ghost btn-sm" type="button" data-team-save="' + esc(t.id) + '">Save team</button></td></tr>')) : '<p class="me-sheet-note">No custom teams have been created.</p>') +
+      "</section>" +
+      '<section class="adm-card"><h3 class="adm-h">Create custom match</h3>' +
+        (leagues.length && teams.length > 1
+          ? '<form class="fb-admin-form" data-football-form="fixture"><label>League<select name="league_id" required>' + option(leagues, "name", "country") + "</select></label>" +
+            '<label>Home team<select name="home_team_id" required>' + option(teams, "name", "country") + "</select></label>" +
+            '<label>Away team<select name="away_team_id" required>' + option(teams, "name", "country") + "</select></label>" +
+            '<label>Kickoff date &amp; time<input name="starts_at" type="datetime-local" required></label>' +
+            '<label>Match type<select name="match_type"><option>LEAGUE</option><option>CUP</option><option>FRIENDLY</option><option selected>CUSTOM</option></select></label>' +
+            '<label>Description<textarea name="description" maxlength="500" rows="2"></textarea></label><button class="btn btn-primary btn-sm">Save draft</button></form>' +
+            '<p class="adm-note">Custom matches start as unpublished drafts. They do not have official results or betting markets.</p>'
+          : '<p class="me-sheet-note">Create a custom league and at least two teams first.</p>') +
+      "</section>" +
+      '<section class="adm-card"><h3 class="adm-h">All custom matches</h3>' +
+        (fixtures.length ? table(["Match", "Kickoff", "Score", "Status", "Published", "Actions"], fixtures.map((f) =>
+          '<tr><td>' + esc(f.home_team) + " vs " + esc(f.away_team) + "<small>" + esc(f.league) + "</small></td><td>" + when(f.starts_at) +
+            '</td><td data-score-row="' + esc(f.id) + '"><input type="number" min="0" max="99" data-home-score aria-label="Home score" value="' + (f.home_score ?? "") +
+            '"> – <input type="number" min="0" max="99" data-away-score aria-label="Away score" value="' + (f.away_score ?? "") + '">' +
+            '</td><td><select data-fixture-status="' + esc(f.id) + '">' + statuses.map((s) => '<option' + (f.status === s ? " selected" : "") + ">" + s + "</option>").join("") +
+            "</select></td><td>" + (f.published ? "Published · custom" : "Draft") + '</td><td><button type="button" class="btn btn-ghost btn-sm" data-fixture-publish="' + esc(f.id) + '" data-published="' + (f.published ? "1" : "0") + '">' +
+            (f.published ? "Unpublish" : "Publish") + '</button><button type="button" class="btn btn-ghost btn-sm" data-fixture-score="' + esc(f.id) + '">Save score</button>' +
+            '<button type="button" class="btn btn-primary btn-sm" data-fixture-final="' + esc(f.id) + '">Publish final result</button>' +
+            '<button type="button" class="btn btn-danger btn-sm" data-fixture-delete="' + esc(f.id) + '">Delete</button></td></tr>')) : '<p class="me-sheet-note">No custom matches have been created.</p>') +
+        '<p class="adm-note">To make a final score visible in Results, enter both scores and choose Publish final result. This marks the custom event finished and publishes it.</p>' +
+      "</section>";
+    panel.onchange = async (e) => {
+      const logoInput = e.target.closest("[data-team-logo]");
+      if (logoInput) {
+        const file = logoInput.files && logoInput.files[0];
+        if (!file) return;
+        if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 512 * 1024) {
+          logoInput.value = "";
+          return flash("error", "Choose a PNG, JPEG or WebP logo no larger than 512 KB.");
+        }
+        try {
+          const row = logoInput.closest("[data-team-row]");
+          const dataUrl = await readLogoFile(file);
+          pendingLogos.set(row, dataUrl);
+          row.removeAttribute("data-clear-logo");
+          const preview = row.querySelector("[data-team-preview]");
+          preview.src = dataUrl;
+          preview.hidden = false;
+        } catch (error) {
+          logoInput.value = "";
+          flash("error", error.message || "Could not read the team logo.");
+        }
+        return;
+      }
+      const feature = e.target.closest("[data-football-enabled]");
+      if (feature) {
+        const enabled = feature.checked;
+        feature.disabled = true;
+        const saved = await api("/football/settings", { enabled });
+        if (!saved.ok) {
+          feature.checked = !enabled;
+          feature.disabled = false;
+          return flash("error", errText(saved, "Couldn't update football settings."));
+        }
+        flash("ok", "Football information is now " + (enabled ? "enabled" : "disabled") + ". Real-money wagering remains disabled.");
+        return loadFootballManagement();
+      }
+      const league = e.target.closest("[data-league-enabled]");
+      if (league) {
+        const enabled = league.checked;
+        const saved = await api("/football/leagues/" + encodeURIComponent(league.dataset.leagueEnabled), { enabled });
+        if (!saved.ok) {
+          league.checked = !enabled;
+          return flash("error", errText(saved, "Couldn't update the league."));
+        }
+        return loadFootballManagement();
+      }
+      const status = e.target.closest("[data-fixture-status]");
+      if (status) {
+        const saved = await api("/football/fixtures/" + encodeURIComponent(status.dataset.fixtureStatus), { status: status.value });
+        if (!saved.ok) return flash("error", errText(saved, "Couldn't update the match."));
+        return loadFootballManagement();
+      }
+    };
+    panel.onclick = async (e) => {
+      const clearLogo = e.target.closest("[data-team-logo-clear]");
+      if (clearLogo) {
+        const row = clearLogo.closest("[data-team-row]");
+        pendingLogos.delete(row);
+        row.dataset.clearLogo = "1";
+        row.querySelector("[data-team-logo]").value = "";
+        row.querySelector("[data-team-preview]").hidden = true;
+        return;
+      }
+      const team = e.target.closest("[data-team-save]");
+      if (team) {
+        const row = team.closest("[data-team-row]");
+        const body = {
+          name: row.querySelector("[data-team-name]").value.trim(),
+          country: row.querySelector("[data-team-country]").value.trim(),
+        };
+        if (pendingLogos.has(row)) body.logo_data_url = pendingLogos.get(row);
+        else if (row.dataset.clearLogo === "1") body.logo_data_url = null;
+        team.disabled = true;
+        const saved = await api("/football/teams/" + encodeURIComponent(team.dataset.teamSave), body);
+        team.disabled = false;
+        if (!saved.ok) return flash("error", errText(saved, "Couldn't update the team."));
+        flash("ok", "Custom team updated.");
+        return loadFootballManagement();
+      }
+      const finalResult = e.target.closest("[data-fixture-final]");
+      if (finalResult) {
+        const row = finalResult.closest("tr");
+        const home = row.querySelector("[data-home-score]").value;
+        const away = row.querySelector("[data-away-score]").value;
+        if (home === "" || away === "") return flash("error", "Enter both team scores before publishing a final result.");
+        const ok = await ask({
+          title: "Publish this final score?",
+          text: "This marks the custom match finished and makes its " + home + "–" + away + " result visible on the Football page.",
+          yes: "Publish result",
+        });
+        if (ok === null) return;
+        finalResult.disabled = true;
+        const saved = await api("/football/fixtures/" + encodeURIComponent(finalResult.dataset.fixtureFinal), {
+          home_score: Number(home), away_score: Number(away), status: "FINISHED", published: true,
+        });
+        finalResult.disabled = false;
+        if (!saved.ok) return flash("error", errText(saved, "Couldn't publish the final score."));
+        flash("ok", "Final result published on the Football page.");
+        return loadFootballManagement();
+      }
+      const publish = e.target.closest("[data-fixture-publish]");
+      if (publish) {
+        const published = publish.dataset.published !== "1";
+        const saved = await api("/football/fixtures/" + encodeURIComponent(publish.dataset.fixturePublish), { published });
+        if (!saved.ok) return flash("error", errText(saved, "Couldn't update the match."));
+        flash("ok", published ? "Custom match published." : "Custom match unpublished.");
+        return loadFootballManagement();
+      }
+      const remove = e.target.closest("[data-fixture-delete]");
+      if (remove) {
+        const ok = await ask({
+          title: "Delete this custom match?",
+          text: "Only this custom event will be removed. Provider-imported fixtures cannot be deleted here.",
+          yes: "Delete match",
+          danger: true,
+        });
+        if (ok === null) return;
+        const deleted = await api("/football/fixtures/" + encodeURIComponent(remove.dataset.fixtureDelete) + "/delete", {});
+        if (!deleted.ok) return flash("error", errText(deleted, "Couldn't delete the custom match."));
+        flash("ok", "Custom match deleted.");
+        return loadFootballManagement();
+      }
+      const score = e.target.closest("[data-fixture-score]");
+      if (score) {
+        const row = score.closest("tr");
+        const home = row.querySelector("[data-home-score]").value;
+        const away = row.querySelector("[data-away-score]").value;
+        if ((home === "") !== (away === "")) return flash("error", "Enter both scores, or leave both blank to clear them.");
+        const saved = await api("/football/fixtures/" + encodeURIComponent(score.dataset.fixtureScore), {
+          home_score: home === "" ? null : Number(home),
+          away_score: away === "" ? null : Number(away),
+        });
+        if (!saved.ok) return flash("error", errText(saved, "Couldn't save the custom match score."));
+        flash("ok", "Custom match score saved.");
+        return loadFootballManagement();
+      }
+    };
+    panel.onsubmit = async (e) => {
+      const form = e.target.closest("form[data-football-form]");
+      if (!form) return;
+      e.preventDefault();
+      const values = Object.fromEntries(new FormData(form).entries());
+      const type = form.dataset.footballForm;
+      if (type === "team") {
+        const logoFile = form.querySelector('[name="logo_file"]').files?.[0];
+        delete values.logo_file;
+        if (logoFile) {
+          if (!["image/png", "image/jpeg", "image/webp"].includes(logoFile.type) || logoFile.size > 512 * 1024) {
+            return flash("error", "Choose a PNG, JPEG or WebP logo no larger than 512 KB.");
+          }
+          try { values.logo_data_url = await readLogoFile(logoFile); }
+          catch (error) { return flash("error", error.message || "Could not read the team logo."); }
+        }
+      }
+      if (type === "fixture") {
+        const date = new Date(String(values.starts_at));
+        if (Number.isNaN(date.getTime())) return flash("error", "Enter a valid match date and time.");
+        values.starts_at = date.toISOString();
+      }
+      const endpoint = type === "fixture" ? "/football/fixtures" : "/football/" + (type === "league" ? "leagues" : "teams");
+      const saved = await api(endpoint, values);
+      if (!saved.ok) return flash("error", errText(saved, "Couldn't create the custom " + type + "."));
+      flash("ok", type === "fixture" ? "Custom match saved as a draft." : "Custom " + type + " added.");
+      loadFootballManagement();
+    };
+  }
+
   /* ================= Betting & withdrawal settings ================= */
   /* The site's minimum deposit, the betting eligibility rule and the withdrawal play-through rule, with the wording
      players see; who each rule affects; and every change. Each save is confirmed, audited and kept in the history.
@@ -3871,7 +4218,7 @@
     if (r.ok) loadRisk(true);
   }
 
-  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, deposits: loadDeposits, payments: () => loadPaymentSettings(true), moneyrules: () => loadMoneyRules(true), blocked: () => loadAccounts("blocked"), banned: () => loadAccounts("banned"), deleted: () => loadAccounts("deleted"), games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), lotto: () => loadLotto(true), partners: loadPartners, withdrawals: loadWithdrawals, risk: loadRisk, reviews: loadReviews, support: () => loadSupport() };
+  const LOADERS = { overview: loadOverview, players: () => loadPlayers(), money: loadMoney, deposits: loadDeposits, payments: () => loadPaymentSettings(true), depositrestrictions: loadDepositRestrictions, football: loadFootballManagement, moneyrules: () => loadMoneyRules(true), blocked: () => loadAccounts("blocked"), banned: () => loadAccounts("banned"), deleted: () => loadAccounts("deleted"), games: loadGames, mines: loadMinesSignals, aviator: () => loadAviator(true), lotto: () => loadLotto(true), partners: loadPartners, withdrawals: loadWithdrawals, risk: loadRisk, reviews: loadReviews, support: () => loadSupport() };
   const ADD_MONEY = '<button class="btn btn-primary btn-sm" type="button" data-credit>' + U.icon("plus") + "Add / take money</button>";
   /* each section's title, a line on what it's for, and its buttons */
   const SECTIONS = {
@@ -3883,6 +4230,8 @@
     banned: { title: AC.banned.title, lead: AC.banned.lead },
     deleted: { title: AC.deleted.title, lead: AC.deleted.lead },
     payments: { title: "Payteller Payment Settings", lead: "Switch Payteller deposits ON or OFF for the website, and check the merchant ID and connection. OFF stops new deposits only; payments already started are still verified and credited. Payouts remain on their separate provider. API keys and passwords stay hidden." },
+    depositrestrictions: { title: "Deposit Restrictions", lead: "Review provider-confirmed failed deposits and manage the 30-hour deposit restriction. Pending or uncertain payment statuses never start a restriction." },
+    football: { title: "Football Management", lead: "Manage custom leagues, teams and fixtures; control the football information page. Provider odds and real-money wagering are not enabled." },
     moneyrules: { title: "Betting & withdrawal settings", lead: "The minimum deposit, the betting eligibility rule and the withdrawal play-through rule, with the messages players see. Both rules are OFF by default, never deduct money and never hold winnings. Every change is confirmed, logged and shown in the history below." },
     withdrawals: { title: "Withdrawals", lead: "Players' requests to cash out. Send the money by hand, then Approve marks it paid; Reject returns it to the player's balance." },
     games: { title: "Games", lead: "Manage every game: switch it on or off, choose whether it offers free play (same odds as real money) and a strip of real big wins, pause and resume it, set bet limits and round timing, and watch live play, statistics and players' wins and losses. Results are drawn by the server and can't be seen or changed before a round ends." },
