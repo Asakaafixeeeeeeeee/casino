@@ -75,10 +75,21 @@ async function partnerDepositsOff(db: Pool, userId: string): Promise<boolean> {
 }
 
 /** One deposit request as it arrived, for the record when our checks refuse it. */
-interface DepositAttempt { userId: string; method: "momo" | "checkout"; amount: unknown; currency: unknown; network?: unknown; phone?: unknown; key: unknown }
+interface DepositAttempt {
+  userId: string; method: "momo" | "checkout"; amount: unknown; currency: unknown;
+  network?: unknown; phone?: unknown; key: unknown;
+  context?: { account_id: string; ip: string; user_agent: string; origin: string; release: string };
+}
 
 export function paymentsRouter(db: Pool): Router {
   const router = Router();
+  const initiationContext = (req: Request, accountId: string): NonNullable<DepositAttempt["context"]> => ({
+    account_id: accountId,
+    ip: String(req.ip ?? req.socket?.remoteAddress ?? "").slice(0, 100),
+    user_agent: String(req.headers?.["user-agent"] ?? "").slice(0, 300),
+    origin: String(req.headers?.origin ?? "").slice(0, 200),
+    release: (process.env.RENDER_GIT_COMMIT ?? "local").slice(0, 40),
+  });
 
   /* A request our checks refuse never reaches TheTeller: it's recorded (who, how much, when, why) and answered here.
      Recording never stands in the way of the answer: a failure to write is logged. */
@@ -101,6 +112,14 @@ export function paymentsRouter(db: Pool): Router {
   /* The main admin's Payteller switch (Admin -> Payteller Payment Settings): while it's OFF no new deposit can start.
      Only the routes that start a payment ask; checking and crediting payments already started never does. */
   async function refuseWhenOff(res: Response, a: DepositAttempt): Promise<boolean> {
+    const block = await db.query(
+      `SELECT 1 FROM deposit_initiation_blocks b JOIN user_accounts ua ON ua.account_user_id = b.account_user_id
+        WHERE ua.user_id = $1`, [a.userId]);
+    if (block.rowCount) {
+      console.warn("[payment/security] %s", JSON.stringify({ event: "incident_account_blocked", user_id: a.userId, ...a.context }));
+      await reject(res, 403, "deposit_investigation_hold", "New deposits on this account are temporarily held for payment-security review. Contact support.", a);
+      return true;
+    }
     if (await paymentsEnabled(db)) return false;
     await reject(res, 503, "payments_off", PAYMENTS_OFF_MESSAGE, a);
     return true;
@@ -129,16 +148,16 @@ export function paymentsRouter(db: Pool): Router {
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["deposit:" + userId]);
+      const restriction = await activeDepositRestriction(client, userId);
+      if (restriction) {
+        await client.query("ROLLBACK");
+        await reject(res, 429, "deposit_restricted",
+          "Your previous deposit attempt was unsuccessful. For payment security, another deposit attempt will be available after 30 hours.",
+          a, { available_at: restriction.expires_at, retry_after_seconds: restriction.retry_after_seconds });
+        return null;
+      }
       const replay = await client.query(`SELECT 1 FROM payment_intents WHERE idempotency_key = $1 AND user_id = $2`, [key, userId]);
       if (!replay.rowCount) {
-        const restriction = await activeDepositRestriction(client, userId);
-        if (restriction) {
-          await client.query("ROLLBACK");
-          await reject(res, 429, "deposit_restricted",
-            "Your previous deposit attempt was unsuccessful. For payment security, another deposit attempt will be available after 30 hours.",
-            a, { available_at: restriction.expires_at, retry_after_seconds: restriction.retry_after_seconds });
-          return null;
-        }
         try {
           await checkDeposit(client, userId, amount);
         } catch (e) {
@@ -148,7 +167,9 @@ export function paymentsRouter(db: Pool): Router {
           return null;
         }
         const open = await client.query<{ n: number }>(
-          `SELECT count(*)::int AS n FROM payment_intents WHERE user_id = $1 AND status = 'PENDING' AND created_at > now() - interval '10 minutes'`, [userId]);
+          `SELECT count(*)::int AS n FROM payment_intents WHERE user_id = $1 AND status = 'PENDING'
+            AND (transaction_id IS NOT NULL OR dispatch_started_at IS NOT NULL)
+            AND created_at > now() - interval '10 minutes'`, [userId]);
         if (open.rows[0]!.n >= MAX_OPEN_PROMPTS) {
           await client.query("ROLLBACK");
           await reject(res, 429, "too_many_pending", "You already have a payment waiting for approval. Approve it, or wait a few minutes for it to expire, before starting another.", a);
@@ -170,18 +191,52 @@ export function paymentsRouter(db: Pool): Router {
     }
   }
   /* The database unique index is authoritative; retry only if a random 12-digit id collides with another intent. */
-  async function claimTxId(intentId: string, payerPhone: string | null): Promise<string | null> {
+  async function claimTxId(intentId: string, userId: string, res: Response, a: DepositAttempt): Promise<string | null> {
     for (let attempt = 0; attempt < 5; attempt++) {
       const txId = newTxId();
+      const client = await db.connect();
       try {
-        const { rowCount } = await db.query(
-          `UPDATE payment_intents SET transaction_id = $1, payer_phone = COALESCE($3, payer_phone), updated_at = now()
-            WHERE id = $2 AND transaction_id IS NULL`, [txId, intentId, payerPhone]);
+        await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["deposit:" + userId]);
+        const restriction = await activeDepositRestriction(client, userId);
+        if (restriction) {
+          await client.query("ROLLBACK");
+          await reject(res, 429, "deposit_restricted", "Deposits are temporarily restricted after a provider-confirmed failure.", a,
+            { available_at: restriction.expires_at, retry_after_seconds: restriction.retry_after_seconds });
+          return null;
+        }
+        const rate = await client.query<{ minute: number; hour: number; day: number; failures: number }>(
+          `SELECT count(*) FILTER (WHERE dispatch_started_at > now() - interval '1 minute')::int AS minute,
+                  count(*) FILTER (WHERE dispatch_started_at > now() - interval '1 hour')::int AS hour,
+                  count(*) FILTER (WHERE status = 'FAILED' AND dispatch_started_at > now() - interval '5 minutes')::int AS failures,
+                  count(*)::int AS day
+             FROM payment_intents WHERE user_id = $1 AND dispatch_started_at > now() - interval '1 day'`, [userId]);
+        const recent = rate.rows[0]!;
+        if (recent.minute >= 1 || recent.failures >= 1 || recent.hour >= 5 || recent.day >= 15) {
+          await client.query("ROLLBACK");
+          const seconds = recent.day >= 15 ? 86400 : recent.hour >= 5 ? 3600 : recent.failures ? 300 : 60;
+          console.warn("[payment/security] %s", JSON.stringify({ event: "initiation_rate_limited", user_id: userId, ...recent, ...a.context }));
+          res.setHeader("Retry-After", String(seconds));
+          await reject(res, 429, "deposit_rate_limited", "Too many deposit requests. Please wait before deliberately starting another deposit.", a,
+            { retry_after_seconds: seconds });
+          return null;
+        }
+        const { rowCount } = await client.query(
+          `UPDATE payment_intents SET transaction_id = $1, dispatch_started_at = now(),
+                  initiation_context = $3::jsonb, updated_at = now()
+            WHERE id = $2 AND user_id = $4 AND status = 'PENDING'
+              AND transaction_id IS NULL AND dispatch_started_at IS NULL`,
+          [txId, intentId, JSON.stringify(a.context ?? {}), userId]);
+        await client.query("COMMIT");
+        if (!rowCount) await reject(res, 409, "payment_pending", "This payment has already started. Check deposit history; it will not be sent again.", a);
         return (rowCount ?? 0) > 0 ? txId : null;
       } catch (error) {
+        await client.query("ROLLBACK");
         if (!error || typeof error !== "object") throw error;
         const pgError = error as { code?: unknown; constraint?: unknown };
         if (pgError.code !== "23505" || pgError.constraint !== "payment_intents_transaction_id_idx") throw error;
+      } finally {
+        client.release();
       }
     }
     throw new Error("Could not allocate a unique TheTeller transaction ID");
@@ -211,12 +266,13 @@ export function paymentsRouter(db: Pool): Router {
       return reject(res, 409, "already_processed", "This payment was already processed. Please start a new deposit.", attempt);
     }
 
-    const txId = intent.transactionId ?? await claimTxId(intent.id, null);
-    if (!txId) {
-      return reject(res, 409, "already_processed", "This payment was already started. Check your deposit history.", attempt);
+    if (intent.transactionId) {
+      return reject(res, 409, "payment_pending", "This payment has already started. Check deposit history; it will not be sent again.", attempt);
     }
+    const txId = await claimTxId(intent.id, userId, res, attempt);
+    if (!txId) return;
     const reference = depositReference(txId);
-    console.log("[payteller/checkout] user=%s amount=%s ref=%s", userId, amount, reference);
+    console.log("[payment/security] %s", JSON.stringify({ event: "gateway_creation_claimed", user_id: userId, amount, reference, ...attempt.context }));
 
     try {
       const { checkoutUrl } = await createPaytellerPayment(config, {
@@ -352,7 +408,8 @@ export function paymentsRouter(db: Pool): Router {
     try {
       const user = requireUser(req);
       const { amount, currency, idempotency_key } = (req.body ?? {}) as Record<string, unknown>;
-      const attempt: DepositAttempt = { userId: user.id, method: "checkout", amount, currency, key: idempotency_key };
+      const attempt: DepositAttempt = { userId: user.id, method: "checkout", amount, currency, key: idempotency_key,
+        context: initiationContext(req, user.accountId) };
       /* every check runs before TheTeller is contacted; a refused request is recorded and never sent */
       if (await refuseWhenOff(res, attempt)) return;
       if (await partnerDepositsOff(db, user.id)) {
@@ -379,7 +436,8 @@ export function paymentsRouter(db: Pool): Router {
     try {
       const user = requireUser(req);
       const { amount, currency, idempotency_key, account_number, network } = (req.body ?? {}) as Record<string, unknown>;
-      const attempt: DepositAttempt = { userId: user.id, method: "momo", amount, currency, network, phone: account_number, key: idempotency_key };
+      const attempt: DepositAttempt = { userId: user.id, method: "momo", amount, currency, network, phone: account_number, key: idempotency_key,
+        context: initiationContext(req, user.accountId) };
       /* every check runs before TheTeller is contacted; a refused request is recorded and never sent */
       if (await refuseWhenOff(res, attempt)) return;
       if (await partnerDepositsOff(db, user.id)) {

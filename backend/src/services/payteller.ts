@@ -1,3 +1,5 @@
+import { assertSafePaymentNetwork } from "./paymentNetworkSafety.js";
+
 export interface PaytellerConfig {
   apiBaseUrl: string;
   merchantId: string;
@@ -57,6 +59,10 @@ export function loadPaytellerConfig(env: NodeJS.ProcessEnv = process.env): Payte
   if (!/^TTM-\d{8}$/.test(merchantId!)) {
     throw new PaytellerConfigurationError("PAYTELLER_MERCHANT_ID must be TTM- followed by eight digits");
   }
+  if (env === process.env) {
+    try { assertSafePaymentNetwork(apiBaseUrl); }
+    catch (error) { throw new PaytellerConfigurationError((error as Error).message); }
+  }
 
   return {
     apiBaseUrl,
@@ -81,6 +87,7 @@ async function paytellerFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<{ status: number; body: Record<string, unknown> }> {
+  assertSafePaymentNetwork(config.apiBaseUrl);
   let response: Response;
   try {
     response = await fetch(`${config.apiBaseUrl}${path}`, {
@@ -143,7 +150,8 @@ export async function createPaytellerPayment(
     }),
   });
   if (status < 200 || status >= 300) {
-    throw new PaytellerRequestError(responseError(body, status), status >= 400 && status < 500 && status !== 409);
+    throw new PaytellerRequestError(responseError(body, status),
+      status >= 400 && status < 500 && ![408, 409, 429].includes(status));
   }
   if (typeof body.checkout_url !== "string" || !["pending", "processing"].includes(String(body.status))
     || body.reference !== args.reference || body.currency !== "GHS" || body.environment !== "live"

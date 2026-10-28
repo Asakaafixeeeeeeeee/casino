@@ -25,6 +25,7 @@ const key = () => "deposit:lock-" + ++n + "-" + Date.now();
 const TELLER = {
   TELLER_MERCHANT_ID: "TTM-00000001", TELLER_API_USERNAME: "user", TELLER_API_KEY: "key", TELLER_MODE: "test",
   PAYTELLER_MERCHANT_ID: "TTM-00000001", PAYTELLER_USERNAME: "user", PAYTELLER_API_KEY: "key",
+  PAYTELLER_API_BASE_URL: "https://paytelller.test/api/v1",
 };
 async function withTeller<T>(fn: () => Promise<T>): Promise<T> {
   const saved = { ...process.env };
@@ -96,7 +97,7 @@ test("Only the registered number may pay; the network comes from it", async () =
   assert.equal(localNumber("0301234567"), null);
 });
 
-test("A successful deposit does not impose a wait before the next checkout", async () => {
+test("A successful deposit allows another checkout after the short request-rate window", async () => {
   clearMoneyRulesCache();
   const { db, userId } = await setupWalletDb();
   const router = paymentsRouter(db);
@@ -131,6 +132,7 @@ test("A successful deposit does not impose a wait before the next checkout", asy
       assert.equal(r.status, 201);
       const txId = String(r.body!.transaction_id);
       await settleIntent(db, txId, "approved", 15000);
+      await db.query(`UPDATE payment_intents SET dispatch_started_at = now() - interval '2 minutes' WHERE transaction_id = $1`, [txId]);
     }
   } finally {
     globalThis.fetch = originalFetch;

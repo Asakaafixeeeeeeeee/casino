@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { PoolClient } from "pg";
+import { assertSafePaymentNetwork } from "./paymentNetworkSafety.js";
 
 export interface TellerConfig {
   apiBaseUrl: string;
@@ -157,6 +158,7 @@ const basicAuth = (config: TellerConfig) =>
   "Basic " + Buffer.from(`${config.apiUsername}:${config.apiKey}`).toString("base64");
 
 async function tellerFetch(url: string, init: RequestInit, timeoutMs: number): Promise<{ status: number; body: Record<string, unknown> }> {
+  assertSafePaymentNetwork(url);
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   const text = await response.text();
   console.log("[teller] %s %s -> %s", init.method ?? "GET", new URL(url).pathname, response.status);
@@ -345,14 +347,17 @@ export async function createPaymentIntent(
   network: string | null = null,
   gateway: "teller" | "payteller" = "teller"
 ): Promise<{ id: string; transactionId: string | null; checkoutUrl: string | null; status: string; gateway: "teller" | "payteller" }> {
-  const existing = await client.query<{ id: string; user_id: string; transaction_id: string | null; checkout_url: string | null; status: string; gateway: "teller" | "payteller" }>(
-    `SELECT id, user_id, transaction_id, checkout_url, status, gateway FROM payment_intents WHERE idempotency_key = $1`,
+  const existing = await client.query<{ id: string; user_id: string; amount: string; currency: string; transaction_id: string | null; checkout_url: string | null; status: string; gateway: "teller" | "payteller" }>(
+    `SELECT id, user_id, amount, currency, transaction_id, checkout_url, status, gateway FROM payment_intents WHERE idempotency_key = $1`,
     [idempotencyKey]
   );
   if (existing.rowCount) {
     const current = existing.rows[0]!;
     /* another player's key: never hand back their checkout page or transaction */
     if (current.user_id !== userId) throw new TellerRequestError("That payment key was already used", true);
+    if (Number(current.amount) !== amountMajor || current.currency !== currency || current.gateway !== gateway) {
+      throw new TellerRequestError("That payment key belongs to a different amount, currency or provider", true);
+    }
     return {
       id: current.id, transactionId: current.transaction_id, checkoutUrl: current.checkout_url,
       status: current.status, gateway: current.gateway,

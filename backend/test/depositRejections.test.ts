@@ -107,7 +107,8 @@ test("A valid request goes on to TheTeller; a duplicate of one already sent is r
 
   /* a payment already completed under this key: the same key again is refused, not sent twice */
   const env = { ...process.env };
-  Object.assign(process.env, { PAYTELLER_MERCHANT_ID: "TTM-00000001", PAYTELLER_USERNAME: "user", PAYTELLER_API_KEY: "key" });
+  Object.assign(process.env, { PAYTELLER_MERCHANT_ID: "TTM-00000001", PAYTELLER_USERNAME: "user", PAYTELLER_API_KEY: "key",
+    PAYTELLER_API_BASE_URL: "https://paytelller.test/api/v1" });
   try {
     const k = key();
     await db.query(`INSERT INTO payment_intents (user_id, amount, currency, idempotency_key, status, transaction_id, redirect_url, gateway)
@@ -119,7 +120,7 @@ test("A valid request goes on to TheTeller; a duplicate of one already sent is r
     assert.equal((await db.query(`SELECT reason_code FROM deposit_rejections`)).rows[0].reason_code, "already_processed");
     assert.equal((await db.query(`SELECT count(*)::int AS n FROM payment_intents`)).rows[0].n, 1, "no second payment was started");
   } finally {
-    for (const k of ["PAYTELLER_MERCHANT_ID", "PAYTELLER_USERNAME", "PAYTELLER_API_KEY"]) {
+    for (const k of ["PAYTELLER_MERCHANT_ID", "PAYTELLER_USERNAME", "PAYTELLER_API_KEY", "PAYTELLER_API_BASE_URL"]) {
       if (env[k] === undefined) delete process.env[k]; else process.env[k] = env[k];
     }
   }

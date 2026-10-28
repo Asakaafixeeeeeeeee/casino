@@ -28,6 +28,25 @@ http.createServer(async (req, res) => {
   if (url.pathname === "/health") return send(res, 200, { ok: true });
   if (url.pathname === "/requests") return send(res, 200, requests);
   if (url.pathname === "/fx") return send(res, 200, { result: "success", rates: { GHS: 11.62 } });
+  if (req.method === "POST" && url.pathname === "/api/v1/payments") {
+    const tx = String(body.reference || "").replace(/^DES/, "");
+    const payment = {
+      reference: body.reference, amount: body.amount, currency: "GHS", environment: "live", status: "pending",
+      checkout_url: `http://127.0.0.1:${PORT}/pay/${tx}`,
+    };
+    verdicts.set(tx, payment);
+    return send(res, 201, payment);
+  }
+  const paytellerStatus = /^\/api\/v1\/payments\/(DES\d+)$/.exec(url.pathname);
+  if (req.method === "GET" && paytellerStatus) {
+    const tx = paytellerStatus[1].slice(3);
+    const payment = verdicts.get(tx);
+    if (!payment) return send(res, 404, { error: "not_found" });
+    return send(res, 200, {
+      ...payment, reference: paytellerStatus[1], currency: "GHS", environment: "live",
+      status: payment.status === "approved" ? "successful" : payment.status === "declined" ? "failed" : payment.status,
+    });
+  }
   /* hosted checkout: hands back a checkout page on the stub (never the real gateway) */
   if (req.method === "POST" && url.pathname === "/initiate") {
     verdicts.set(String(body.transaction_id), { status: "pending", code: "111", reason: "Waiting for the customer", amount: body.amount });

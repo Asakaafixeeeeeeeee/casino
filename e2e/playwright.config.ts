@@ -50,6 +50,12 @@ export default defineConfig({
         PORT: "8781",
         ACCOUNTS_API_URL: "http://localhost:8792",
         PUBLIC_URL: "http://localhost:8808",
+        SITE_URL: "http://localhost:8808",
+        PAYMENT_TEST_MODE: "true",
+        PAYTELLER_API_BASE_URL: `${GATEWAY}/api/v1`,
+        PAYTELLER_MERCHANT_ID: "TTM-00000001",
+        PAYTELLER_USERNAME: "e2e-user",
+        PAYTELLER_API_KEY: "e2e-key",
         TELLER_BASE_URL: GATEWAY,
         TELLER_CHECKOUT_URL: GATEWAY,                 /* never the real gateway from a test */
         TELLER_MERCHANT_ID: "TTM-00000001",
